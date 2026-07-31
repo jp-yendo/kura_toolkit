@@ -23,22 +23,23 @@
     <true/>
 
     <!-- Allow execution of external commands -->
-    <!-- Required for executing which, brew, code, cursor, and other package managers -->
+    <!-- Required for running ffmpeg and ffprobe installed on the user's system -->
     <key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
     <array>
       <string>com.apple.coreservices.launchservicesd</string>
     </array>
 
+    <!-- Allow reading and writing files chosen by the user through open/save dialogs -->
     <key>com.apple.security.files.user-selected.read-write</key>
     <true/>
 
-    <!-- Allow reading from user home directory and Library folders -->
-    <!-- Required for accessing:
-         - ~/.dfapp (app config)
-    -->
-    <key>com.apple.security.temporary-exception.files.absolute-path.read-write</key>
-    <array>
-      <string>/Users/</string>
-    </array>
+    <!-- Note on file access:
+         The app is not sandboxed, so file access is governed by macOS TCC rather than
+         entitlements. Reading protected locations (Desktop, Documents, Downloads,
+         removable and network volumes) requires the user to grant Full Disk Access in
+         System Settings; the Cleanup screen shows a notice when it has not been granted.
+         The usage description strings shown in the TCC prompts are defined in
+         electron-builder.yml (mac.extendInfo).
+         App configuration is stored in ~/.kura_toolkit, which needs no special permission. -->
   </dict>
 </plist>

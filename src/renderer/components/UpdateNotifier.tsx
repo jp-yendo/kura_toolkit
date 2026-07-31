@@ -21,11 +21,11 @@ export default function UpdateNotifier() {
         let cancelled = false;
 
         // 取りこぼしを防ぐため購読を先に登録
-        const unsubscribe = window.dfapp.updater.onStateChanged(next => {
+        const unsubscribe = window.kuraToolkit.updater.onStateChanged(next => {
             setState(next);
         });
 
-        window.dfapp.updater.getState().then(initial => {
+        window.kuraToolkit.updater.getState().then(initial => {
             if (cancelled) return;
             setState(initial);
         });
@@ -60,7 +60,7 @@ export default function UpdateNotifier() {
                                     size='small'
                                     variant='outlined'
                                     onClick={() => {
-                                        void window.dfapp.updater.download();
+                                        void window.kuraToolkit.updater.download();
                                     }}
                                 >
                                     {t('updater.update')}
@@ -105,7 +105,7 @@ export default function UpdateNotifier() {
                                     size='small'
                                     variant='outlined'
                                     onClick={() => {
-                                        void window.dfapp.updater.download();
+                                        void window.kuraToolkit.updater.download();
                                     }}
                                 >
                                     {t('updater.retry')}
@@ -125,6 +125,7 @@ export default function UpdateNotifier() {
     if (!content) return null;
 
     return (
+        // 通知の表示位置は NoticeSnackbar と揃える (常に右下)
         <Snackbar open anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} autoHideDuration={null}>
             {content}
         </Snackbar>

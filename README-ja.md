@@ -1,44 +1,47 @@
-# システム名をここに記載
-
-## 0. 開発開始時のプロンプト例
-
-```text
-～～　開発するアプリなどの指示内容　～～
-
-これら作業に入る前に、まずこのテンプレートプロジェクト内のREADME-ja.mdのシステム概要セクションを参照し、その中の指示にあるファイル名、ファイル内容など置き換えるものを先に置き換えてから作業を開始してください。
-全作業完了時にはこのシステム概要セクションを一式置き換えしてください。
-
-プロジェクト名： 〇〇〇〇
-設定ファイルディレクトリ： ~/.devapp
-実行ファイル： dev_app
-配布ファイル名： devapp-～
-名前パターン：
-- Dev App
-- dev_app
-- dev-app
-
-全ての対応が完了したらREADME-ja.mdの内容を元に、英語でREADME.mdを作成してください。
-```
+# Kura Toolkit
 
 ## 1. システム概要
 
-システムの概略をここに記載してください。
+Kura Toolkit は、音声・動画・画像・ファイル整理の 4 つのユーティリティを 1 つにまとめたデスクトップアプリケーションです。ダッシュボードとタイトルバーのカテゴリメニューから各機能へアクセスできます。
 
-事前の変更点は以下のキーワードでファイル名、またはファイル内容を検索しアプリ名に置き換えてください。
+### オーディオ: オーディオ正規化
 
-ファイル名キーワード:
+- 音声ファイル (wav / mp3 / aac / flac) のラウドネス (LUFS) とチャンネル数を解析
+- 指定したターゲット LUFS へ正規化して出力 (元のフォーマット・タグ・アルバムアートを維持)
+- サンプリング周波数、ビットレートモード (CBR/VBR)、ビットレートを指定可能
 
-- develop_app
-- develop-app
+### 動画: チャプターカット
 
-ファイル内容検索キーワード:
+- 動画のチャプター一覧を表示
+- チャプター範囲を指定して再エンコードなし (ストリームコピー) で切り出し。開始点は直前のキーフレームに自動吸着し、チャプター情報も出力へ引き継ぎます
+- 指定チャプターの直前を分割点として複数ファイルへ分割
+- フレーム精度モード: 元のコーデック・ビットレートを可能な範囲で引き継いだ再エンコードにより、チャプター開始位置で正確に切り出し
+- mkv のテキスト字幕は時刻を再構成して正しく引き継ぎます
 
-- develop_app
-- develop-app
-- develop app
-- developapp
-- dfapp
-- システム名をここに記載
+### 画像: SVG 変換
+
+- 画像 (PNG / JPEG / BMP / GIF / TIFF) をベクター形式の SVG に変換 (VTracer エンジン)
+- クラスタリング / カーブフィッティングの各パラメータを調整可能
+- 元画像と変換結果を並べてプレビューし、SVG ファイルとして保存
+
+### ツール: クリーンアップ
+
+- Windows Zone.Identifier、Thumbs.db、.DS_Store、macOS のメタデータファイル/ディレクトリなど 11 種類の不要ファイルを検索
+- Zone.Identifier は、Windows では代替データストリームとして、Windows からコピーしたり書庫を解凍した macOS/Linux 上では `ファイル名:Zone.Identifier` という通常のファイルとして検出します
+- 検索対象はホームディレクトリ、各ドライブ/ボリューム、任意の追加ディレクトリから選択 (システムディレクトリは自動的に除外)。CD/DVD など書き込みできないメディアは一覧に表示されません
+- 検出した項目を選択してゴミ箱へ移動 (Zone.Identifier のみ直接削除)
+
+macOS では、デスクトップ・書類・ダウンロードなどのフォルダを検索するために「フルディスクアクセス」の許可が必要です。未許可の場合はクリーンアップ画面に案内が表示され、そこからシステム設定を開けます (許可後はアプリの再起動が必要です)。
+
+### アプリ設定
+
+- テーマ (ライト / ダーク / システム)、言語 (日本語 / 英語)
+- ffmpeg / ffprobe の実行ファイルパス (未設定時は PATH から自動検出)
+- 設定は `~/.kura_toolkit/settings.json` に保存されます
+
+### 必要な外部ツール
+
+オーディオ正規化とチャプターカットには [FFmpeg](https://ffmpeg.org/) (ffmpeg / ffprobe) が必要です。アプリには同梱していないため、別途インストールしてください。PATH に加えて一般的なインストール先 (macOS の Homebrew など) も自動的に検出します。見つからない場合はアプリ設定でパスを指定してください。SVG 変換とクリーンアップは外部ツール不要です。
 
 ## 2. 対応OS
 
@@ -60,8 +63,8 @@
 
 ```bash
 # リポジトリのクローン
-git clone <repository-url>
-cd <repository-name>
+git clone https://github.com/jp-yendo/kura_toolkit.git
+cd kura_toolkit
 
 # 依存関係のインストール
 yarn install
@@ -81,7 +84,7 @@ yarn dev
 - macOS: `yarn dist:mac`
 - Linux: `yarn dist:linux`
 
-開発時は BrowserRouter で `<http://localhost:3001>` を、配布ビルドでは HashRouter で `dist/renderer/index.html` を読み込みます。
+開発時は `http://localhost:3001` を、配布ビルドでは `dist/renderer/index.html` を読み込みます。ページ遷移はどちらも HashRouter で行います。
 
 ### GitHub への直接リリース (自動アップデート用)
 
@@ -121,28 +124,37 @@ Windows で署名なしのローカルビルド/配布物を実行・テスト�
 
 ```text
 src/
-├── main/                  # Electron メイン: IPC/各種マネージャ
+├── main/                  # Electron メイン: IPC/各種サービス
 │   ├── index.ts           # 起動・ウィンドウ生成・サービス初期化
 │   ├── ipc/               # IPCハンドラ
-│   ├── services/          # 各種サービス
+│   ├── services/          # 設定・ジョブ管理・ffmpeg・各機能サービス
 │   └── utils/             # 各種ユーティリティ
-├── preload/               # renderer へ安全にAPIをブリッジ
-├── renderer/              # React + MUI UI
+├── preload/               # renderer へ安全にAPIをブリッジ (window.kuraToolkit)
+├── renderer/              # React + MUI UI (pages/stores/components/i18n)
 ├── shared/                # 型定義・定数(Default設定/保存パス)
 └── public/                # アイコン等
 ```
 
+詳細な仕様は [Documents/システム仕様.md](Documents/システム仕様.md) を参照してください。
+
 ### 使用技術
 
 - **Electron**
-- **React (MUI v7)**
+- **React (MUI)**
 - **TypeScript**
 - **Zustand**
 - **i18next**
 - **Vite**
+- **@neplex/vectorizer** (VTracer)
 
 ### Windows用アイコンの作成
 
 ```exec
 magick public/icon.png -define icon:auto-resize=256,128,96,64,48,32,24,16 public/icon.ico
 ```
+
+## 4. ライセンス
+
+本プロジェクトは [MIT License](LICENSE) で公開されています。
+
+FFmpeg はアプリに同梱せず、ユーザー環境にインストールされたものを外部プロセスとして呼び出します。そのため FFmpeg 自体のライセンス (GPL/LGPL ビルド) は本アプリの配布物には影響しません。

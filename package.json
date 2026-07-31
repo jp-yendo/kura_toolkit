@@ -1,7 +1,7 @@
 {
-  "name": "develop-app",
+  "name": "kura-toolkit",
   "version": "0.1.0",
-  "description": "develop app",
+  "description": "Kura Toolkit - integrated desktop utilities for audio, video, image and file cleanup",
   "main": "dist/main/index.js",
   "engines": {
     "node": ">=22.0.0",
@@ -28,9 +28,9 @@
     "clean": "rimraf dist release node_modules/.cache"
   },
   "keywords": [
-    "develop-app"
+    "kura-toolkit"
   ],
-  "author": "",
+  "author": "jp-yendo",
   "license": "MIT",
   "devDependencies": {
     "@types/archiver": "^7.0.0",
@@ -60,6 +60,7 @@
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^9.2.0",
     "@mui/material": "^9.2.0",
+    "@neplex/vectorizer": "^0.1.0",
     "electron-updater": "^6.8.9",
     "i18next": "^26.3.6",
     "react": "^19.2.7",

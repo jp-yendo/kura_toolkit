@@ -1,8 +1,10 @@
 import path from 'path';
-import { app, BrowserWindow, nativeTheme, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import { setupConsoleBridge, setMainWindow } from './utils/console-bridge';
 import { registerIpcHandlers } from './ipc/index';
 import { initializeUpdater, scheduleStartupCheck, isInstallingUpdate } from './services/updater';
+import { applySavedTheme, getSettings, updateSettings } from './services/settings';
+import { cancelAllJobs, setJobWindow } from './services/job-manager';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -22,6 +24,8 @@ function createWindow() {
 
     // コンソールブリッジ用にメインウィンドウを設定
     setMainWindow(mainWindow);
+    // ジョブイベント送信用にメインウィンドウを設定
+    setJobWindow(mainWindow);
 
     if (isDev) {
         mainWindow.loadURL('http://localhost:3001');
@@ -49,7 +53,10 @@ function createWindow() {
 
     mainWindow.on('ready-to-show', () => mainWindow?.show());
     mainWindow.on('closed', () => {
+        // 実行中のジョブ (外部プロセス) をすべて停止する
+        cancelAllJobs();
         setMainWindow(null);
+        setJobWindow(null);
         mainWindow = null;
     });
 
@@ -62,6 +69,9 @@ app.whenReady().then(async () => {
     // コンソールブリッジをセットアップしてメインプロセスのログをDevToolsに送信
     setupConsoleBridge();
 
+    // 保存済み設定のテーマを反映
+    applySavedTheme();
+
     // electron-updater のイベントを登録 (本番ビルド時のみ動作)
     initializeUpdater();
 
@@ -70,25 +80,29 @@ app.whenReady().then(async () => {
 
     // アプリ情報取得とウィンドウ制御のIPC
     ipcMain.handle('app:getInfo', async () => {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const pkg = require('../../package.json');
+        const settings = getSettings();
         return {
-            name: app.getName() || pkg.name || 'Default App',
-            version: pkg.version || app.getVersion(),
-            language: (app.getLocale().startsWith('ja') ? 'ja' : 'en') as 'ja' | 'en',
-            theme: nativeTheme.shouldUseDarkColors ? 'dark' : 'light',
+            name: app.getName() || 'Kura Toolkit',
+            version: app.getVersion(),
+            language: settings.app.language,
+            theme: settings.app.theme,
             os: process.platform as 'win32' | 'darwin' | 'linux',
         };
     });
 
     ipcMain.handle('app:setTheme', (_e, theme: 'light' | 'dark' | 'system') => {
-        nativeTheme.themeSource = theme;
+        updateSettings({ app: { theme } });
+        applySavedTheme();
         return { theme };
     });
 
     ipcMain.handle('app:setLanguage', (_e, lang: 'ja' | 'en') => {
-        // 必要に応じて設定に保存
+        updateSettings({ app: { language: lang } });
         return { language: lang };
+    });
+
+    ipcMain.handle('app:quit', () => {
+        app.quit();
     });
 
     ipcMain.handle('window:minimize', () => {

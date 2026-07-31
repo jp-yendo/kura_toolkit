@@ -1,17 +1,17 @@
-appId: com.developapp.app
-productName: Develop App
+appId: com.kuratoolkit.app
+productName: Kura Toolkit
 directories:
   output: release
   buildResources: build
-artifactName: "developapp-${version}-${os}-${arch}.${ext}"
+artifactName: "kura-toolkit-${version}-${os}-${arch}.${ext}"
 afterAllArtifactBuild: scripts/zip-portable.js
 portable:
-  artifactName: "developapp-${version}-${os}-${arch}-portable.${ext}"
+  artifactName: "kura-toolkit-${version}-${os}-${arch}-portable.${ext}"
   buildUniversalInstaller: false
 publish:
   provider: github
-  owner: kakehashi-inc
-  repo: develop_app
+  owner: jp-yendo
+  repo: kura_toolkit
   releaseType: draft
 releaseInfo:
   releaseName: "v${version}"
@@ -23,6 +23,10 @@ releaseInfo:
     ## Bug Fixes
 
     -
+
+# ネイティブモジュール (.node) は asar 内からロードできないため展開する
+asarUnpack:
+  - "**/node_modules/@neplex/**"
 
 files:
   - dist/**/*
@@ -37,7 +41,7 @@ files:
 
 win:
   icon: public/icon.ico
-  executableName: developapp
+  executableName: kura_toolkit
   target:
     - target: nsis
       arch:
@@ -49,7 +53,7 @@ win:
         - arm64
 
 nsis:
-  shortcutName: Develop App
+  shortcutName: Kura Toolkit
   buildUniversalInstaller: false
   oneClick: false
   perMachine: false
@@ -59,13 +63,21 @@ nsis:
   deleteAppDataOnUninstall: true
 
 mac:
-  category: public.app-category.developer-tools
+  category: public.app-category.utilities
   icon: public/icon.png
   hardenedRuntime: true
   gatekeeperAssess: false
   notarize: true
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
+  # TCC の許可ダイアログに表示される利用目的。未指定だとダイアログが出ずに拒否される場合がある
+  extendInfo:
+    NSDesktopFolderUsageDescription: "Kura Toolkit searches the Desktop folder for junk files to clean up."
+    NSDocumentsFolderUsageDescription: "Kura Toolkit searches the Documents folder for junk files to clean up."
+    NSDownloadsFolderUsageDescription: "Kura Toolkit searches the Downloads folder for junk files to clean up."
+    NSRemovableVolumesUsageDescription: "Kura Toolkit searches removable volumes for junk files to clean up."
+    NSNetworkVolumesUsageDescription: "Kura Toolkit searches network volumes for junk files to clean up."
+    NSFileProviderDomainUsageDescription: "Kura Toolkit searches cloud storage folders for junk files to clean up."
   target:
     - target: dmg
       arch:
@@ -78,7 +90,7 @@ mac:
 
 linux:
   icon: public/icon.png
-  category: Development
+  category: Utility
   target:
     - target: AppImage
       arch:
@@ -94,6 +106,6 @@ linux:
         - arm64
   desktop:
     entry:
-      Name: Develop App
-      Comment: "Develop App."
-      Categories: Development;
+      Name: Kura Toolkit
+      Comment: "Integrated desktop utilities for audio, video, image and file cleanup."
+      Categories: Utility;

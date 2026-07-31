@@ -1,5 +1,11 @@
-// import { ipcMain } from 'electron';
 import { registerUpdaterIpcHandlers } from './updater';
+import { registerSettingsIpcHandlers } from './settings';
+import { registerDialogIpcHandlers } from './dialog';
+import { registerJobIpcHandlers } from './jobs';
+import { registerAudioIpcHandlers } from './audio';
+import { registerChapterIpcHandlers } from './chapter';
+import { registerVectorizerIpcHandlers } from './vectorizer';
+import { registerCleanupIpcHandlers } from './cleanup';
 
 /**
  * IPCハンドラを登録
@@ -9,8 +15,14 @@ export function registerIpcHandlers() {
     // 自動アップデート関連の IPC ハンドラ
     registerUpdaterIpcHandlers();
 
-    // 例: カスタムIPCハンドラ
-    // ipcMain.handle('custom:action', async (_e, arg) => {
-    //     return someService.doSomething(arg);
-    // });
+    // 設定・ダイアログ・ジョブ制御
+    registerSettingsIpcHandlers();
+    registerDialogIpcHandlers();
+    registerJobIpcHandlers();
+
+    // 機能別ハンドラ
+    registerAudioIpcHandlers();
+    registerChapterIpcHandlers();
+    registerVectorizerIpcHandlers();
+    registerCleanupIpcHandlers();
 }
