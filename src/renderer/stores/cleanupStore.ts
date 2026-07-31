@@ -6,6 +6,8 @@ type CleanupState = {
     selectedRoots: string[];
     items: CleanupItem[];
     checked: string[];
+    // 保存済みの検索条件を復元済みかどうか (起動後 1 回だけ復元する)
+    restored: boolean;
     toggleTarget(id: CleanupTargetId): void;
     setAllTargets(ids: CleanupTargetId[]): void;
     toggleRoot(path: string): void;
@@ -13,6 +15,8 @@ type CleanupState = {
     setItems(items: CleanupItem[]): void;
     toggleChecked(path: string): void;
     setChecked(paths: string[]): void;
+    restore(targets: CleanupTargetId[], roots: string[]): void;
+    pruneRoots(availablePaths: string[]): void;
 };
 
 function toggle<T>(list: T[], value: T): T[] {
@@ -24,6 +28,7 @@ export const useCleanupStore = create<CleanupState>((set, get) => ({
     selectedRoots: [],
     items: [],
     checked: [],
+    restored: false,
     toggleTarget(id) {
         set({ selectedTargets: toggle(get().selectedTargets, id) });
     },
@@ -44,5 +49,18 @@ export const useCleanupStore = create<CleanupState>((set, get) => ({
     },
     setChecked(paths) {
         set({ checked: paths });
+    },
+    restore(targets, roots) {
+        // 起動後の最初の 1 回だけ適用する (画面を行き来しても選択が巻き戻らないようにする)
+        if (get().restored) return;
+        set({ selectedTargets: targets, selectedRoots: roots, restored: true });
+    },
+    pruneRoots(availablePaths) {
+        // 取り外したドライブなど、現在は存在しない検索対象を選択から外す
+        const current = get().selectedRoots;
+        const next = current.filter(path => availablePaths.includes(path));
+        if (next.length !== current.length) {
+            set({ selectedRoots: next });
+        }
     },
 }));

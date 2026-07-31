@@ -3,6 +3,7 @@ import GraphicEqIcon from '@mui/icons-material/GraphicEq';
 import ContentCutIcon from '@mui/icons-material/ContentCut';
 import PolylineIcon from '@mui/icons-material/Polyline';
 import CleaningServicesIcon from '@mui/icons-material/CleaningServices';
+import { FEATURE_COLORS } from '../theme';
 
 // 機能カテゴリ (タイトルバーのメニューとダッシュボードの分類)
 export type FeatureCategory = 'audio' | 'video' | 'image' | 'tools';
@@ -14,7 +15,7 @@ export type FeatureDef = {
     category: FeatureCategory;
     route: string;
     icon: SvgIconComponent;
-    // ダッシュボードカードのアイコン背景色
+    // ダッシュボードカードのアイコン背景色 (白いアイコンを載せる前提の濃さ)
     color: string;
     titleKey: string;
     descKey: string;
@@ -27,7 +28,7 @@ export const FEATURES: FeatureDef[] = [
         category: 'audio',
         route: '/audio/normalizer',
         icon: GraphicEqIcon,
-        color: '#1976d2',
+        color: FEATURE_COLORS.audio,
         titleKey: 'features.audioNormalizer.title',
         descKey: 'features.audioNormalizer.desc',
     },
@@ -36,7 +37,7 @@ export const FEATURES: FeatureDef[] = [
         category: 'video',
         route: '/video/chapter-cut',
         icon: ContentCutIcon,
-        color: '#e65100',
+        color: FEATURE_COLORS.video,
         titleKey: 'features.chapterCut.title',
         descKey: 'features.chapterCut.desc',
     },
@@ -45,7 +46,7 @@ export const FEATURES: FeatureDef[] = [
         category: 'image',
         route: '/image/svg-converter',
         icon: PolylineIcon,
-        color: '#7b1fa2',
+        color: FEATURE_COLORS.image,
         titleKey: 'features.svgConverter.title',
         descKey: 'features.svgConverter.desc',
     },
@@ -54,7 +55,7 @@ export const FEATURES: FeatureDef[] = [
         category: 'tools',
         route: '/tools/cleanup',
         icon: CleaningServicesIcon,
-        color: '#2e7d32',
+        color: FEATURE_COLORS.tools,
         titleKey: 'features.cleanup.title',
         descKey: 'features.cleanup.desc',
     },

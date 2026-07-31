@@ -20,10 +20,13 @@ import ProgressDialog from '../../components/common/ProgressDialog';
 import PageContainer from '../../components/common/PageContainer';
 import SectionLabel from '../../components/common/SectionLabel';
 import Panel from '../../components/common/Panel';
-import NoticeSnackbar from '../../components/common/NoticeSnackbar';
+import { showNotice } from '../../stores/noticeStore';
 import { useCleanupStore } from '../../stores/cleanupStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import type { CleanupCapabilities, CleanupRemoveResult, CleanupRoot, JobEvent } from '@shared/types';
+
+// グループ配下の項目を字下げする量 (MUI の spacing 単位)
+const CHILD_INDENT = 3;
 
 // チェックボックスの行。既定より少し小さめの文字にして行間を詰める
 const CHECKBOX_SX = { py: 0.25 };
@@ -33,6 +36,13 @@ const CHECKBOX_ROW_SX = {
     mr: 0,
     '& .MuiFormControlLabel-label': { fontSize: '0.9375rem', lineHeight: 1.5 },
 };
+
+// 検索条件が前回と同じかどうか (並び順は問わない)
+function sameSelection(a: readonly string[], b: readonly string[]): boolean {
+    if (a.length !== b.length) return false;
+    const sortedB = [...b].sort();
+    return [...a].sort().every((value, index) => value === sortedB[index]);
+}
 
 type RunningJob = {
     jobId: string;
@@ -51,7 +61,6 @@ export default function CleanupPage() {
     const [roots, setRoots] = React.useState<CleanupRoot[]>([]);
     const [capabilities, setCapabilities] = React.useState<CleanupCapabilities | null>(null);
     const [job, setJob] = React.useState<RunningJob | null>(null);
-    const [warning, setWarning] = React.useState<string | null>(null);
     const [confirmOpen, setConfirmOpen] = React.useState(false);
     const [noneFoundOpen, setNoneFoundOpen] = React.useState(false);
     const [result, setResult] = React.useState<CleanupRemoveResult | null>(null);
@@ -66,6 +75,18 @@ export default function CleanupPage() {
             cancelled = true;
         };
     }, [customDirs]);
+
+    // 前回の検索条件を復元する (起動後 1 回だけ)
+    React.useEffect(() => {
+        if (!settings) return;
+        useCleanupStore.getState().restore(settings.cleanup.selectedTargets, settings.cleanup.selectedRoots);
+    }, [settings]);
+
+    // 一覧に無くなった検索対象 (取り外したドライブなど) は選択から外す
+    React.useEffect(() => {
+        if (roots.length === 0) return;
+        useCleanupStore.getState().pruneRoots(roots.map(root => root.path));
+    }, [roots]);
 
     // 利用可能な対象と権限状態を取得する
     const refreshCapabilities = React.useCallback(() => {
@@ -128,6 +149,65 @@ export default function CleanupPage() {
         return root.path;
     };
 
+    // 検索対象は「ユーザープロファイル」「ボリューム」「カスタム」の 3 つに分けて表示する
+    const homeRoots = roots.filter(root => root.kind === 'home');
+    const driveRoots = roots.filter(root => root.kind === 'drive');
+    const customRoots = roots.filter(root => root.kind === 'custom');
+
+    // 個々の検索対象の行
+    const renderRootRow = (root: CleanupRoot, indent = false) => (
+        <Box key={root.id} sx={{ display: 'flex', alignItems: 'center', ml: indent ? CHILD_INDENT : 0 }}>
+            <FormControlLabel
+                sx={{ ...CHECKBOX_ROW_SX, flexGrow: 1, minWidth: 0 }}
+                control={
+                    <Checkbox
+                        size='small'
+                        sx={CHECKBOX_SX}
+                        checked={store.selectedRoots.includes(root.path)}
+                        onChange={() => store.toggleRoot(root.path)}
+                    />
+                }
+                label={rootLabel(root)}
+            />
+            {/* 自分で追加したディレクトリのみ取り除ける */}
+            {root.kind === 'custom' && (
+                <Tooltip title={t('cleanupPage.removeDirectory')}>
+                    <IconButton size='small' onClick={() => void removeDirectory(root.path)} sx={{ ml: 0.5 }}>
+                        <DeleteIcon fontSize='small' />
+                    </IconButton>
+                </Tooltip>
+            )}
+        </Box>
+    );
+
+    // 配下をまとめて切り替えるグループの行
+    const renderGroupRow = (label: string, paths: string[]) => {
+        const selectedCount = paths.filter(path => store.selectedRoots.includes(path)).length;
+        const allSelected = paths.length > 0 && selectedCount === paths.length;
+        return (
+            <FormControlLabel
+                sx={CHECKBOX_ROW_SX}
+                control={
+                    <Checkbox
+                        size='small'
+                        sx={CHECKBOX_SX}
+                        disabled={paths.length === 0}
+                        checked={allSelected}
+                        indeterminate={selectedCount > 0 && !allSelected}
+                        onChange={() =>
+                            store.setAllRoots(
+                                allSelected
+                                    ? store.selectedRoots.filter(path => !paths.includes(path))
+                                    : [...new Set([...store.selectedRoots, ...paths])]
+                            )
+                        }
+                    />
+                }
+                label={label}
+            />
+        );
+    };
+
     const addDirectory = async () => {
         const selected = await window.kuraToolkit.dialog.openDirectory();
         if (!selected) return;
@@ -149,13 +229,24 @@ export default function CleanupPage() {
 
     const runScan = async () => {
         if (store.selectedTargets.length === 0) {
-            setWarning(t('cleanupPage.needTargets'));
+            showNotice('warning', t('cleanupPage.needTargets'));
             return;
         }
         if (store.selectedRoots.length === 0) {
-            setWarning(t('cleanupPage.needDirs'));
+            showNotice('warning', t('cleanupPage.needDirs'));
             return;
         }
+        // 前回と条件が変わっていれば保存し、次回起動時に復元できるようにする
+        const saved = settings.cleanup;
+        if (
+            !sameSelection(store.selectedTargets, saved.selectedTargets) ||
+            !sameSelection(store.selectedRoots, saved.selectedRoots)
+        ) {
+            await update({
+                cleanup: { selectedTargets: [...store.selectedTargets], selectedRoots: [...store.selectedRoots] },
+            });
+        }
+
         const jobId = crypto.randomUUID();
         setJob({ jobId, kind: 'scan', foundCount: 0 });
         try {
@@ -169,7 +260,7 @@ export default function CleanupPage() {
                 setNoneFoundOpen(true);
             }
         } catch (error) {
-            setWarning(error instanceof Error ? error.message : String(error));
+            showNotice('warning', error instanceof Error ? error.message : String(error));
         } finally {
             setJob(null);
         }
@@ -187,7 +278,7 @@ export default function CleanupPage() {
             const failedPaths = new Set(removeResult.failed.map(item => item.path));
             store.setItems(store.items.filter(item => !store.checked.includes(item.path) || failedPaths.has(item.path)));
         } catch (error) {
-            setWarning(error instanceof Error ? error.message : String(error));
+            showNotice('warning', error instanceof Error ? error.message : String(error));
         } finally {
             setJob(null);
         }
@@ -260,54 +351,28 @@ export default function CleanupPage() {
                     </Panel>
                 </Box>
 
-                {/* 検索対象ディレクトリ */}
+                {/* 検索対象ディレクトリ。ボリュームとカスタムはまとめて切り替えられるようにする */}
                 <Box sx={{ flex: 1 }}>
-                    <SectionLabel
-                        action={
-                            <Button
-                                size='small'
-                                onClick={() =>
-                                    store.setAllRoots(
-                                        store.selectedRoots.length === roots.length ? [] : roots.map(root => root.path)
-                                    )
-                                }
-                            >
-                                {t('common.checkAll')}
-                            </Button>
-                        }
-                    >
-                        {t('cleanupPage.dirs')}
-                    </SectionLabel>
+                    <SectionLabel>{t('cleanupPage.dirs')}</SectionLabel>
                     <Panel>
-                        {roots.map(root => (
-                            <Box key={root.id} sx={{ display: 'flex', alignItems: 'center' }}>
-                                <FormControlLabel
-                                    sx={{ ...CHECKBOX_ROW_SX, flexGrow: 1, minWidth: 0 }}
-                                    control={
-                                        <Checkbox
-                                            size='small'
-                                            sx={CHECKBOX_SX}
-                                            checked={store.selectedRoots.includes(root.path)}
-                                            onChange={() => store.toggleRoot(root.path)}
-                                        />
-                                    }
-                                    label={rootLabel(root)}
-                                />
-                                {/* 自分で追加したディレクトリのみ取り除ける */}
-                                {root.kind === 'custom' && (
-                                    <Tooltip title={t('cleanupPage.removeDirectory')}>
-                                        <IconButton
-                                            size='small'
-                                            onClick={() => void removeDirectory(root.path)}
-                                            sx={{ ml: 0.5 }}
-                                        >
-                                            <DeleteIcon fontSize='small' />
-                                        </IconButton>
-                                    </Tooltip>
-                                )}
-                            </Box>
-                        ))}
-                        <Button size='small' fullWidth variant='outlined' sx={{ mt: 1 }} onClick={addDirectory}>
+                        {homeRoots.map(root => renderRootRow(root))}
+
+                        {driveRoots.length > 0 && (
+                            <>
+                                {renderGroupRow(t('cleanupPage.volumes'), driveRoots.map(root => root.path))}
+                                {driveRoots.map(root => renderRootRow(root, true))}
+                            </>
+                        )}
+
+                        {renderGroupRow(t('cleanupPage.custom'), customRoots.map(root => root.path))}
+                        {customRoots.map(root => renderRootRow(root, true))}
+                        <Button
+                            size='small'
+                            fullWidth
+                            variant='outlined'
+                            sx={{ mt: 1, ml: CHILD_INDENT, width: `calc(100% - ${CHILD_INDENT * 8}px)` }}
+                            onClick={addDirectory}
+                        >
                             {t('cleanupPage.addDirectory')}
                         </Button>
                     </Panel>
@@ -363,7 +428,7 @@ export default function CleanupPage() {
                     fullWidth
                     onClick={() => {
                         if (store.checked.length === 0) {
-                            setWarning(t('cleanupPage.needChecked'));
+                            showNotice('warning', t('cleanupPage.needChecked'));
                             return;
                         }
                         setConfirmOpen(true);
@@ -450,7 +515,6 @@ export default function CleanupPage() {
                 </DialogActions>
             </Dialog>
 
-            <NoticeSnackbar message={warning} severity='warning' onClose={() => setWarning(null)} />
         </PageContainer>
     );
 }

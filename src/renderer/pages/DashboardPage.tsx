@@ -49,7 +49,13 @@ export default function DashboardPage() {
                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
                                             <Avatar
                                                 variant='rounded'
-                                                sx={{ bgcolor: feature.color, width: 32, height: 32 }}
+                                                sx={{
+                                                    bgcolor: feature.color,
+                                                    // Avatar の既定色は背景色に追随して暗くなるため明示する
+                                                    color: '#fff',
+                                                    width: 32,
+                                                    height: 32,
+                                                }}
                                             >
                                                 <Icon sx={{ fontSize: 20 }} />
                                             </Avatar>

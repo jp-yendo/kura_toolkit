@@ -174,7 +174,11 @@ export type ImagePreview = {
 // ---------------------------------------------------------------------------
 
 export type CleanupSettings = {
+    // ユーザーが追加した検索対象ディレクトリ
     customDirs: string[];
+    // 前回検索したときの条件 (次回起動時に復元する)
+    selectedTargets: CleanupTargetId[];
+    selectedRoots: string[];
 };
 
 export type CleanupTargetId =

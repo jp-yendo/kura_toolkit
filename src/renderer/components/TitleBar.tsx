@@ -73,14 +73,15 @@ export default function TitleBar({ info }: Props) {
                     </Typography>
                 )}
                 {/* 現在の画面名。各ページ側には見出しを置かずここに集約する */}
-                <Typography variant='caption' sx={{ color: 'text.disabled' }}>
+                <Typography variant='body2' sx={{ color: 'text.secondary' }}>
                     /
                 </Typography>
                 <Typography
-                    variant='body2'
+                    variant='body1'
                     sx={{
                         fontWeight: 600,
-                        color: 'text.secondary',
+                        fontSize: '0.95rem',
+                        color: 'text.primary',
                         whiteSpace: 'nowrap',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',

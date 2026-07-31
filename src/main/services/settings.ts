@@ -42,6 +42,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     },
     cleanup: {
         customDirs: [],
+        selectedTargets: [],
+        selectedRoots: [],
     },
 };
 

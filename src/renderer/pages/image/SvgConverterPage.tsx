@@ -15,7 +15,7 @@ import FileDropZone from '../../components/common/FileDropZone';
 import ProgressDialog from '../../components/common/ProgressDialog';
 import PageContainer from '../../components/common/PageContainer';
 import SectionLabel from '../../components/common/SectionLabel';
-import NoticeSnackbar from '../../components/common/NoticeSnackbar';
+import { showNotice } from '../../stores/noticeStore';
 import { useVectorizerStore } from '../../stores/vectorizerStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import type { VectorizerColorMode, VectorizerHierarchical, VectorizerPathMode } from '@shared/types';
@@ -62,7 +62,6 @@ export default function SvgConverterPage() {
     const store = useVectorizerStore();
     const { settings, update } = useSettingsStore();
     const [busy, setBusy] = React.useState(false);
-    const [notice, setNotice] = React.useState<{ severity: 'success' | 'warning'; message: string } | null>(null);
 
     // SVG は数 MB になり得るため、変換結果が変わったときだけ URL を作り直す
     const svgUrl = React.useMemo(
@@ -85,7 +84,7 @@ export default function SvgConverterPage() {
             const preview = await window.kuraToolkit.vectorizer.loadImage(imagePath);
             store.setImage(imagePath, preview.dataUrl);
         } catch (error) {
-            setNotice({ severity: 'warning', message: error instanceof Error ? error.message : String(error) });
+            showNotice('warning', error instanceof Error ? error.message : String(error));
         }
     };
 
@@ -95,9 +94,9 @@ export default function SvgConverterPage() {
         try {
             const result = await window.kuraToolkit.vectorizer.convert(store.imagePath, params);
             store.setSvg(result.svg);
-            setNotice({ severity: 'success', message: t('svgPage.converted') });
+            showNotice('success', t('svgPage.converted'));
         } catch (error) {
-            setNotice({ severity: 'warning', message: error instanceof Error ? error.message : String(error) });
+            showNotice('warning', error instanceof Error ? error.message : String(error));
         } finally {
             setBusy(false);
         }
@@ -117,9 +116,9 @@ export default function SvgConverterPage() {
         if (!target) return;
         try {
             await window.kuraToolkit.vectorizer.saveSvg(target, store.svg);
-            setNotice({ severity: 'success', message: t('svgPage.saved', { path: target }) });
+            showNotice('success', t('svgPage.saved', { path: target }));
         } catch (error) {
-            setNotice({ severity: 'warning', message: error instanceof Error ? error.message : String(error) });
+            showNotice('warning', error instanceof Error ? error.message : String(error));
         }
     };
 
@@ -149,7 +148,7 @@ export default function SvgConverterPage() {
                     onFiles={loadImage}
                     filters={IMAGE_FILTERS}
                     accept={IMAGE_EXTENSIONS}
-                    onRejected={() => setNotice({ severity: 'warning', message: t('svgPage.unsupportedImage') })}
+                    onRejected={() => showNotice('warning', t('svgPage.unsupportedImage'))}
                     hint={t('svgPage.dropHint')}
                     sx={{ flex: 1, minHeight: 160, overflow: 'hidden' }}
                 >
@@ -304,12 +303,6 @@ export default function SvgConverterPage() {
             </Box>
 
             <ProgressDialog open={busy} title={t('svgPage.converting')} />
-
-            <NoticeSnackbar
-                message={notice?.message ?? null}
-                severity={notice?.severity ?? 'success'}
-                onClose={() => setNotice(null)}
-            />
         </PageContainer>
     );
 }

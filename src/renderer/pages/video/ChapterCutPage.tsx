@@ -32,7 +32,7 @@ import LogView from '../../components/common/LogView';
 import PageContainer from '../../components/common/PageContainer';
 import SectionLabel from '../../components/common/SectionLabel';
 import Panel from '../../components/common/Panel';
-import NoticeSnackbar from '../../components/common/NoticeSnackbar';
+import { showNotice } from '../../stores/noticeStore';
 import { useChapterStore, type ChapterMode } from '../../stores/chapterStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import type { JobEvent } from '@shared/types';
@@ -64,7 +64,6 @@ export default function ChapterCutPage() {
     const { settings, update } = useSettingsStore();
     const [job, setJob] = React.useState<RunningJob | null>(null);
     const [loading, setLoading] = React.useState(false);
-    const [warning, setWarning] = React.useState<string | null>(null);
     const [resultOutputs, setResultOutputs] = React.useState<string[] | null>(null);
 
     const activeJobId = job?.jobId;
@@ -114,7 +113,7 @@ export default function ChapterCutPage() {
             store.setInput(input, probe);
         } catch (error) {
             store.setInput(null, null);
-            setWarning(formatError(error));
+            showNotice('warning', formatError(error));
         } finally {
             setLoading(false);
         }
@@ -123,11 +122,11 @@ export default function ChapterCutPage() {
     const run = async () => {
         if (!store.input || !store.probe) return;
         if (store.mode === 'split' && store.boundaries.filter(index => index > 0).length === 0) {
-            setWarning(t('chapterPage.noSplitPoint'));
+            showNotice('warning', t('chapterPage.noSplitPoint'));
             return;
         }
         if (store.mode === 'cut' && store.toIndex >= 0 && store.fromIndex > store.toIndex) {
-            setWarning(t('chapterPage.invalidRange'));
+            showNotice('warning', t('chapterPage.invalidRange'));
             return;
         }
         const jobId = crypto.randomUUID();
@@ -155,7 +154,7 @@ export default function ChapterCutPage() {
                 setResultOutputs(result.outputs);
             }
         } catch (error) {
-            setWarning(formatError(error));
+            showNotice('warning', formatError(error));
         } finally {
             setJob(null);
         }
@@ -361,7 +360,6 @@ export default function ChapterCutPage() {
                 }
             />
 
-            <NoticeSnackbar message={warning} severity='warning' onClose={() => setWarning(null)} />
 
             <Dialog open={resultOutputs !== null} onClose={() => setResultOutputs(null)} maxWidth='sm' fullWidth>
                 <DialogTitle>{t('common.done')}</DialogTitle>

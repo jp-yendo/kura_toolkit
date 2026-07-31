@@ -1,5 +1,5 @@
 import React from 'react';
-import { Snackbar, Alert, Button, LinearProgress, Stack, Typography } from '@mui/material';
+import { Alert, Button, LinearProgress, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import type { UpdateState } from '@shared/types';
 
@@ -10,6 +10,9 @@ import type { UpdateState } from '@shared/types';
  * - downloading: 進捗を表示
  * - downloaded: 適用中メッセージを表示 (メイン側が短い遅延で再起動)
  * - error: 失敗メッセージを表示 (再試行 / 閉じる) ※ユーザー操作によるダウンロード失敗時のみ届く
+ *
+ * 表示位置は持たず、通知の中身 (Alert) だけを返す。
+ * 実際の配置は NotificationArea が行い、画面内の一時通知と積み重ねて表示する。
  */
 export default function UpdateNotifier() {
     const { t } = useTranslation();
@@ -121,13 +124,5 @@ export default function UpdateNotifier() {
         }
     };
 
-    const content = renderContent();
-    if (!content) return null;
-
-    return (
-        // 通知の表示位置は NoticeSnackbar と揃える (常に右下)
-        <Snackbar open anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} autoHideDuration={null}>
-            {content}
-        </Snackbar>
-    );
+    return renderContent();
 }

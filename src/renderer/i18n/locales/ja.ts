@@ -135,6 +135,8 @@ export default {
     cleanupPage: {
         targets: 'クリーンアップ対象:',
         dirs: '検索対象ディレクトリ:',
+        volumes: 'ボリューム',
+        custom: 'カスタム',
         addDirectory: 'ディレクトリを追加...',
         removeDirectory: 'この検索対象を削除',
         homeWin: 'ユーザープロファイル ({{path}})',

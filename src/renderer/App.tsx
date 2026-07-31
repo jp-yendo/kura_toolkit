@@ -1,11 +1,11 @@
 import React from 'react';
 import { HashRouter, Routes, Route } from 'react-router-dom';
 import { Box, CssBaseline, useMediaQuery } from '@mui/material';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { ThemeProvider } from '@mui/material/styles';
+import { createAppTheme } from './theme';
 import { useTranslation } from 'react-i18next';
 import TitleBar from './components/TitleBar';
-import UpdateNotifier from './components/UpdateNotifier';
-import NoticeSnackbar from './components/common/NoticeSnackbar';
+import NotificationArea from './components/common/NotificationArea';
 import DashboardPage from './pages/DashboardPage';
 import SettingsPage from './pages/SettingsPage';
 import AudioNormalizerPage from './pages/audio/AudioNormalizerPage';
@@ -13,6 +13,7 @@ import ChapterCutPage from './pages/video/ChapterCutPage';
 import SvgConverterPage from './pages/image/SvgConverterPage';
 import CleanupPage from './pages/tools/CleanupPage';
 import { useSettingsStore } from './stores/settingsStore';
+import { showNotice } from './stores/noticeStore';
 
 export default function App() {
     const { t, i18n } = useTranslation();
@@ -22,6 +23,13 @@ export default function App() {
     React.useEffect(() => {
         void init();
     }, [init]);
+
+    // 設定の保存に失敗したら通知する (起動中の設定は反映されている)
+    React.useEffect(() => {
+        if (saveError === null) return;
+        showNotice('error', t('settingsPage.saveFailed', { error: saveError }), 10000);
+        clearSaveError();
+    }, [saveError, clearSaveError, t]);
 
     // 言語設定を i18next に反映
     React.useEffect(() => {
@@ -33,20 +41,7 @@ export default function App() {
     const themeSetting = settings?.app.theme ?? 'system';
     const mode = themeSetting === 'system' ? (prefersDark ? 'dark' : 'light') : themeSetting;
 
-    const muiTheme = React.useMemo(
-        () =>
-            createTheme({
-                palette: {
-                    mode,
-                    ...(mode === 'dark'
-                        ? {
-                              background: { default: '#0a0a0a', paper: '#141414' },
-                          }
-                        : {}),
-                },
-            }),
-        [mode]
-    );
+    const muiTheme = React.useMemo(() => createAppTheme(mode), [mode]);
 
     if (!initialized) {
         // 設定読込前は描画しない (テーマ/言語のちらつき防止)
@@ -71,14 +66,8 @@ export default function App() {
                     </Box>
                 </Box>
             </HashRouter>
-            <UpdateNotifier />
-            {/* 設定ファイルへの保存に失敗した場合の通知 (起動中の設定は反映されている) */}
-            <NoticeSnackbar
-                message={saveError === null ? null : t('settingsPage.saveFailed', { error: saveError })}
-                severity='error'
-                autoHideDuration={10000}
-                onClose={clearSaveError}
-            />
+            {/* アップデート通知と画面内の一時通知をまとめて右下に表示する */}
+            <NotificationArea />
         </ThemeProvider>
     );
 }

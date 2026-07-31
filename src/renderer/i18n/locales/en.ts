@@ -135,6 +135,8 @@ export default {
     cleanupPage: {
         targets: 'Cleanup Targets:',
         dirs: 'Search Directories:',
+        volumes: 'Volumes',
+        custom: 'Custom',
         addDirectory: 'Add Directory...',
         removeDirectory: 'Remove this search target',
         homeWin: 'User Profile ({{path}})',

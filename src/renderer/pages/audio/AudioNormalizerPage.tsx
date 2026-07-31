@@ -29,7 +29,7 @@ import ProgressDialog from '../../components/common/ProgressDialog';
 import PageContainer from '../../components/common/PageContainer';
 import SectionLabel from '../../components/common/SectionLabel';
 import Panel from '../../components/common/Panel';
-import NoticeSnackbar from '../../components/common/NoticeSnackbar';
+import { showNotice } from '../../stores/noticeStore';
 import { useAudioStore } from '../../stores/audioStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import type { AudioNormalizeItem, BitrateMode, JobEvent } from '@shared/types';
@@ -88,7 +88,6 @@ export default function AudioNormalizerPage() {
     const { files, addFiles, clearFiles, applyAnalysis } = useAudioStore();
     const { settings, update } = useSettingsStore();
     const [job, setJob] = React.useState<RunningJob | null>(null);
-    const [warning, setWarning] = React.useState<string | null>(null);
     const [result, setResult] = React.useState<{ ok: number; failed: number; skipped: number; details: AudioNormalizeItem[] } | null>(null);
     // 入力途中の文字列を保持する (空文字や "-" だけの状態を設定に保存しないため)
     const [lufsText, setLufsText] = React.useState<string | null>(null);
@@ -131,7 +130,7 @@ export default function AudioNormalizerPage() {
 
     const runAnalyze = async () => {
         if (files.length === 0) {
-            setWarning(t('audioPage.needFiles'));
+            showNotice('warning', t('audioPage.needFiles'));
             return;
         }
         const jobId = crypto.randomUUID();
@@ -144,10 +143,10 @@ export default function AudioNormalizerPage() {
             // 中断時も解析できた分は反映し、中断したことを伝える
             applyAnalysis(analyzeResult.items);
             if (analyzeResult.cancelled) {
-                setWarning(t('audioPage.cancelled'));
+                showNotice('warning', t('audioPage.cancelled'));
             }
         } catch (error) {
-            setWarning(formatError(error));
+            showNotice('warning', formatError(error));
         } finally {
             setJob(null);
         }
@@ -155,15 +154,15 @@ export default function AudioNormalizerPage() {
 
     const runNormalize = async () => {
         if (files.length === 0) {
-            setWarning(t('audioPage.needFiles'));
+            showNotice('warning', t('audioPage.needFiles'));
             return;
         }
         if (!audioSettings.outputDir) {
-            setWarning(t('audioPage.needOutputDir'));
+            showNotice('warning', t('audioPage.needOutputDir'));
             return;
         }
         if (!isValidTargetLufs(String(audioSettings.targetLufs))) {
-            setWarning(t('audioPage.invalidTargetLufs'));
+            showNotice('warning', t('audioPage.invalidTargetLufs'));
             return;
         }
         const jobId = crypto.randomUUID();
@@ -180,10 +179,10 @@ export default function AudioNormalizerPage() {
             const details = normalizeResult.items.filter(item => !item.ok && item.error);
             setResult({ ok, failed: details.length - skipped, skipped, details });
             if (normalizeResult.cancelled) {
-                setWarning(t('audioPage.cancelled'));
+                showNotice('warning', t('audioPage.cancelled'));
             }
         } catch (error) {
-            setWarning(formatError(error));
+            showNotice('warning', formatError(error));
         } finally {
             setJob(null);
         }
@@ -213,7 +212,7 @@ export default function AudioNormalizerPage() {
                     filters={AUDIO_FILTERS}
                     accept={AUDIO_EXTENSIONS}
                     multiple
-                    onRejected={() => setWarning(t('audioPage.unsupportedFile'))}
+                    onRejected={() => showNotice('warning', t('audioPage.unsupportedFile'))}
                     sx={{ flexGrow: 1 }}
                 />
             ) : (
@@ -222,7 +221,7 @@ export default function AudioNormalizerPage() {
                     filters={AUDIO_FILTERS}
                     accept={AUDIO_EXTENSIONS}
                     multiple
-                    onRejected={() => setWarning(t('audioPage.unsupportedFile'))}
+                    onRejected={() => showNotice('warning', t('audioPage.unsupportedFile'))}
                     sx={{ flexGrow: 1, alignItems: 'stretch', cursor: 'default', p: 0, border: 1, borderStyle: 'solid', minHeight: 160 }}
                 >
                     <TableContainer sx={{ maxHeight: '100%', width: '100%' }} onClick={event => event.stopPropagation()}>
@@ -358,7 +357,6 @@ export default function AudioNormalizerPage() {
                 }}
             />
 
-            <NoticeSnackbar message={warning} severity='warning' onClose={() => setWarning(null)} />
 
             <Dialog open={result !== null} onClose={() => setResult(null)} maxWidth='sm' fullWidth>
                 <DialogTitle>
