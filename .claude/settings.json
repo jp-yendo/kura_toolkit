@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__serena",
+      "WebSearch",
+      "WebFetch",
+      "SemanticSearch",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(glob:*)",
+      "Bash(ls:*)",
+      "Bash(yarn lint)",
+      "Bash(yarn format:*)",
+      "Bash(node -e:*)",
+      "Bash(echo \"exit=$?\")"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

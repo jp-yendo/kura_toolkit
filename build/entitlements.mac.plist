@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <!-- Hardened Runtime Permissions -->
+    <!-- Required for Electron to function under Hardened Runtime (Notarization) -->
+    <!-- Note: App is not sandboxed, so sandbox-related entitlements are not needed -->
+
+    <!-- Allow JIT compilation (required by V8 JS engine) -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+
+    <!-- Allow unsigned executable memory (required by Electron) -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+
+    <!-- Disable library validation (required to load third-party dylibs/plugins) -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+
+    <!-- Allow DYLD environment variables (helps with command execution and PATH resolution) -->
+    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <true/>
+
+    <!-- Allow execution of external commands -->
+    <!-- Required for executing which, brew, code, cursor, and other package managers -->
+    <key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
+    <array>
+      <string>com.apple.coreservices.launchservicesd</string>
+    </array>
+
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+
+    <!-- Allow reading from user home directory and Library folders -->
+    <!-- Required for accessing:
+         - ~/.dfapp (app config)
+    -->
+    <key>com.apple.security.temporary-exception.files.absolute-path.read-write</key>
+    <array>
+      <string>/Users/</string>
+    </array>
+  </dict>
+</plist>

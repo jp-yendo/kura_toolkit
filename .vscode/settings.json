@@ -1,0 +1,15 @@
+{
+  // electron-builder の出力フォルダ等を VS Code のファイル監視・検索・表示から除外する。
+  // これらを監視していると、ビルド時に release/win-unpacked(.tmp) をロックして
+  // electron-builder のリネームが EPERM で失敗するため。
+  "files.watcherExclude": {
+    "**/release/**": true,
+    "**/dist/**": true,
+    "**/node_modules/**": true
+  },
+  "search.exclude": {
+    "**/release": true,
+    "**/dist": true,
+    "**/node_modules": true
+  }
+}
