@@ -9,6 +9,7 @@ import type {
     AudioNormalizeItem,
     AudioNormalizeResult,
     AudioNormalizerSettings,
+    AudioOutputCheck,
 } from '../../shared/types';
 
 // オーディオのラウドネス解析と正規化 (元: AudioNormalizer/audio_normalizer.py)
@@ -180,12 +181,57 @@ function buildEncoderArgs(codec: string, encoder: string, options: AudioNormaliz
     return ['-b:a', bitrateArg];
 }
 
+// 出力パスの決め方。出力先が未指定の場合は入力と同じディレクトリ (= 元のファイルの上書き) になる
+function resolveOutputPath(filePath: string, outputDir: string): string {
+    return path.join(outputDir || path.dirname(filePath), path.basename(filePath));
+}
+
+// パス比較用のキー。Windows は大文字小文字を区別しないため小文字へ揃える
+function pathKey(filePath: string): string {
+    const resolved = path.resolve(filePath);
+    return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
+// 出力パスが重複する入力の一覧 (別ディレクトリの同名ファイルを 1 つの出力先へ出す場合)
+function findDuplicatedOutputs(files: string[], outputDir: string): string[] {
+    const seen = new Set<string>();
+    const duplicated = new Map<string, string>();
+    for (const filePath of files) {
+        const outputPath = resolveOutputPath(filePath, outputDir);
+        const key = pathKey(outputPath);
+        if (seen.has(key)) {
+            duplicated.set(key, outputPath);
+        } else {
+            seen.add(key);
+        }
+    }
+    return [...duplicated.values()];
+}
+
+// 正規化を実行する前に出力先を調べる。既存ファイル (上書き) と出力パスの重複を返す
+export function checkOutputs(files: string[], outputDir: string): AudioOutputCheck {
+    const existing = new Map<string, string>();
+    for (const filePath of files) {
+        const outputPath = resolveOutputPath(filePath, outputDir);
+        try {
+            if (fs.existsSync(outputPath)) existing.set(pathKey(outputPath), outputPath);
+        } catch {
+            // 判定できない場合は確認対象にしない (実行時に改めて失敗を返す)
+        }
+    }
+    return { existing: [...existing.values()], duplicated: findDuplicatedOutputs(files, outputDir) };
+}
+
 // 指定ターゲット LUFS へ正規化し、出力先ディレクトリへ同名で書き出す
 export async function normalizeFiles(
     jobId: string,
     files: string[],
     options: AudioNormalizerSettings
 ): Promise<AudioNormalizeResult> {
+    // 出力パスが重複する指定は必ず互いを上書きするため、1 件も処理せずに失敗させる
+    if (findDuplicatedOutputs(files, options.outputDir).length > 0) {
+        throw new Error('DUPLICATE_OUTPUTS');
+    }
     startJob(jobId);
     const items: AudioNormalizeItem[] = [];
     let cancelled = false;
@@ -196,7 +242,14 @@ export async function normalizeFiles(
                 break;
             }
             const filePath = files[i];
-            const outputPath = path.join(options.outputDir, path.basename(filePath));
+            const outputPath = resolveOutputPath(filePath, options.outputDir);
+            const outputDir = path.dirname(outputPath);
+            const overwriting = path.resolve(outputPath) === path.resolve(filePath);
+            // ffmpeg は読み込み中のファイルへ直接書けないため、上書き時は一時ファイルへ出力してから置き換える
+            const extension = path.extname(filePath);
+            const writePath = overwriting
+                ? path.join(outputDir, `${path.basename(filePath, extension)}.kura-tmp${extension}`)
+                : outputPath;
             const item: AudioNormalizeItem = { path: filePath, outputPath, ok: false };
             emitJobEvent({
                 jobId,
@@ -207,9 +260,6 @@ export async function normalizeFiles(
                 message: path.basename(filePath),
             });
             try {
-                if (path.resolve(outputPath) === path.resolve(filePath)) {
-                    throw new Error('OUTPUT_SAME_AS_INPUT');
-                }
                 const probe = await probeAudio(filePath, jobId);
                 const audioStream = firstAudioStream(probe);
                 const codec = audioStream?.codec_name ?? '';
@@ -251,7 +301,7 @@ export async function normalizeFiles(
                     '-c:a',
                     encoder,
                     ...buildEncoderArgs(codec, encoder, options),
-                    outputPath,
+                    writePath,
                 ];
                 await runFfmpeg(args, {
                     jobId,
@@ -267,12 +317,16 @@ export async function normalizeFiles(
                         });
                     },
                 });
+                if (overwriting) {
+                    // 変換が終わってから元のファイルを置き換える (途中で失敗しても元のファイルは残る)
+                    fs.renameSync(writePath, outputPath);
+                }
                 item.ok = true;
             } catch (error) {
-                // 書きかけの出力ファイルを削除
+                // 書きかけの出力ファイルを削除 (上書き時は一時ファイルなので元のファイルは消さない)
                 try {
-                    if (fs.existsSync(outputPath) && path.resolve(outputPath) !== path.resolve(filePath)) {
-                        fs.unlinkSync(outputPath);
+                    if (fs.existsSync(writePath) && path.resolve(writePath) !== path.resolve(filePath)) {
+                        fs.unlinkSync(writePath);
                     }
                 } catch {
                     // 削除失敗は無視

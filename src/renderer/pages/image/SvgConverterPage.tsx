@@ -3,21 +3,27 @@ import {
     Box,
     Button,
     FormControl,
+    IconButton,
     InputLabel,
     MenuItem,
     Select,
     Slider,
     Stack,
+    Tooltip,
     Typography,
 } from '@mui/material';
+import FitScreenIcon from '@mui/icons-material/FitScreen';
+import ZoomInIcon from '@mui/icons-material/ZoomIn';
+import ZoomOutIcon from '@mui/icons-material/ZoomOut';
 import { useTranslation } from 'react-i18next';
 import FileDropZone from '../../components/common/FileDropZone';
 import ProgressDialog from '../../components/common/ProgressDialog';
 import PageContainer from '../../components/common/PageContainer';
 import SectionLabel from '../../components/common/SectionLabel';
+import SplitPane from '../../components/common/SplitPane';
+import ZoomableImage, { clampScale } from '../../components/common/ZoomableImage';
 import { showNotice } from '../../stores/noticeStore';
 import { useVectorizerStore } from '../../stores/vectorizerStore';
-import { useSettingsStore } from '../../stores/settingsStore';
 import type { VectorizerColorMode, VectorizerHierarchical, VectorizerPathMode } from '@shared/types';
 
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'bmp', 'gif', 'tiff'];
@@ -60,8 +66,12 @@ function SliderRow({ label, value, min, max, step, decimals, onChange }: SliderR
 export default function SvgConverterPage() {
     const { t } = useTranslation();
     const store = useVectorizerStore();
-    const { settings, update } = useSettingsStore();
     const [busy, setBusy] = React.useState(false);
+    // 変換パラメータは設定ファイルへ保存せず、起動のたびに既定値から始める
+    const params = store.params;
+    // SVG プレビューの表示倍率 (null = 全体表示) と、実際に表示している倍率
+    const [previewScale, setPreviewScale] = React.useState<number | null>(null);
+    const [previewEffectiveScale, setPreviewEffectiveScale] = React.useState(1);
 
     // SVG は数 MB になり得るため、変換結果が変わったときだけ URL を作り直す
     const svgUrl = React.useMemo(
@@ -74,8 +84,10 @@ export default function SvgConverterPage() {
         };
     }, [svgUrl]);
 
-    if (!settings) return null;
-    const params = settings.vectorizer;
+    // 変換し直したら全体表示へ戻す
+    React.useEffect(() => {
+        setPreviewScale(null);
+    }, [svgUrl]);
 
     const loadImage = async (paths: string[]) => {
         const imagePath = paths[0];
@@ -122,74 +134,117 @@ export default function SvgConverterPage() {
         }
     };
 
+    // SVG プレビューの見出しに置くズーム操作。Tooltip は無効時も出すため span で包む
+    const zoomControls = (
+        <Stack direction='row' spacing={0.5} sx={{ alignItems: 'center' }}>
+            <Tooltip title={t('svgPage.zoomOut')}>
+                <span>
+                    <IconButton
+                        size='small'
+                        disabled={!svgUrl}
+                        onClick={() => setPreviewScale(clampScale(previewEffectiveScale / 1.25))}
+                    >
+                        <ZoomOutIcon fontSize='small' />
+                    </IconButton>
+                </span>
+            </Tooltip>
+            <Tooltip title={t('svgPage.actualSize')}>
+                <span>
+                    <Button
+                        size='small'
+                        color='inherit'
+                        disabled={!svgUrl}
+                        onClick={() => setPreviewScale(1)}
+                        sx={{ minWidth: 60 }}
+                    >
+                        {Math.round(previewEffectiveScale * 100)}%
+                    </Button>
+                </span>
+            </Tooltip>
+            <Tooltip title={t('svgPage.zoomIn')}>
+                <span>
+                    <IconButton
+                        size='small'
+                        disabled={!svgUrl}
+                        onClick={() => setPreviewScale(clampScale(previewEffectiveScale * 1.25))}
+                    >
+                        <ZoomInIcon fontSize='small' />
+                    </IconButton>
+                </span>
+            </Tooltip>
+            <Tooltip title={t('svgPage.fitToWindow')}>
+                <span>
+                    <IconButton size='small' disabled={!svgUrl} onClick={() => setPreviewScale(null)}>
+                        <FitScreenIcon fontSize='small' />
+                    </IconButton>
+                </span>
+            </Tooltip>
+        </Stack>
+    );
+
     return (
         <PageContainer sx={{ flexDirection: 'row', height: '100%', minHeight: 0 }}>
-            {/* 左: 画像入力とプレビュー */}
-            <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-                <SectionLabel>
-                    {store.imagePath ? (
-                        <Box
-                            component='span'
-                            sx={{
-                                display: 'block',
-                                maxWidth: 640,
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                            }}
+            {/* 左: 画像入力とプレビュー (間の仕切りをドラッグして高さを配分できる) */}
+            <SplitPane
+                sx={{ flexGrow: 1, minWidth: 0 }}
+                top={
+                    <>
+                        <SectionLabel>
+                            {store.imagePath ? (
+                                <Box
+                                    component='span'
+                                    sx={{
+                                        display: 'block',
+                                        maxWidth: 640,
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap',
+                                    }}
+                                >
+                                    {store.imagePath}
+                                </Box>
+                            ) : (
+                                t('svgPage.original')
+                            )}
+                        </SectionLabel>
+                        <FileDropZone
+                            onFiles={loadImage}
+                            filters={IMAGE_FILTERS}
+                            accept={IMAGE_EXTENSIONS}
+                            onRejected={() => showNotice('warning', t('svgPage.unsupportedImage'))}
+                            hint={t('svgPage.dropHint')}
+                            sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}
                         >
-                            {store.imagePath}
-                        </Box>
-                    ) : (
-                        t('svgPage.original')
-                    )}
-                </SectionLabel>
-                <FileDropZone
-                    onFiles={loadImage}
-                    filters={IMAGE_FILTERS}
-                    accept={IMAGE_EXTENSIONS}
-                    onRejected={() => showNotice('warning', t('svgPage.unsupportedImage'))}
-                    hint={t('svgPage.dropHint')}
-                    sx={{ flex: 1, minHeight: 160, overflow: 'hidden' }}
-                >
-                    {store.imageDataUrl ? (
-                        <Box
-                            component='img'
-                            src={store.imageDataUrl}
-                            alt={t('svgPage.original')}
-                            sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-                        />
-                    ) : undefined}
-                </FileDropZone>
-                <SectionLabel>{t('svgPage.preview')}</SectionLabel>
-                <Box
-                    sx={{
-                        flex: 1,
-                        minHeight: 160,
-                        border: 1,
-                        borderColor: 'divider',
-                        borderRadius: 2,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        overflow: 'hidden',
-                        bgcolor: 'background.paper',
-                    }}
-                >
-                    {svgUrl ? (
-                        <Box
-                            component='img'
+                            {store.imageDataUrl ? (
+                                <Box
+                                    component='img'
+                                    src={store.imageDataUrl}
+                                    alt={t('svgPage.original')}
+                                    sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                                />
+                            ) : undefined}
+                        </FileDropZone>
+                    </>
+                }
+                bottom={
+                    <>
+                        <SectionLabel action={zoomControls}>{t('svgPage.preview')}</SectionLabel>
+                        <ZoomableImage
                             src={svgUrl}
                             alt={t('svgPage.preview')}
-                            sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                            scale={previewScale}
+                            onScaleChange={setPreviewScale}
+                            onEffectiveScaleChange={setPreviewEffectiveScale}
+                            placeholder={
+                                <Typography variant='body2' color='text.secondary'>
+                                    {t('svgPage.preview')}
+                                </Typography>
+                            }
+                            sx={{ flex: 1, minHeight: 0 }}
                         />
-                    ) : (
-                        <Typography variant='body2' color='text.secondary'>
-                            {t('svgPage.preview')}
-                        </Typography>
-                    )}
-                </Box>
-            </Box>
+                    </>
+                }
+            />
 
             {/* 右: パラメータと実行 */}
             <Box sx={{ width: 320, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -203,9 +258,7 @@ export default function SvgConverterPage() {
                                 label={t('svgPage.colorMode')}
                                 value={params.colorMode}
                                 onChange={event =>
-                                    void update({
-                                        vectorizer: { colorMode: event.target.value as VectorizerColorMode },
-                                    })
+                                    store.patchParams({ colorMode: event.target.value as VectorizerColorMode })
                                 }
                             >
                                 <MenuItem value='color'>{t('svgPage.colorModeColor')}</MenuItem>
@@ -219,9 +272,7 @@ export default function SvgConverterPage() {
                                 label={t('svgPage.hierarchical')}
                                 value={params.hierarchical}
                                 onChange={event =>
-                                    void update({
-                                        vectorizer: { hierarchical: event.target.value as VectorizerHierarchical },
-                                    })
+                                    store.patchParams({ hierarchical: event.target.value as VectorizerHierarchical })
                                 }
                             >
                                 <MenuItem value='stacked'>{t('svgPage.hierarchicalStacked')}</MenuItem>
@@ -233,21 +284,21 @@ export default function SvgConverterPage() {
                             value={params.filterSpeckle}
                             min={0}
                             max={128}
-                            onChange={value => void update({ vectorizer: { filterSpeckle: value } })}
+                            onChange={value => store.patchParams({ filterSpeckle: value })}
                         />
                         <SliderRow
                             label={t('svgPage.colorPrecision')}
                             value={params.colorPrecision}
                             min={1}
                             max={8}
-                            onChange={value => void update({ vectorizer: { colorPrecision: value } })}
+                            onChange={value => store.patchParams({ colorPrecision: value })}
                         />
                         <SliderRow
                             label={t('svgPage.gradientStep')}
                             value={params.layerDifference}
                             min={0}
                             max={128}
-                            onChange={value => void update({ vectorizer: { layerDifference: value } })}
+                            onChange={value => store.patchParams({ layerDifference: value })}
                         />
                     </Stack>
 
@@ -260,7 +311,7 @@ export default function SvgConverterPage() {
                                 label={t('svgPage.mode')}
                                 value={params.mode}
                                 onChange={event =>
-                                    void update({ vectorizer: { mode: event.target.value as VectorizerPathMode } })
+                                    store.patchParams({ mode: event.target.value as VectorizerPathMode })
                                 }
                             >
                                 <MenuItem value='spline'>{t('svgPage.modeSpline')}</MenuItem>
@@ -273,7 +324,7 @@ export default function SvgConverterPage() {
                             value={params.cornerThreshold}
                             min={0}
                             max={180}
-                            onChange={value => void update({ vectorizer: { cornerThreshold: value } })}
+                            onChange={value => store.patchParams({ cornerThreshold: value })}
                         />
                         <SliderRow
                             label={t('svgPage.segmentLength')}
@@ -282,14 +333,14 @@ export default function SvgConverterPage() {
                             max={10}
                             step={0.1}
                             decimals={1}
-                            onChange={value => void update({ vectorizer: { lengthThreshold: value } })}
+                            onChange={value => store.patchParams({ lengthThreshold: value })}
                         />
                         <SliderRow
                             label={t('svgPage.spliceThreshold')}
                             value={params.spliceThreshold}
                             min={0}
                             max={180}
-                            onChange={value => void update({ vectorizer: { spliceThreshold: value } })}
+                            onChange={value => store.patchParams({ spliceThreshold: value })}
                         />
                     </Stack>
                 </Box>

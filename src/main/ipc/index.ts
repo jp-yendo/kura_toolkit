@@ -1,6 +1,7 @@
 import { registerUpdaterIpcHandlers } from './updater';
 import { registerSettingsIpcHandlers } from './settings';
 import { registerDialogIpcHandlers } from './dialog';
+import { registerFileIpcHandlers } from './files';
 import { registerJobIpcHandlers } from './jobs';
 import { registerAudioIpcHandlers } from './audio';
 import { registerChapterIpcHandlers } from './chapter';
@@ -18,6 +19,7 @@ export function registerIpcHandlers() {
     // 設定・ダイアログ・ジョブ制御
     registerSettingsIpcHandlers();
     registerDialogIpcHandlers();
+    registerFileIpcHandlers();
     registerJobIpcHandlers();
 
     // 機能別ハンドラ

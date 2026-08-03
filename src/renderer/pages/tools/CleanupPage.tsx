@@ -4,7 +4,6 @@ import {
     Box,
     Button,
     Checkbox,
-    Dialog,
     DialogActions,
     DialogContent,
     DialogTitle,
@@ -16,6 +15,7 @@ import {
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useTranslation } from 'react-i18next';
+import AppDialog from '../../components/common/AppDialog';
 import ProgressDialog from '../../components/common/ProgressDialog';
 import PageContainer from '../../components/common/PageContainer';
 import SectionLabel from '../../components/common/SectionLabel';
@@ -453,7 +453,7 @@ export default function CleanupPage() {
             />
 
             {/* 検索したが対象が無かった場合 */}
-            <Dialog open={noneFoundOpen} onClose={() => setNoneFoundOpen(false)} maxWidth='sm' fullWidth>
+            <AppDialog open={noneFoundOpen} onClose={() => setNoneFoundOpen(false)} maxWidth='sm' fullWidth>
                 <DialogTitle>{t('cleanupPage.searchResultTitle')}</DialogTitle>
                 <DialogContent>
                     <Typography>{t('cleanupPage.noneFound')}</Typography>
@@ -461,10 +461,10 @@ export default function CleanupPage() {
                 <DialogActions>
                     <Button onClick={() => setNoneFoundOpen(false)}>{t('common.close')}</Button>
                 </DialogActions>
-            </Dialog>
+            </AppDialog>
 
             {/* 削除確認 */}
-            <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} maxWidth='sm' fullWidth>
+            <AppDialog open={confirmOpen} onClose={() => setConfirmOpen(false)} maxWidth='sm' fullWidth>
                 <DialogTitle>{t('cleanupPage.confirmTitle')}</DialogTitle>
                 <DialogContent>
                     <Typography>{t('cleanupPage.confirmMessage', { count: store.checked.length })}</Typography>
@@ -475,10 +475,10 @@ export default function CleanupPage() {
                         {t('cleanupPage.cleanup')}
                     </Button>
                 </DialogActions>
-            </Dialog>
+            </AppDialog>
 
             {/* 結果 */}
-            <Dialog open={result !== null} onClose={() => setResult(null)} maxWidth='sm' fullWidth>
+            <AppDialog open={result !== null} onClose={() => setResult(null)} maxWidth='sm' fullWidth>
                 <DialogTitle>{t('common.done')}</DialogTitle>
                 <DialogContent>
                     <Typography sx={{ mb: 1 }}>
@@ -513,7 +513,7 @@ export default function CleanupPage() {
                         {t('cleanupPage.rescan')}
                     </Button>
                 </DialogActions>
-            </Dialog>
+            </AppDialog>
 
         </PageContainer>
     );

@@ -11,6 +11,9 @@ type Props = {
     filters: FileFilter[];
     // 受け付ける拡張子 (小文字、ドットなし)。省略時は無制限
     accept?: string[];
+    // ディレクトリのドロップを許可する。renderer からはファイルかディレクトリか判別できないため、
+    // 拡張子で絞り込まずにそのまま渡し、展開と絞り込みは呼び出し側 (main) に任せる
+    allowDirectories?: boolean;
     multiple?: boolean;
     // 対象外の形式だけが選択/ドロップされたときの通知
     onRejected?(): void;
@@ -21,18 +24,29 @@ type Props = {
 };
 
 // ドラッグ&ドロップ + クリック選択のファイル入力ゾーン
-export default function FileDropZone({ onFiles, filters, accept, multiple, onRejected, hint, sx, children }: Props) {
+export default function FileDropZone({
+    onFiles,
+    filters,
+    accept,
+    allowDirectories,
+    multiple,
+    onRejected,
+    hint,
+    sx,
+    children,
+}: Props) {
     const { t } = useTranslation();
     const [dragOver, setDragOver] = React.useState(false);
 
     const acceptPath = React.useCallback(
         (filePath: string) => {
+            if (allowDirectories) return true;
             if (!accept || accept.length === 0) return true;
             const dot = filePath.lastIndexOf('.');
             if (dot < 0) return false;
             return accept.includes(filePath.slice(dot + 1).toLowerCase());
         },
-        [accept]
+        [accept, allowDirectories]
     );
 
     const handleDrop = (event: React.DragEvent) => {

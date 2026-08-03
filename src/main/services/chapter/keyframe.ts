@@ -45,3 +45,38 @@ export async function findKeyframeBefore(
         window *= 4;
     }
 }
+
+// target に最も近い映像キーフレームの時刻を返す。
+// 実測から求めた「実際の切り出し開始位置」は誤差を含むが、内容は必ずキーフレームから
+// 始まっているため、近傍のキーフレームへ吸着させて正確な値にする。
+export async function findNearestKeyframe(
+    input: string,
+    streamIndex: number,
+    target: number,
+    jobId?: string
+): Promise<number> {
+    const begin = Math.max(0, target - 3);
+    const data = await probeJson<FfprobePacketsResult>(
+        [
+            '-select_streams',
+            String(streamIndex),
+            '-show_entries',
+            'packet=pts_time,flags',
+            '-read_intervals',
+            `${begin.toFixed(6)}%${(target + 3).toFixed(6)}`,
+            input,
+        ],
+        { jobId }
+    );
+    let best: number | null = null;
+    for (const packet of data.packets ?? []) {
+        if (!packet.flags?.includes('K')) continue;
+        if (packet.pts_time === undefined) continue;
+        const t = Number.parseFloat(packet.pts_time);
+        if (!Number.isFinite(t)) continue;
+        if (best === null || Math.abs(t - target) < Math.abs(best - target)) {
+            best = t;
+        }
+    }
+    return best ?? target;
+}

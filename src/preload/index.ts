@@ -24,13 +24,17 @@ const IPC_CHANNELS = {
     DIALOG_OPEN_FILES: 'dialog:openFiles',
     DIALOG_OPEN_DIRECTORY: 'dialog:openDirectory',
     DIALOG_SAVE_FILE: 'dialog:saveFile',
+    FILES_COLLECT: 'files:collect',
     JOB_CANCEL: 'job:cancel',
     JOB_EVENT: 'job:event',
     AUDIO_ANALYZE: 'audio:analyze',
     AUDIO_NORMALIZE: 'audio:normalize',
+    AUDIO_CHECK_OUTPUTS: 'audio:checkOutputs',
     CHAPTER_PROBE: 'chapter:probe',
     CHAPTER_CUT: 'chapter:cut',
     CHAPTER_SPLIT: 'chapter:split',
+    CHAPTER_CHECK_CUT: 'chapter:checkCut',
+    CHAPTER_CHECK_SPLIT: 'chapter:checkSplit',
     VECTORIZER_LOAD_IMAGE: 'vectorizer:loadImage',
     VECTORIZER_CONVERT: 'vectorizer:convert',
     VECTORIZER_SAVE_SVG: 'vectorizer:saveSvg',
@@ -93,6 +97,11 @@ const api: IpcApi = {
             return ipcRenderer.invoke(IPC_CHANNELS.DIALOG_SAVE_FILE, options);
         },
     },
+    files: {
+        async collect(paths, extensions) {
+            return ipcRenderer.invoke(IPC_CHANNELS.FILES_COLLECT, paths, extensions);
+        },
+    },
     jobs: {
         async cancel(jobId) {
             return ipcRenderer.invoke(IPC_CHANNELS.JOB_CANCEL, jobId);
@@ -112,6 +121,9 @@ const api: IpcApi = {
         async normalize(jobId, files, options) {
             return ipcRenderer.invoke(IPC_CHANNELS.AUDIO_NORMALIZE, jobId, files, options);
         },
+        async checkOutputs(files, outputDir) {
+            return ipcRenderer.invoke(IPC_CHANNELS.AUDIO_CHECK_OUTPUTS, files, outputDir);
+        },
     },
     chapter: {
         async probe(input) {
@@ -122,6 +134,12 @@ const api: IpcApi = {
         },
         async split(jobId, request) {
             return ipcRenderer.invoke(IPC_CHANNELS.CHAPTER_SPLIT, jobId, request);
+        },
+        async checkCut(request) {
+            return ipcRenderer.invoke(IPC_CHANNELS.CHAPTER_CHECK_CUT, request);
+        },
+        async checkSplit(request) {
+            return ipcRenderer.invoke(IPC_CHANNELS.CHAPTER_CHECK_SPLIT, request);
         },
     },
     vectorizer: {

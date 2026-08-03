@@ -25,21 +25,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
         bitrateMode: 'cbr',
         bitrate: 160,
     },
-    chapterCut: {
-        outputDir: '',
-        accurate: false,
-    },
-    vectorizer: {
-        colorMode: 'color',
-        hierarchical: 'stacked',
-        filterSpeckle: 4,
-        colorPrecision: 6,
-        layerDifference: 16,
-        mode: 'spline',
-        cornerThreshold: 60,
-        lengthThreshold: 4.0,
-        spliceThreshold: 45,
-    },
     cleanup: {
         customDirs: [],
         selectedTargets: [],

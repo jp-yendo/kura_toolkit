@@ -66,6 +66,14 @@ export type AudioNormalizerSettings = {
     bitrate: number;
 };
 
+// 正規化を実行する前の出力先チェック結果
+export type AudioOutputCheck = {
+    // 既に存在する出力パス (実行すると上書きになるため確認が必要)
+    existing: string[];
+    // 複数の入力が同じ出力パスになる場合のパス (必ず互いを上書きするため実行させない)
+    duplicated: string[];
+};
+
 export type AudioAnalyzeItem = {
     path: string;
     channels: number | null;
@@ -95,11 +103,6 @@ export type AudioNormalizeResult = {
 // チャプターカット
 // ---------------------------------------------------------------------------
 
-export type ChapterCutSettings = {
-    outputDir: string;
-    accurate: boolean;
-};
-
 export type ChapterInfo = {
     // ffprobe が返すチャプター id (文字列化)
     id: string;
@@ -111,11 +114,44 @@ export type ChapterInfo = {
     title: string;
 };
 
+export type MediaStreamKind = 'video' | 'audio' | 'subtitle' | 'other';
+
+// 入力ファイルのストリーム情報 (画面表示用。不明な項目は null)
+export type MediaStreamInfo = {
+    index: number;
+    kind: MediaStreamKind;
+    // ffprobe が返した codec_type をそのまま持つ (kind='other' の内訳を表示するため)
+    codecType: string;
+    codec: string;
+    // コンテナ上のタグと用途名 (mp4 の 'text' / 'SubtitleHandler' など)。
+    // ffmpeg がコーデックを判別できない字幕トラックの識別に使う
+    codecTag: string | null;
+    handlerName: string | null;
+    // 収録フレーム数 (分かる場合のみ)。mp4 のチャプター用トラック判定に使う
+    frameCount: number | null;
+    // 映像のみ
+    width: number | null;
+    height: number | null;
+    pixelFormat: string | null;
+    // カバーアート (本編ではない映像ストリーム)
+    attachedPic: boolean;
+    // 再生時に既定で選ばれるか / 強制表示か
+    isDefault: boolean;
+    isForced: boolean;
+    // 音声のみ
+    channels: number | null;
+    sampleRate: number | null;
+    bitrateKbps: number | null;
+    language: string | null;
+    title: string | null;
+};
+
 export type ChapterProbeResult = {
     chapters: ChapterInfo[];
     formatName: string;
     durationSec: number | null;
     hasVideo: boolean;
+    streams: MediaStreamInfo[];
 };
 
 export type ChapterCutRequest = {
@@ -127,8 +163,9 @@ export type ChapterCutRequest = {
     accurate: boolean;
     // null = 入力と同じディレクトリ
     outputDir: string | null;
-    // 出力ファイルパスの明示指定 (null = チャプター名から自動生成)
-    outputPath: string | null;
+    // 出力ファイル名の明示指定 (null = チャプター名から自動生成)。
+    // ディレクトリは含まず、outputDir の下に作られる
+    outputName: string | null;
 };
 
 export type ChapterSplitRequest = {
@@ -137,6 +174,16 @@ export type ChapterSplitRequest = {
     boundaryIndexes: number[];
     accurate: boolean;
     outputDir: string | null;
+};
+
+// 実行前の出力先チェック結果
+export type ChapterOutputCheck = {
+    // 生成される出力パスの一覧
+    outputs: string[];
+    // そのうち既に存在するもの (実行すると上書きになるため確認が必要)
+    existing: string[];
+    // 字幕の形式の都合で出力コンテナを変える場合の変更内容 (拡張子。変えない場合は null)
+    containerChange: { from: string; to: string } | null;
 };
 
 export type ChapterJobResult = {
@@ -256,8 +303,7 @@ export type AppSettings = {
     };
     ffmpeg: FfmpegSettings;
     audioNormalizer: AudioNormalizerSettings;
-    chapterCut: ChapterCutSettings;
-    vectorizer: VectorizeParams;
+    // チャプターカットと画像 SVG 変換のパラメータは永続化しない (毎回既定値から始める)
     cleanup: CleanupSettings;
 };
 

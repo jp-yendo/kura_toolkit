@@ -6,8 +6,10 @@ import type {
     AudioAnalyzeResult,
     AudioNormalizeResult,
     AudioNormalizerSettings,
+    AudioOutputCheck,
     ChapterCutRequest,
     ChapterJobResult,
+    ChapterOutputCheck,
     ChapterProbeResult,
     ChapterSplitRequest,
     CleanupCapabilities,
@@ -56,6 +58,12 @@ export type IpcApi = {
         openDirectory(options?: { defaultPath?: string }): Promise<string | null>;
         saveFile(options: { defaultPath?: string; filters: FileFilter[] }): Promise<string | null>;
     };
+    // ファイルの列挙
+    files: {
+        // 渡されたパスのうちディレクトリは配下を再帰的に展開し、
+        // 拡張子 (小文字・ドット無し) が一致するファイルだけを返す
+        collect(paths: string[], extensions: string[]): Promise<string[]>;
+    };
     // 長時間ジョブの制御
     jobs: {
         cancel(jobId: string): Promise<void>;
@@ -66,12 +74,17 @@ export type IpcApi = {
     audio: {
         analyze(jobId: string, files: string[]): Promise<AudioAnalyzeResult>;
         normalize(jobId: string, files: string[], options: AudioNormalizerSettings): Promise<AudioNormalizeResult>;
+        // 実行前の出力先チェック (上書きになるファイルと、出力パスの重複)
+        checkOutputs(files: string[], outputDir: string): Promise<AudioOutputCheck>;
     };
     // チャプターカット
     chapter: {
         probe(input: string): Promise<ChapterProbeResult>;
         cut(jobId: string, request: ChapterCutRequest): Promise<ChapterJobResult>;
         split(jobId: string, request: ChapterSplitRequest): Promise<ChapterJobResult>;
+        // 実行前の出力先チェック (生成される出力パスと、そのうち上書きになるもの)
+        checkCut(request: ChapterCutRequest): Promise<ChapterOutputCheck>;
+        checkSplit(request: ChapterSplitRequest): Promise<ChapterOutputCheck>;
     };
     // 画像 SVG 変換
     vectorizer: {

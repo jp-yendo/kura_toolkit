@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 import { IPC_CHANNELS } from '../../shared/constants';
-import { analyzeFiles, normalizeFiles } from '../services/audio-normalizer';
+import { analyzeFiles, checkOutputs, normalizeFiles } from '../services/audio-normalizer';
 import type { AudioNormalizerSettings } from '../../shared/types';
 
 export function registerAudioIpcHandlers() {
@@ -14,4 +14,8 @@ export function registerAudioIpcHandlers() {
             return normalizeFiles(jobId, files, options);
         }
     );
+
+    ipcMain.handle(IPC_CHANNELS.AUDIO_CHECK_OUTPUTS, (_e, files: string[], outputDir: string) => {
+        return checkOutputs(files, outputDir);
+    });
 }

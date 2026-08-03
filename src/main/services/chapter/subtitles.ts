@@ -134,6 +134,55 @@ export async function extractTextSubtitle(
     );
 }
 
+// テキストとして編集できない字幕 (PGS・VOBSUB・mov_text 等) を切り出す。
+// 入力側 -ss で範囲の先頭へ飛びつつ、-copyts と出力側 -ss で
+// 「切り出し開始より前から表示され続けているパケット」を捨てる。
+// これを pass1 に含めたまま処理すると、その古いパケットが -avoid_negative_ts の基準になり、
+// 映像・音声の時刻がまとめてずれてしまう。
+export async function extractSubtitleRange(
+    inputPath: string,
+    subRelIndex: number,
+    start: number,
+    end: number,
+    outPath: string,
+    jobId?: string,
+    // 表示領域の大きさ。VOBSUB のようにコンテナ側にしか大きさを持たない字幕で指定する。
+    // 指定した場合はコピーではなく同じコーデックで再エンコードし、大きさを字幕自身に持たせる
+    canvas?: { width: number; height: number },
+    // 元のパレット。指定しないとエンコーダの既定色 (青・緑など) になり色が化ける
+    palette?: string | null
+): Promise<void> {
+    await runFfmpeg(
+        [
+            '-hide_banner',
+            '-loglevel',
+            'error',
+            '-nostats',
+            '-y',
+            ...(canvas ? ['-canvas_size', `${canvas.width}x${canvas.height}`] : []),
+            '-copyts',
+            '-ss',
+            start.toFixed(6),
+            '-to',
+            end.toFixed(6),
+            '-i',
+            inputPath,
+            '-map',
+            `0:s:${subRelIndex}`,
+            '-c:s',
+            canvas ? 'dvdsub' : 'copy',
+            ...(canvas && palette ? ['-palette', palette] : []),
+            '-ss',
+            start.toFixed(6),
+            // コピー時は切り出し開始が 0 になるが、再エンコード時は元の時刻のまま残るため、
+            // 同じ基準 (切り出し開始 = 0) に揃える
+            ...(canvas ? ['-output_ts_offset', (-start).toFixed(6)] : []),
+            outPath,
+        ],
+        { jobId }
+    );
+}
+
 // 抽出済み字幕ファイルをリタイムして書き戻す
 export function retimeSubtitleFile(subPath: string, ext: string, delta: number, limit: number): void {
     const content = fs.readFileSync(subPath, 'utf-8');
