@@ -1,12 +1,6 @@
 import { ipcMain } from 'electron';
 import { IPC_CHANNELS } from '../../shared/constants';
-import {
-    chapterCheckCut,
-    chapterCheckSplit,
-    chapterCut,
-    chapterProbe,
-    chapterSplit,
-} from '../services/chapter/index';
+import { chapterCheckCut, chapterCheckSplit, chapterCut, chapterProbe, chapterSplit } from '../services/chapter/index';
 import type { ChapterCutRequest, ChapterSplitRequest } from '../../shared/types';
 
 export function registerChapterIpcHandlers() {

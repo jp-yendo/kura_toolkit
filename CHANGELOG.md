@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-08-27
+
+### Added
+
+- App Settings: a "Search threads" setting controls how many threads are used to scan directories.
+  It starts at half of the CPU cores (up to 4) and accepts any value from 1 to 100.
+
+### Changed
+
+- Cleanup: the search is far faster - about 7 times on a whole user profile with the default
+  setting, and more with a higher thread count. Folders holding tens of thousands of files no
+  longer hold the rest of the search back.
+- Cleanup: while searching, the dialog shows how many directories have been searched and how many
+  items were found, and "Show details" lists what each thread is currently scanning. There is no
+  progress bar any more, because a search cannot tell in advance when it will finish.
+- Cleanup: cancelling a search now takes effect immediately.
+- Progress dialogs throughout the app are tighter: the empty space below the text is gone and the
+  buttons line up with the rest of the content.
+
+### Fixed
+
+- Cleanup: cancelling a search could report "no items found" instead of reporting it as cancelled.
+
 ## [0.2.0] - 2026-08-03
 
 ### Added

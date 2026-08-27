@@ -3,7 +3,7 @@ import { app, BrowserWindow, ipcMain } from 'electron';
 import { setupConsoleBridge, setMainWindow } from './utils/console-bridge';
 import { registerIpcHandlers } from './ipc/index';
 import { initializeUpdater, scheduleStartupCheck, isInstallingUpdate } from './services/updater';
-import { applySavedTheme, getSettings, updateSettings } from './services/settings';
+import { applySavedTheme, getSettings, initializeSearchThreads, updateSettings } from './services/settings';
 import { cancelAllJobs, setJobWindow } from './services/job-manager';
 
 let mainWindow: BrowserWindow | null = null;
@@ -71,6 +71,9 @@ app.whenReady().then(async () => {
 
     // 保存済み設定のテーマを反映
     applySavedTheme();
+
+    // 初回起動時だけ、探索のスレッド数の既定値を決めて保存する
+    initializeSearchThreads();
 
     // electron-updater のイベントを登録 (本番ビルド時のみ動作)
     initializeUpdater();

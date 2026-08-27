@@ -52,6 +52,9 @@ type RunningJob = {
     total?: number;
     message?: string;
     foundCount: number;
+    // 検索時のみ: 走査済みディレクトリ数と、走査スレッドごとの現在位置
+    visitedDirs: number;
+    workers: (string | null)[];
 };
 
 export default function CleanupPage() {
@@ -103,8 +106,13 @@ export default function CleanupPage() {
             if (event.jobId !== activeJobId) return;
             setJob(previous => {
                 if (!previous || previous.jobId !== event.jobId) return previous;
-                if (event.kind === 'item') {
-                    return { ...previous, foundCount: previous.foundCount + 1 };
+                if (event.kind === 'scan' && event.scan) {
+                    return {
+                        ...previous,
+                        visitedDirs: event.scan.visitedDirs,
+                        foundCount: event.scan.foundCount,
+                        workers: event.scan.workers,
+                    };
                 }
                 if (event.kind === 'progress' || event.kind === 'log') {
                     return {
@@ -126,6 +134,12 @@ export default function CleanupPage() {
     const availableTargets = capabilities?.availableTargets ?? [];
     const needsPermissionNotice =
         capabilities?.requiresFullDiskAccess === true && capabilities.hasFullDiskAccess === false;
+
+    // 進捗ダイアログの「詳細」に出す、走査スレッドごとの現在位置。
+    // 行の位置はスレッド番号で固定し、走査していないスレッドは空欄にせず待機中と出す
+    const scanDetailLines = (job?.workers ?? []).map(
+        (dir, index) => `#${index + 1}  ${dir ?? t('cleanupPage.threadIdle')}`
+    );
 
     const rootLabel = (root: CleanupRoot): string => {
         if (root.kind === 'home') {
@@ -248,7 +262,7 @@ export default function CleanupPage() {
         }
 
         const jobId = crypto.randomUUID();
-        setJob({ jobId, kind: 'scan', foundCount: 0 });
+        setJob({ jobId, kind: 'scan', foundCount: 0, visitedDirs: 0, workers: [] });
         try {
             const scanResult = await window.kuraToolkit.cleanup.scan(jobId, {
                 roots: store.selectedRoots,
@@ -270,13 +284,15 @@ export default function CleanupPage() {
         setConfirmOpen(false);
         const targets = store.items.filter(item => store.checked.includes(item.path));
         const jobId = crypto.randomUUID();
-        setJob({ jobId, kind: 'remove', foundCount: 0 });
+        setJob({ jobId, kind: 'remove', foundCount: 0, visitedDirs: 0, workers: [] });
         try {
             const removeResult = await window.kuraToolkit.cleanup.remove(jobId, targets);
             setResult(removeResult);
             // 失敗した項目以外を一覧から取り除く
             const failedPaths = new Set(removeResult.failed.map(item => item.path));
-            store.setItems(store.items.filter(item => !store.checked.includes(item.path) || failedPaths.has(item.path)));
+            store.setItems(
+                store.items.filter(item => !store.checked.includes(item.path) || failedPaths.has(item.path))
+            );
         } catch (error) {
             showNotice('warning', error instanceof Error ? error.message : String(error));
         } finally {
@@ -320,9 +336,7 @@ export default function CleanupPage() {
                                 size='small'
                                 onClick={() =>
                                     store.setAllTargets(
-                                        store.selectedTargets.length === availableTargets.length
-                                            ? []
-                                            : availableTargets
+                                        store.selectedTargets.length === availableTargets.length ? [] : availableTargets
                                     )
                                 }
                             >
@@ -359,12 +373,18 @@ export default function CleanupPage() {
 
                         {driveRoots.length > 0 && (
                             <>
-                                {renderGroupRow(t('cleanupPage.volumes'), driveRoots.map(root => root.path))}
+                                {renderGroupRow(
+                                    t('cleanupPage.volumes'),
+                                    driveRoots.map(root => root.path)
+                                )}
                                 {driveRoots.map(root => renderRootRow(root, true))}
                             </>
                         )}
 
-                        {renderGroupRow(t('cleanupPage.custom'), customRoots.map(root => root.path))}
+                        {renderGroupRow(
+                            t('cleanupPage.custom'),
+                            customRoots.map(root => root.path)
+                        )}
                         {customRoots.map(root => renderRootRow(root, true))}
                         <Button
                             size='small'
@@ -443,10 +463,18 @@ export default function CleanupPage() {
                 open={job !== null}
                 title={job?.kind === 'scan' ? t('cleanupPage.searching') : t('cleanupPage.cleaning')}
                 percent={job?.kind === 'remove' ? job?.percent : undefined}
+                // 検索は総ディレクトリ数が事前に分からず完了予測できないため、進捗バーを出さずに件数だけ見せる
+                showProgressBar={job?.kind !== 'scan'}
                 current={job?.current}
                 total={job?.total}
-                status={job?.kind === 'scan' ? t('cleanupPage.foundCount', { count: job.foundCount }) : undefined}
-                message={job?.message ?? ''}
+                status={
+                    job?.kind === 'scan'
+                        ? `${t('cleanupPage.scannedDirs', { count: job.visitedDirs })} / ${t('cleanupPage.foundCount', { count: job.foundCount })}`
+                        : undefined
+                }
+                message={job?.kind === 'scan' ? undefined : (job?.message ?? '')}
+                messageLines={2}
+                details={job?.kind === 'scan' ? scanDetailLines : undefined}
                 onCancel={() => {
                     if (job) void window.kuraToolkit.jobs.cancel(job.jobId);
                 }}
@@ -493,7 +521,12 @@ export default function CleanupPage() {
                                 {t('cleanupPage.failedItems')}
                             </Typography>
                             {result.failed.map(item => (
-                                <Typography key={item.path} variant='body2' color='text.secondary' sx={{ wordBreak: 'break-all' }}>
+                                <Typography
+                                    key={item.path}
+                                    variant='body2'
+                                    color='text.secondary'
+                                    sx={{ wordBreak: 'break-all' }}
+                                >
                                     {item.path} ({item.error})
                                 </Typography>
                             ))}
@@ -514,7 +547,6 @@ export default function CleanupPage() {
                     </Button>
                 </DialogActions>
             </AppDialog>
-
         </PageContainer>
     );
 }

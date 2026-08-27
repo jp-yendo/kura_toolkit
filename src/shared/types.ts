@@ -40,7 +40,7 @@ export type FfmpegDetectResult = {
 // main から renderer へ push されるジョブイベント
 export type JobEvent = {
     jobId: string;
-    kind: 'progress' | 'log' | 'item';
+    kind: 'progress' | 'log' | 'item' | 'scan';
     // 全体進捗 (0-100)。不定の場合は省略
     percent?: number;
     // 複数アイテム処理時の現在位置 (1 始まり) と総数
@@ -50,6 +50,19 @@ export type JobEvent = {
     message?: string;
     // kind='item' の場合の発見アイテムなど
     payload?: unknown;
+    // kind='scan' (ディレクトリ走査) の進捗。総数が事前に分からないため percent は持たない。
+    // 1 件ごとではなく一定間隔でまとめて送る
+    scan?: ScanProgress;
+};
+
+// ディレクトリ走査の進捗。走査スレッドごとの現在位置を含む
+export type ScanProgress = {
+    // 走査済みディレクトリ数 (累計)
+    visitedDirs: number;
+    // 発見件数 (累計)
+    foundCount: number;
+    // 走査スレッドごとに今見ているディレクトリ。走査を終えたスレッドは null
+    workers: (string | null)[];
 };
 
 // ---------------------------------------------------------------------------
@@ -288,6 +301,13 @@ export type FfmpegSettings = {
     ffprobePath: string;
 };
 
+// ファイル探索 (ディレクトリ走査) の共通設定。
+// クリーンアップの検索など、ディレクトリを走査する処理はこのスレッド数を上限とする
+export type SearchSettings = {
+    // 走査に使うスレッド数。0 は「未決定」を表す番兵で、初回起動時に実数値へ置き換わる
+    threads: number;
+};
+
 // 設定更新の結果。保存に失敗しても起動中の設定 (settings) は更新される
 export type SettingsUpdateResult = {
     settings: AppSettings;
@@ -302,6 +322,8 @@ export type AppSettings = {
         language: AppLanguage;
     };
     ffmpeg: FfmpegSettings;
+    // ファイル探索処理で共有する設定 (機能ごとではなくアプリ全体で 1 つ)
+    search: SearchSettings;
     audioNormalizer: AudioNormalizerSettings;
     // チャプターカットと画像 SVG 変換のパラメータは永続化しない (毎回既定値から始める)
     cleanup: CleanupSettings;

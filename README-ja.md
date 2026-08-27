@@ -36,6 +36,8 @@ macOS では、デスクトップ・書類・ダウンロードなどのフォ�
 ### アプリ設定
 
 - テーマ (ライト / ダーク / システム)、言語 (日本語 / 英語)
+- ディレクトリの探索に使うスレッド数 (1〜100)。初回起動時に論理コア数の半分 (最大 4) が設定されます。
+  大きくするとクリーンアップの検索が速くなりますが、HDD やネットワークドライブでは逆に遅くなることがあります
 - ffmpeg / ffprobe の実行ファイルパス (未設定時は PATH から自動検出)
 - 設定は `~/.kura_toolkit/settings.json` に保存されます
 
@@ -128,6 +130,7 @@ src/
 │   ├── index.ts           # 起動・ウィンドウ生成・サービス初期化
 │   ├── ipc/               # IPCハンドラ
 │   ├── services/          # 設定・ジョブ管理・ffmpeg・各機能サービス
+│   ├── workers/           # worker_threads のエントリ (ディレクトリ走査ワーカー)
 │   └── utils/             # 各種ユーティリティ
 ├── preload/               # renderer へ安全にAPIをブリッジ (window.kuraToolkit)
 ├── renderer/              # React + MUI UI (pages/stores/components/i18n)

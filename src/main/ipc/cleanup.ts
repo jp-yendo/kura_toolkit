@@ -11,8 +11,7 @@ import {
 import type { CleanupCapabilities, CleanupItem } from '../../shared/types';
 
 // macOS のフルディスクアクセス設定を開く URL スキーム
-const MAC_FULL_DISK_ACCESS_URL =
-    'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles';
+const MAC_FULL_DISK_ACCESS_URL = 'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles';
 
 export function registerCleanupIpcHandlers() {
     ipcMain.handle(IPC_CHANNELS.CLEANUP_GET_CAPABILITIES, (): CleanupCapabilities => {

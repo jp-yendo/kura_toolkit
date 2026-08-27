@@ -5,12 +5,7 @@ import { isCancelledError, runFfmpeg } from '../ffmpeg/ffmpeg';
 import { findKeyframeBefore, findNearestKeyframe } from './keyframe';
 import { accurateStreamArgs, copyStreamArgs } from './encoders';
 import { buildMetadata } from './metadata';
-import {
-    extractSubtitleRange,
-    extractTextSubtitle,
-    retimeSubtitleFile,
-    TEXT_SUBTITLE_EXTRACT,
-} from './subtitles';
+import { extractSubtitleRange, extractTextSubtitle, retimeSubtitleFile, TEXT_SUBTITLE_EXTRACT } from './subtitles';
 import { findVideoStreamIndex, probeMedia, probeSubtitlePalette, type FfStream } from './probe';
 import type { ChapterInfo } from '../../../shared/types';
 
@@ -118,8 +113,7 @@ export async function cutRange(options: CutRangeOptions): Promise<void> {
     }
     // 本編の映像の大きさ (字幕の表示領域を補うときに使う)
     const mainVideo = streams.find(stream => stream.codec_type === 'video' && !stream.disposition?.attached_pic);
-    const canvas =
-        mainVideo?.width && mainVideo?.height ? { width: mainVideo.width, height: mainVideo.height } : null;
+    const canvas = mainVideo?.width && mainVideo?.height ? { width: mainVideo.width, height: mainVideo.height } : null;
 
     // カバーアート (本編ではない映像) も切り出し範囲外の時刻を持つため pass1 から外し、
     // mp4 系の出力では pass2 で picture として付け直す

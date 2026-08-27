@@ -21,9 +21,7 @@ export function createAppTheme(mode: 'light' | 'dark'): Theme {
         palette: {
             mode,
             // ライトでは面 (paper) を白、下地をわずかに灰色にして枠が沈まないようにする
-            background: isDark
-                ? { default: '#0a0a0a', paper: '#161616' }
-                : { default: '#f4f5f7', paper: '#ffffff' },
+            background: isDark ? { default: '#0a0a0a', paper: '#161616' } : { default: '#f4f5f7', paper: '#ffffff' },
         },
         components: {
             MuiAlert: {

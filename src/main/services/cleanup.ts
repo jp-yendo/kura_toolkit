@@ -3,8 +3,10 @@ import os from 'os';
 import path from 'path';
 import { spawn } from 'child_process';
 import { shell } from 'electron';
-import { getSettings } from './settings';
+import { getSettings, resolveSearchThreads } from './settings';
 import { emitJobEvent, finishJob, isCancelled, startJob } from './job-manager';
+import { buildCleanupScanConfig } from './cleanup-targets';
+import { walkCleanupTargets } from './dir-walker';
 import type {
     CleanupItem,
     CleanupRemoveResult,
@@ -13,62 +15,10 @@ import type {
     CleanupTargetId,
 } from '../../shared/types';
 
-// 不要ファイルのクリーンアップ (元: CleanSweep/clean_sweep.py)
-
-type TargetKind = 'ads' | 'file' | 'prefix' | 'dir';
-
-type TargetDef = {
-    id: CleanupTargetId;
-    kind: TargetKind;
-    pattern: string;
-};
-
-// クリーンアップ対象の定義 (検出パターンは元実装と同一)
-const TARGETS: TargetDef[] = [
-    { id: 'zoneIdentifier', kind: 'ads', pattern: 'Zone.Identifier' },
-    { id: 'thumbsDb', kind: 'file', pattern: 'Thumbs.db' },
-    { id: 'dsStore', kind: 'file', pattern: '.DS_Store' },
-    { id: 'dotUnderscore', kind: 'prefix', pattern: '._' },
-    { id: 'appleDouble', kind: 'dir', pattern: '.AppleDouble' },
-    { id: 'fseventsd', kind: 'dir', pattern: '.fseventsd' },
-    { id: 'spotlight', kind: 'dir', pattern: '.Spotlight-V100' },
-    { id: 'appleDb', kind: 'dir', pattern: '.AppleDB' },
-    { id: 'appleDesktop', kind: 'dir', pattern: '.AppleDesktop' },
-    { id: 'temporaryItems', kind: 'dir', pattern: '.TemporaryItems' },
-    { id: 'networkTrash', kind: 'dir', pattern: 'Network Trash Folder' },
-];
-
-// システムディレクトリの除外パターン (ディレクトリ名で判定、大文字小文字無視)
-const EXCLUDED_DIR_NAMES: Record<string, string[]> = {
-    win32: [
-        'Program Files',
-        'Program Files (x86)',
-        'Windows',
-        'AppData',
-        'ProgramData',
-        'Recovery',
-        '$Recycle.Bin',
-        'System Volume Information',
-    ],
-    // macOS: ~/Library は巨大で走査が長時間化するため除外する。
-    // システム領域と既にゴミ箱へ入れたものも対象外とする。
-    darwin: [
-        'Library',
-        'Applications',
-        'System',
-        'private',
-        '.Trash',
-        '.DocumentRevisions-V100',
-        '.MobileBackups',
-        '.PKInstallSandboxManager',
-        '.PKInstallSandboxManager-SystemSoftware',
-    ],
-    linux: ['proc', 'sys', 'dev', 'run', 'boot', 'lost+found', '.Trash', '.Trash-1000'],
-};
-
-const EXCLUDED_SEGMENTS = new Set(
-    (EXCLUDED_DIR_NAMES[process.platform] ?? []).map(name => name.toLowerCase())
-);
+// 不要ファイルのクリーンアップ (元: CleanSweep/clean_sweep.py)。
+// 対象の定義とディレクトリ 1 個ぶんの判定は cleanup-targets.ts にある
+// (走査ワーカーからも読み込むため、electron に依存させられないので分けている)。
+export { getAvailableCleanupTargets } from './cleanup-targets';
 
 // Win32_LogicalDisk の DriveType 値
 const DRIVE_TYPE_REMOVABLE = 2;
@@ -230,21 +180,6 @@ export async function getCleanupRoots(): Promise<CleanupRoot[]> {
     return roots;
 }
 
-function isExcludedDirName(name: string): boolean {
-    if (EXCLUDED_SEGMENTS.has(name.toLowerCase())) return true;
-    // macOS のアプリケーションバンドルは内部を書き換えると署名が壊れるため走査しない
-    if (process.platform === 'darwin' && name.endsWith('.app')) return true;
-    return false;
-}
-
-// クリーンアップ対象の一覧を返す。一覧は OS によらず共通で、
-// Zone.Identifier も Windows では代替データストリーム、それ以外では
-// 通常のファイルとして検出するため、いずれの環境でも対象になる。
-// (renderer 側で一覧を二重定義しないよう、ここを唯一の定義元とする)
-export function getAvailableCleanupTargets(): CleanupTargetId[] {
-    return TARGETS.map(target => target.id);
-}
-
 // macOS のフルディスクアクセス権限の有無を判定する。
 // TCC で保護されたディレクトリの読み取りを試すだけで、書き込みなどの副作用はない。
 export function getFullDiskAccessStatus(): boolean {
@@ -267,132 +202,32 @@ export function getFullDiskAccessStatus(): boolean {
     return true;
 }
 
-// Windows 以外では、Windows からコピーしたり書庫を解凍した際に
-// 代替データストリームが "元のファイル名:Zone.Identifier" という
-// 通常のファイルとして現れる (NTFS 以外では ADS を保持できないため)。
-// Windows のファイル名に ":" は使えないので、この判定は全環境で安全に実行できる。
-const ZONE_IDENTIFIER_SUFFIX = ':Zone.Identifier';
-
-export function isZoneIdentifierFile(name: string): boolean {
-    return name.endsWith(ZONE_IDENTIFIER_SUFFIX) && name.length > ZONE_IDENTIFIER_SUFFIX.length;
-}
-
-// Windows ADS (Zone.Identifier) の存在を open の成否で確認する
-async function hasZoneIdentifier(filePath: string): Promise<boolean> {
-    try {
-        const handle = await fs.promises.open(`${filePath}:Zone.Identifier`, 'r');
-        await handle.close();
-        return true;
-    } catch {
-        return false;
-    }
-}
-
 export type CleanupScanOptions = {
     roots: string[];
     targets: CleanupTargetId[];
 };
 
-// 選択されたルートを再帰走査して対象を検出する
+// 選択されたルートを再帰走査して対象を検出する。
+// 走査はディレクトリ単位で並列化する (スレッド数はアプリ設定の「探索のスレッド数」)。
+// 総ディレクトリ数は事前に分からないため進捗率は出さず、走査済み件数と各スレッドの現在位置を送る。
 export async function scanCleanupTargets(jobId: string, options: CleanupScanOptions): Promise<CleanupScanResult> {
     startJob(jobId);
-    const selected = new Set(options.targets);
-    const fileTargets = TARGETS.filter(target => target.kind === 'file' && selected.has(target.id));
-    const prefixTargets = TARGETS.filter(target => target.kind === 'prefix' && selected.has(target.id));
-    const dirTargets = TARGETS.filter(target => target.kind === 'dir' && selected.has(target.id));
-    const wantsZoneIdentifier = selected.has('zoneIdentifier');
-    // ADS の存在確認はファイルごとに open を試すため Windows でのみ行う
-    const checkAds = process.platform === 'win32' && wantsZoneIdentifier;
-
-    const items: CleanupItem[] = [];
-    const errors: string[] = [];
-    let cancelled = false;
-    let visitedDirs = 0;
-
-    const pushItem = (item: CleanupItem) => {
-        items.push(item);
-        emitJobEvent({ jobId, kind: 'item', payload: item });
-    };
-
     try {
-        for (const root of options.roots) {
-            if (isCancelled(jobId)) {
-                cancelled = true;
-                break;
-            }
-            const stack: string[] = [root];
-            while (stack.length > 0) {
-                if (isCancelled(jobId)) {
-                    cancelled = true;
-                    break;
-                }
-                const current = stack.pop() as string;
-                visitedDirs += 1;
-                if (visitedDirs % 100 === 0) {
-                    emitJobEvent({ jobId, kind: 'log', message: current });
-                }
-                let entries: fs.Dirent[];
-                try {
-                    entries = await fs.promises.readdir(current, { withFileTypes: true });
-                } catch {
-                    // アクセスできないディレクトリはスキップ
-                    continue;
-                }
-                for (const entry of entries) {
-                    const entryPath = path.join(current, entry.name);
-                    try {
-                        if (entry.isSymbolicLink()) {
-                            // シンボリックリンクは辿らない
-                            continue;
-                        }
-                        if (entry.isDirectory()) {
-                            if (isExcludedDirName(entry.name)) {
-                                continue;
-                            }
-                            const dirTarget = dirTargets.find(target => target.pattern === entry.name);
-                            if (dirTarget) {
-                                // 対象ディレクトリは丸ごと削除対象とし、配下は走査しない
-                                pushItem({ path: entryPath, targetId: dirTarget.id, kind: 'dir' });
-                                continue;
-                            }
-                            stack.push(entryPath);
-                        } else if (entry.isFile()) {
-                            // Windows 以外で ADS が通常のファイルとして現れたもの
-                            if (wantsZoneIdentifier && isZoneIdentifierFile(entry.name)) {
-                                pushItem({ path: entryPath, targetId: 'zoneIdentifier', kind: 'file' });
-                                continue;
-                            }
-                            const fileTarget = fileTargets.find(target => target.pattern === entry.name);
-                            if (fileTarget) {
-                                pushItem({ path: entryPath, targetId: fileTarget.id, kind: 'file' });
-                                continue;
-                            }
-                            const prefixTarget = prefixTargets.find(target => entry.name.startsWith(target.pattern));
-                            if (prefixTarget) {
-                                pushItem({ path: entryPath, targetId: prefixTarget.id, kind: 'file' });
-                                continue;
-                            }
-                            if (checkAds && (await hasZoneIdentifier(entryPath))) {
-                                pushItem({
-                                    path: `${entryPath}:Zone.Identifier`,
-                                    targetId: 'zoneIdentifier',
-                                    kind: 'ads',
-                                });
-                            }
-                        }
-                    } catch (error) {
-                        if (errors.length < 100) {
-                            errors.push(`${entryPath}: ${error instanceof Error ? error.message : String(error)}`);
-                        }
-                    }
-                }
-            }
-            if (cancelled) break;
-        }
+        const result = await walkCleanupTargets({
+            roots: options.roots,
+            config: buildCleanupScanConfig(options.targets),
+            threads: resolveSearchThreads(),
+            isCancelled: () => isCancelled(jobId),
+            onProgress: (visitedDirs, foundCount, workers) => {
+                emitJobEvent({ jobId, kind: 'scan', scan: { visitedDirs, foundCount, workers } });
+            },
+        });
+        // キャンセル状態は finishJob でジョブ登録が消える前に確定させる
+        const cancelled = result.cancelled || isCancelled(jobId);
+        return { items: result.items, cancelled, errors: result.errors };
     } finally {
         finishJob(jobId);
     }
-    return { items, cancelled: cancelled || isCancelled(jobId), errors };
 }
 
 // 選択された項目を削除する (通常はゴミ箱へ、ADS は直接削除)

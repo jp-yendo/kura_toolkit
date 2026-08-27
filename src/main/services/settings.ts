@@ -1,7 +1,9 @@
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { nativeTheme } from 'electron';
 import { getAppRootDir } from '../../shared/constants';
+import { SEARCH_THREADS_MAX, SEARCH_THREADS_MIN } from '../../shared/search';
 import type { AppSettings, DeepPartial, SettingsUpdateResult } from '../../shared/types';
 
 // 設定ファイルのパス
@@ -17,6 +19,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
     ffmpeg: {
         ffmpegPath: '',
         ffprobePath: '',
+    },
+    search: {
+        // 0 は「未決定」を表す番兵。初回起動時に initializeSearchThreads() が実数値へ置き換える
+        threads: 0,
     },
     audioNormalizer: {
         outputDir: '',
@@ -106,4 +112,27 @@ export function updateSettings(patch: DeepPartial<AppSettings>): SettingsUpdateR
 // 保存済みテーマを nativeTheme に反映する (起動時に呼ぶ)
 export function applySavedTheme(): void {
     nativeTheme.themeSource = getSettings().app.theme;
+}
+
+// 初回起動時に決める既定値の上限。論理コア数の半分まで、かつこの値を超えない。
+// 実測ではスレッド数を増やしても 8 前後で頭打ちになるため、既定はこの程度で十分効果が出る
+const SEARCH_THREADS_INITIAL_MAX = 4;
+
+// 設定がまだ無い (未決定の) 起動時にだけ、探索スレッド数の既定値を決めて保存する。
+// 既に有効な値が入っている場合は何もしない (ユーザーの指定を上書きしない)
+export function initializeSearchThreads(): void {
+    const current = getSettings().search.threads;
+    if (current >= SEARCH_THREADS_MIN) return;
+    const threads = Math.max(
+        SEARCH_THREADS_MIN,
+        Math.min(SEARCH_THREADS_INITIAL_MAX, Math.floor(os.availableParallelism() / 2))
+    );
+    updateSettings({ search: { threads } });
+}
+
+// 実行時に使う探索スレッド数。起動時初期化の上限 (4) はここでは適用しない
+export function resolveSearchThreads(): number {
+    const threads = getSettings().search.threads;
+    if (!Number.isFinite(threads)) return SEARCH_THREADS_MIN;
+    return Math.max(SEARCH_THREADS_MIN, Math.min(SEARCH_THREADS_MAX, Math.floor(threads)));
 }

@@ -36,6 +36,8 @@ On macOS, Full Disk Access is required to search folders such as Desktop, Docume
 ### App Settings
 
 - Theme (light / dark / system) and language (Japanese / English)
+- Number of threads used to search directories (1-100). It starts at half of the CPU cores (up to 4);
+  raising it speeds up the Cleanup search on SSDs, but may slow it down on HDDs or network drives
 - Paths to the ffmpeg / ffprobe executables (auto-detected from PATH when not set)
 - Settings are stored in `~/.kura_toolkit/settings.json`
 
@@ -128,6 +130,7 @@ src/
 │   ├── index.ts           # Startup, window creation, service initialization
 │   ├── ipc/               # IPC handlers
 │   ├── services/          # Settings, job manager, ffmpeg, feature services
+│   ├── workers/           # worker_threads entry points (directory-scan worker)
 │   └── utils/             # Utilities
 ├── preload/               # Bridges APIs safely to the renderer (window.kuraToolkit)
 ├── renderer/              # React + MUI UI (pages/stores/components/i18n)

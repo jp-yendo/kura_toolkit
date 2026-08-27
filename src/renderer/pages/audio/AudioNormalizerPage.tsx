@@ -37,20 +37,7 @@ import type { AudioNormalizeItem, AudioNormalizerSettings, BitrateMode, JobEvent
 
 // ドラッグ&ドロップで受け付ける拡張子。ffmpeg が扱える音声形式を広めに許可し、
 // 実際に正規化できるかどうかの判定は main 側のコーデック判定に委ねる
-const AUDIO_EXTENSIONS = [
-    'wav',
-    'mp3',
-    'aac',
-    'flac',
-    'm4a',
-    'mp4',
-    'ogg',
-    'oga',
-    'opus',
-    'aif',
-    'aiff',
-    'wma',
-];
+const AUDIO_EXTENSIONS = ['wav', 'mp3', 'aac', 'flac', 'm4a', 'mp4', 'ogg', 'oga', 'opus', 'aif', 'aiff', 'wma'];
 const AUDIO_FILTERS = [
     { name: 'Audio Files', extensions: AUDIO_EXTENSIONS },
     { name: 'All Files', extensions: ['*'] },
@@ -95,7 +82,12 @@ export default function AudioNormalizerPage() {
     const { files, addFiles, clearFiles, applyAnalysis } = useAudioStore();
     const { settings, update } = useSettingsStore();
     const [job, setJob] = React.useState<RunningJob | null>(null);
-    const [result, setResult] = React.useState<{ ok: number; failed: number; skipped: number; details: AudioNormalizeItem[] } | null>(null);
+    const [result, setResult] = React.useState<{
+        ok: number;
+        failed: number;
+        skipped: number;
+        details: AudioNormalizeItem[];
+    } | null>(null);
     // 入力途中の文字列を保持する (空文字や "-" だけの状態を設定値にしないため)
     const [lufsText, setLufsText] = React.useState<string | null>(null);
     // 出力設定は画面上で編集し、解析・正規化を実行したときにまとめて保存する
@@ -471,7 +463,6 @@ export default function AudioNormalizerPage() {
                 }}
             />
 
-
             <AppDialog open={result !== null} onClose={() => setResult(null)} maxWidth='sm' fullWidth>
                 <DialogTitle>
                     {result && result.failed + result.skipped > 0 ? t('audioPage.doneWithErrors') : t('common.done')}
@@ -490,7 +481,12 @@ export default function AudioNormalizerPage() {
                                 {t('audioPage.failedFiles')}
                             </Typography>
                             {result.details.map(item => (
-                                <Typography key={item.path} variant='body2' color='text.secondary' sx={{ wordBreak: 'break-all' }}>
+                                <Typography
+                                    key={item.path}
+                                    variant='body2'
+                                    color='text.secondary'
+                                    sx={{ wordBreak: 'break-all' }}
+                                >
                                     {item.path}
                                     {item.error?.startsWith('UNSUPPORTED_CODEC')
                                         ? ` (${t('audioPage.unsupportedCodec')})`
@@ -506,7 +502,12 @@ export default function AudioNormalizerPage() {
             </AppDialog>
 
             {/* 既存のファイルを上書きする場合の確認 (取り消せない操作のため実行前に必ず挟む) */}
-            <AppDialog open={overwriteTargets !== null} onClose={() => setOverwriteTargets(null)} maxWidth='sm' fullWidth>
+            <AppDialog
+                open={overwriteTargets !== null}
+                onClose={() => setOverwriteTargets(null)}
+                maxWidth='sm'
+                fullWidth
+            >
                 <DialogTitle>{t('audioPage.overwriteTitle')}</DialogTitle>
                 <DialogContent>
                     <Typography sx={{ mb: 1, lineHeight: 1.6 }}>

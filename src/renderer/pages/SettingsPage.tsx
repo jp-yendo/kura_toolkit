@@ -1,17 +1,33 @@
 import React from 'react';
-import { Box, FormControl, InputLabel, MenuItem, Select, Stack, Typography } from '@mui/material';
+import { Box, FormControl, InputLabel, MenuItem, Select, Stack, TextField, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from '../stores/settingsStore';
 import PageContainer from '../components/common/PageContainer';
 import SectionLabel from '../components/common/SectionLabel';
 import Panel from '../components/common/Panel';
 import PathField from '../components/common/PathField';
+import { SEARCH_THREADS_MAX, SEARCH_THREADS_MIN } from '@shared/search';
 import type { AppLanguage, AppTheme, FfmpegDetectResult } from '@shared/types';
 
 export default function SettingsPage() {
     const { t } = useTranslation();
     const { settings, update } = useSettingsStore();
     const [detected, setDetected] = React.useState<FfmpegDetectResult | null>(null);
+    // 入力途中は文字列のまま保持し、確定時に範囲へ収めて保存する
+    const savedThreads = settings?.search.threads;
+    const [searchThreads, setSearchThreads] = React.useState('');
+    React.useEffect(() => {
+        if (savedThreads !== undefined) setSearchThreads(String(savedThreads));
+    }, [savedThreads]);
+
+    const commitSearchThreads = React.useCallback(() => {
+        const parsed = Number.parseInt(searchThreads, 10);
+        const threads = Number.isFinite(parsed)
+            ? Math.max(SEARCH_THREADS_MIN, Math.min(SEARCH_THREADS_MAX, parsed))
+            : (savedThreads ?? SEARCH_THREADS_MIN);
+        setSearchThreads(String(threads));
+        if (threads !== savedThreads) void update({ search: { threads } });
+    }, [searchThreads, savedThreads, update]);
 
     // 現在の設定での検出結果を表示する
     React.useEffect(() => {
@@ -64,6 +80,25 @@ export default function SettingsPage() {
                             </Select>
                         </FormControl>
                     </Stack>
+                </Panel>
+            </Box>
+
+            <Box>
+                <SectionLabel>{t('settingsPage.searchSection')}</SectionLabel>
+                <Panel>
+                    <Typography variant='body2' color='text.secondary' sx={{ mb: 2, lineHeight: 1.6 }}>
+                        {t('settingsPage.searchThreadsHint')}
+                    </Typography>
+                    <TextField
+                        size='small'
+                        type='number'
+                        label={t('settingsPage.searchThreads')}
+                        sx={{ width: 220 }}
+                        slotProps={{ htmlInput: { min: SEARCH_THREADS_MIN, max: SEARCH_THREADS_MAX, step: 1 } }}
+                        value={searchThreads}
+                        onChange={event => setSearchThreads(event.target.value)}
+                        onBlur={() => commitSearchThreads()}
+                    />
                 </Panel>
             </Box>
 
