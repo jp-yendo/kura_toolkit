@@ -9,6 +9,8 @@ import type { JobEvent } from '../../shared/types';
 
 type JobEntry = {
     children: Set<ChildProcess>;
+    // 子プロセスの kill 以外の中断処理 (ダウンロードの中止、子孫プロセスごとの終了など)
+    cancelHandlers: Set<() => void>;
     cancelled: boolean;
 };
 
@@ -22,12 +24,33 @@ export function setJobWindow(window: BrowserWindow | null): void {
 
 // ジョブを開始登録する
 export function startJob(jobId: string): void {
-    jobs.set(jobId, { children: new Set(), cancelled: false });
+    jobs.set(jobId, { children: new Set(), cancelHandlers: new Set(), cancelled: false });
+}
+
+// キャンセル時に呼ぶ処理を登録する。戻り値は登録解除関数。
+// 既にキャンセル済みのジョブに登録した場合はその場で呼ぶ。開始していない (または終了した) ジョブには
+// 登録できない (キャンセルを受け取れないまま処理が進まないようにするため)
+export function onJobCancel(jobId: string, handler: () => void): () => void {
+    const entry = jobs.get(jobId);
+    if (!entry) throw new Error(`JOB_NOT_FOUND: ${jobId}`);
+    if (entry.cancelled) {
+        handler();
+        return () => undefined;
+    }
+    entry.cancelHandlers.add(handler);
+    return () => {
+        entry.cancelHandlers.delete(handler);
+    };
 }
 
 // ジョブを終了して登録解除する (finally で呼ぶ)
 export function finishJob(jobId: string): void {
     jobs.delete(jobId);
+}
+
+// 実行中のジョブがあるか
+export function hasActiveJobs(): boolean {
+    return jobs.size > 0;
 }
 
 export function isCancelled(jobId: string): boolean {
@@ -60,6 +83,14 @@ export function cancelJob(jobId: string): void {
             // 既に終了している場合は無視
         }
     }
+    for (const handler of entry.cancelHandlers) {
+        try {
+            handler();
+        } catch (error) {
+            console.error('cancel handler failed', error);
+        }
+    }
+    entry.cancelHandlers.clear();
 }
 
 // すべてのジョブをキャンセルする (ウィンドウクローズ時)

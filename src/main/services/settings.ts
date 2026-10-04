@@ -4,7 +4,7 @@ import path from 'path';
 import { nativeTheme } from 'electron';
 import { getAppRootDir } from '../../shared/constants';
 import { SEARCH_THREADS_MAX, SEARCH_THREADS_MIN } from '../../shared/search';
-import type { AppSettings, DeepPartial, SettingsUpdateResult } from '../../shared/types';
+import type { AppSettings, DeepPartial, SettingsLoadError, SettingsUpdateResult } from '../../shared/types';
 
 // 設定ファイルのパス
 const SETTINGS_FILE = 'settings.json';
@@ -24,6 +24,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
         // 0 は「未決定」を表す番兵。初回起動時に initializeSearchThreads() が実数値へ置き換える
         threads: 0,
     },
+    storage: {
+        libraryDir: '',
+        modelDir: '',
+        workDir: '',
+    },
     audioNormalizer: {
         outputDir: '',
         targetLufs: -13,
@@ -36,9 +41,24 @@ export const DEFAULT_SETTINGS: AppSettings = {
         selectedTargets: [],
         selectedRoots: [],
     },
+    voice: {
+        export: {
+            format: 'mp3',
+            sampleRate: 44100,
+            bitrateMode: 'cbr',
+            bitrate: 160,
+        },
+        symbolReadings: {
+            ja: null,
+            en: null,
+        },
+        updatePromptVersion: '',
+    },
 };
 
 let cachedSettings: AppSettings | null = null;
+// 設定ファイルを読み込めなかったときの内容。利用者が既定の設定で続けることを選ぶまで、ファイルを上書きしない
+let loadError: SettingsLoadError | null = null;
 
 function getSettingsFilePath(): string {
     return path.join(getAppRootDir(), SETTINGS_FILE);
@@ -66,23 +86,59 @@ function deepMerge<T>(base: T, patch: unknown): T {
     return result as T;
 }
 
+// 設定ファイルの内容。ファイルが無い (初回の起動) 場合は空。読み込めない場合は理由を記録し、空として扱う
+function readSettingsFile(): unknown {
+    const filePath = getSettingsFilePath();
+    try {
+        const parsed: unknown = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        if (!isPlainObject(parsed)) throw new Error('the settings file does not contain an object');
+        return parsed;
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {};
+        loadError = { path: filePath, message: error instanceof Error ? error.message : String(error) };
+        console.error(`failed to load settings from ${filePath}: ${loadError.message}`);
+        return {};
+    }
+}
+
 // 設定を読み込む (初回のみファイルアクセス、以後キャッシュ)
 export function getSettings(): AppSettings {
     if (cachedSettings) return cachedSettings;
-    let loaded: unknown = {};
-    try {
-        const raw = fs.readFileSync(getSettingsFilePath(), 'utf-8');
-        loaded = JSON.parse(raw);
-    } catch {
-        // ファイルが無い/壊れている場合は既定値を使用
-        loaded = {};
-    }
-    cachedSettings = deepMerge(DEFAULT_SETTINGS, loaded);
+    cachedSettings = deepMerge(DEFAULT_SETTINGS, readSettingsFile());
     return cachedSettings;
+}
+
+// 設定ファイルを読み込めなかった場合の内容 (読み込めた場合は null)
+export function getSettingsLoadError(): SettingsLoadError | null {
+    getSettings();
+    return loadError;
+}
+
+// 年月日-時分秒 (ファイル名に使う)
+function timestamp(): string {
+    const now = new Date();
+    const pad = (value: number) => String(value).padStart(2, '0');
+    return (
+        `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-` +
+        `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+    );
+}
+
+// 読み込めなかった設定ファイルを同じ場所に別の名前で残し、今の設定 (既定の設定) を保存する。残した場所を返す
+export function resetBrokenSettings(): string {
+    if (!loadError) throw new Error('SETTINGS_NOT_BROKEN');
+    const filePath = getSettingsFilePath();
+    const kept = path.join(path.dirname(filePath), `settings.broken-${timestamp()}.json`);
+    fs.renameSync(filePath, kept);
+    loadError = null;
+    writeSettings(getSettings());
+    return kept;
 }
 
 // 設定をアトミックに書き込む (一時ファイルに書いて rename)
 function writeSettings(settings: AppSettings): void {
+    // 読み込めなかった設定ファイルは、利用者が既定の設定で続けることを選ぶまで上書きしない
+    if (loadError) throw new Error('SETTINGS_FILE_UNREADABLE');
     const dir = getAppRootDir();
     fs.mkdirSync(dir, { recursive: true });
     const filePath = getSettingsFilePath();

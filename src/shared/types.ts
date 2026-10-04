@@ -1,3 +1,6 @@
+import type { AudioExportSettings } from './voice/types';
+import type { SymbolReading, VoiceLanguage } from './voice/languages';
+
 // プラットフォーム識別子
 export type PlatformId = 'win32' | 'darwin' | 'linux';
 
@@ -40,7 +43,7 @@ export type FfmpegDetectResult = {
 // main から renderer へ push されるジョブイベント
 export type JobEvent = {
     jobId: string;
-    kind: 'progress' | 'log' | 'item' | 'scan';
+    kind: 'progress' | 'log' | 'item' | 'scan' | 'wait';
     // 全体進捗 (0-100)。不定の場合は省略
     percent?: number;
     // 複数アイテム処理時の現在位置 (1 始まり) と総数
@@ -51,8 +54,10 @@ export type JobEvent = {
     // kind='item' の場合の発見アイテムなど
     payload?: unknown;
     // kind='scan' (ディレクトリ走査) の進捗。総数が事前に分からないため percent は持たない。
-    // 1 件ごとではなく一定間隔でまとめて送る
+    // 一定間隔でまとめて送る
     scan?: ScanProgress;
+    // kind='wait': 他の処理が GPU を使い終わるのを待っているか (音声機能)
+    waiting?: boolean;
 };
 
 // ディレクトリ走査の進捗。走査スレッドごとの現在位置を含む
@@ -308,11 +313,60 @@ export type SearchSettings = {
     threads: number;
 };
 
+// 保存場所
+type StorageSettings = {
+    // ライブラリディレクトリ (外部のライブラリ。中はライブラリごとのディレクトリ)。空文字 = 既定 (~/.kura_toolkit/libraries)
+    libraryDir: string;
+    // モデルディレクトリ (ダウンロードしたモデルと、学習・取り込みしたモデル。中は分類ごとの階層)。
+    // 空文字 = 既定 (~/.kura_toolkit/models)
+    modelDir: string;
+    // 作業ディレクトリ (全機能の一時ファイル)。空文字 = 既定 (OS の一時ディレクトリの中の kura_toolkit)
+    workDir: string;
+};
+
+// 音声分離・音声変換・読み上げの設定
+type VoiceSettings = {
+    // 音声の書き出しの設定 (3 機能で共有する)
+    export: AudioExportSettings;
+    // 記号の読みの定義 (読み上げ機能、言語ごと)。null = 言語定義の初期値を使う
+    symbolReadings: Record<VoiceLanguage, SymbolReading[] | null>;
+    // 音声機能の更新の確認を表示したアプリのバージョン (同じバージョンでは起動のたびに確認しない)
+    updatePromptVersion: string;
+};
+
+// 保存場所の種類 (ライブラリ・モデル・作業ディレクトリ)
+export type StorageKind = 'library' | 'model' | 'work';
+
+// 保存場所の状態 (設定画面の表示用)
+export type StorageInfo = {
+    // 実際に使う場所 (設定が空なら既定の場所)
+    dirs: Record<StorageKind, string>;
+    // 既定の場所
+    defaults: Record<StorageKind, string>;
+    // Windows でパスに ASCII 以外の文字が含まれる (一部のライブラリが扱えない)
+    nonAscii: Record<StorageKind, boolean>;
+};
+
+// 保存場所 (ライブラリ・モデルディレクトリ) の移動結果
+export type StorageMoveResult = {
+    cancelled: boolean;
+    // 移動後の動作確認に失敗し、作り直し (パッケージの再ダウンロード) が必要になった項目
+    rebuildRequired: string[];
+    // 移動は終わったが消せなかった元の場所 (消せた場合は null)
+    remainingPath: string | null;
+};
+
 // 設定更新の結果。保存に失敗しても起動中の設定 (settings) は更新される
 export type SettingsUpdateResult = {
     settings: AppSettings;
     // 保存に失敗した場合の理由 (成功時は null)
     saveError: string | null;
+};
+
+// 設定ファイルを読み込めなかった場合の内容
+export type SettingsLoadError = {
+    path: string;
+    message: string;
 };
 
 export type AppSettings = {
@@ -322,11 +376,15 @@ export type AppSettings = {
         language: AppLanguage;
     };
     ffmpeg: FfmpegSettings;
-    // ファイル探索処理で共有する設定 (機能ごとではなくアプリ全体で 1 つ)
+    // ファイル探索処理で共有する設定
     search: SearchSettings;
+    // ライブラリ・モデル・作業ディレクトリ
+    storage: StorageSettings;
     audioNormalizer: AudioNormalizerSettings;
     // チャプターカットと画像 SVG 変換のパラメータは永続化しない (毎回既定値から始める)
     cleanup: CleanupSettings;
+    // 音声分離・音声変換・読み上げ
+    voice: VoiceSettings;
 };
 
 // 自動アップデートの状態

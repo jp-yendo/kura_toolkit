@@ -6,6 +6,7 @@ import PageContainer from '../components/common/PageContainer';
 import SectionLabel from '../components/common/SectionLabel';
 import Panel from '../components/common/Panel';
 import PathField from '../components/common/PathField';
+import StorageSection from '../components/settings/StorageSection';
 import { SEARCH_THREADS_MAX, SEARCH_THREADS_MIN } from '@shared/search';
 import type { AppLanguage, AppTheme, FfmpegDetectResult } from '@shared/types';
 
@@ -148,6 +149,8 @@ export default function SettingsPage() {
                     </Stack>
                 </Panel>
             </Box>
+
+            <StorageSection />
         </PageContainer>
     );
 }

@@ -3,6 +3,9 @@ import GraphicEqIcon from '@mui/icons-material/GraphicEq';
 import ContentCutIcon from '@mui/icons-material/ContentCut';
 import PolylineIcon from '@mui/icons-material/Polyline';
 import CleaningServicesIcon from '@mui/icons-material/CleaningServices';
+import CallSplitIcon from '@mui/icons-material/CallSplit';
+import RecordVoiceOverIcon from '@mui/icons-material/RecordVoiceOver';
+import CampaignIcon from '@mui/icons-material/Campaign';
 import { FEATURE_COLORS } from '../theme';
 
 // 機能カテゴリ (タイトルバーのメニューとダッシュボードの分類)
@@ -33,6 +36,33 @@ export const FEATURES: FeatureDef[] = [
         descKey: 'features.audioNormalizer.desc',
     },
     {
+        id: 'separation',
+        category: 'audio',
+        route: '/audio/separation',
+        icon: CallSplitIcon,
+        color: FEATURE_COLORS.audio,
+        titleKey: 'features.separation.title',
+        descKey: 'features.separation.desc',
+    },
+    {
+        id: 'conversion',
+        category: 'audio',
+        route: '/audio/conversion',
+        icon: RecordVoiceOverIcon,
+        color: FEATURE_COLORS.audio,
+        titleKey: 'features.conversion.title',
+        descKey: 'features.conversion.desc',
+    },
+    {
+        id: 'tts',
+        category: 'audio',
+        route: '/audio/tts',
+        icon: CampaignIcon,
+        color: FEATURE_COLORS.audio,
+        titleKey: 'features.tts.title',
+        descKey: 'features.tts.desc',
+    },
+    {
         id: 'chapterCut',
         category: 'video',
         route: '/video/chapter-cut',
@@ -61,6 +91,15 @@ export const FEATURES: FeatureDef[] = [
     },
 ];
 
+// 機能の中で切り替える画面 (声のモデルの管理・モデルの学習)。メニューには出さず、機能の画面上端の切り替えから開く。
+// 画面タイトルは機能の名前とし、どの画面かは切り替えの表示で示す
+const SUB_ROUTE_TITLES: Record<string, string> = {
+    '/audio/conversion/models': 'features.conversion.title',
+    '/audio/conversion/training': 'features.conversion.title',
+    '/audio/tts/models': 'features.tts.title',
+    '/audio/tts/training': 'features.tts.title',
+};
+
 export function featuresByCategory(category: FeatureCategory): FeatureDef[] {
     return FEATURES.filter(feature => feature.category === category);
 }
@@ -69,6 +108,7 @@ export function featuresByCategory(category: FeatureCategory): FeatureDef[] {
 // (タイトルは各ページではなくタイトルバーに表示する)
 export function titleKeyForRoute(pathname: string): string {
     if (pathname === '/settings') return 'settingsPage.title';
+    if (SUB_ROUTE_TITLES[pathname]) return SUB_ROUTE_TITLES[pathname];
     const feature = FEATURES.find(item => item.route === pathname);
     return feature ? feature.titleKey : 'dashboard.title';
 }

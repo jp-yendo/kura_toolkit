@@ -7,6 +7,8 @@ import { registerAudioIpcHandlers } from './audio';
 import { registerChapterIpcHandlers } from './chapter';
 import { registerVectorizerIpcHandlers } from './vectorizer';
 import { registerCleanupIpcHandlers } from './cleanup';
+import { registerVoiceIpcHandlers } from './voice';
+import { registerStorageIpcHandlers } from './storage';
 
 /**
  * IPCハンドラを登録
@@ -18,6 +20,7 @@ export function registerIpcHandlers() {
 
     // 設定・ダイアログ・ジョブ制御
     registerSettingsIpcHandlers();
+    registerStorageIpcHandlers();
     registerDialogIpcHandlers();
     registerFileIpcHandlers();
     registerJobIpcHandlers();
@@ -27,4 +30,6 @@ export function registerIpcHandlers() {
     registerChapterIpcHandlers();
     registerVectorizerIpcHandlers();
     registerCleanupIpcHandlers();
+    // 音声分離・音声変換・読み上げ
+    registerVoiceIpcHandlers();
 }

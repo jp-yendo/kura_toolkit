@@ -47,7 +47,8 @@ function SliderRow({ label, value, min, max, step, decimals, onChange }: SliderR
     return (
         <Box>
             <Typography variant='body2' color='text.secondary' sx={{ mb: 0.5 }}>
-                {label}: <Box component='span' sx={{ color: 'text.primary', fontWeight: 600 }}>
+                {label}:{' '}
+                <Box component='span' sx={{ color: 'text.primary', fontWeight: 600 }}>
                     {decimals !== undefined ? value.toFixed(decimals) : value}
                 </Box>
             </Typography>

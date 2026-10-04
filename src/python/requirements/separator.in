@@ -1,0 +1,5 @@
+# 音声分離 (audio-separator)。onnxruntime は CPU 版を使う (GPU 処理は PyTorch が受け持つ)
+audio-separator[cpu]==0.47.0
+torch==2.11.0; sys_platform == "win32"
+# Apple Silicon では audio-separator が PyTorch 2.13 以上を要求する
+torch==2.14.1; sys_platform == "darwin"

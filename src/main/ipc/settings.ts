@@ -1,6 +1,6 @@
 import { ipcMain, nativeTheme } from 'electron';
 import { IPC_CHANNELS } from '../../shared/constants';
-import { getSettings, updateSettings } from '../services/settings';
+import { getSettings, getSettingsLoadError, resetBrokenSettings, updateSettings } from '../services/settings';
 import { detectTools } from '../services/ffmpeg/ffmpeg';
 import type { AppSettings, DeepPartial } from '../../shared/types';
 
@@ -15,6 +15,10 @@ export function registerSettingsIpcHandlers() {
         nativeTheme.themeSource = result.settings.app.theme;
         return result;
     });
+
+    ipcMain.handle(IPC_CHANNELS.SETTINGS_GET_LOAD_ERROR, () => getSettingsLoadError());
+
+    ipcMain.handle(IPC_CHANNELS.SETTINGS_RESET_BROKEN, () => resetBrokenSettings());
 
     ipcMain.handle(IPC_CHANNELS.FFMPEG_DETECT, () => {
         return detectTools();

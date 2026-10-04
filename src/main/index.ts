@@ -5,8 +5,27 @@ import { registerIpcHandlers } from './ipc/index';
 import { initializeUpdater, scheduleStartupCheck, isInstallingUpdate } from './services/updater';
 import { applySavedTheme, getSettings, initializeSearchThreads, updateSettings } from './services/settings';
 import { cancelAllJobs, setJobWindow } from './services/job-manager';
+import { registerMediaProtocol, registerMediaSchemePrivileges } from './services/voice/media-protocol';
+import { removeLeftoverWorkFiles } from './services/work-dir';
+import { removeVoiceStagingLeftovers } from './services/voice/voice-models';
+import { setGpuSwitchHandler } from './services/voice/gpu-lock';
+import { stopAllWorkers, unloadOtherWorkers } from './services/voice/python-worker';
 
 let mainWindow: BrowserWindow | null = null;
+
+// ライブラリ・モデル・作業ディレクトリを複数のアプリが同時に書き換えないよう、起動できるのは 1 つだけにする。
+// 2 つ目を起動しようとした場合は、起動中のウィンドウを前面に出して終わる
+if (!app.requestSingleInstanceLock()) {
+    app.exit(0);
+}
+app.on('second-instance', () => {
+    if (!mainWindow) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+});
+
+// プレビュー再生用の独自スキームは ready より前に登録する必要がある
+registerMediaSchemePrivileges();
 
 const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--dev');
 
@@ -75,6 +94,14 @@ app.whenReady().then(async () => {
     // 初回起動時だけ、探索のスレッド数の既定値を決めて保存する
     initializeSearchThreads();
 
+    // 前回の起動が残した一時ファイルと、作りかけのまま残った声のモデルを裏で消す (起動は待たせない)
+    removeLeftoverWorkFiles();
+    removeVoiceStagingLeftovers();
+    // 音声機能: プレビュー再生用のスキームを登録する
+    registerMediaProtocol();
+    // GPU を別のコンポーネントへ渡す前に、他の常駐プロセスが持つモデルを手放させる
+    setGpuSwitchHandler(owner => unloadOtherWorkers(owner));
+
     // electron-updater のイベントを登録 (本番ビルド時のみ動作)
     initializeUpdater();
 
@@ -125,6 +152,11 @@ app.whenReady().then(async () => {
         mainWindow?.close();
     });
     createWindow();
+});
+
+// 終了時は Python の常駐プロセスを止める。作業ディレクトリに残ったものは、終了を待たせないよう次の起動時に消す
+app.on('will-quit', () => {
+    stopAllWorkers();
 });
 
 app.on('window-all-closed', () => {

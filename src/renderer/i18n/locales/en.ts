@@ -1,3 +1,5 @@
+import enVoice from './en-voice';
+
 export default {
     appTitle: 'Kura Toolkit',
     common: {
@@ -11,6 +13,7 @@ export default {
         checkAll: 'Check All',
         ffmpegNotFound: 'ffmpeg not found. Please set its path in App Settings.',
         ffprobeNotFound: 'ffprobe not found. Please set its path in App Settings.',
+        workDirMissing: 'The work directory was not found. Check it under Storage in App Settings. ({{detail}})',
         dropHint: 'Drag & drop files here\nor click to select',
     },
     nav: {
@@ -29,6 +32,18 @@ export default {
         audioNormalizer: {
             title: 'Audio Normalizer',
             desc: 'Analyze loudness (LUFS) of audio files and normalize them to a target level.',
+        },
+        separation: {
+            title: 'Audio Separation',
+            desc: 'Split songs and recordings into vocals, accompaniment, instruments and more. Compare and adopt results, then separate them further.',
+        },
+        conversion: {
+            title: 'Voice Conversion',
+            desc: 'Convert singing or speaking voices into another voice and export them mixed with the accompaniment. You can also train voice models.',
+        },
+        tts: {
+            title: 'Text to Speech',
+            desc: 'Read text or subtitles (SRT/WebVTT) aloud in the chosen voice. You can also train voice models.',
         },
         chapterCut: {
             title: 'Chapter Cut',
@@ -240,6 +255,55 @@ export default {
         detectedPath: 'Detected path: {{path}}',
         notDetected: 'Not detected',
         saveFailed: 'Failed to save settings. Your changes apply to this session only. ({{error}})',
+        storageSection: 'Storage locations',
+        storage: {
+            library: 'Library directory',
+            libraryHint: 'Where the libraries used by the app are stored.',
+            model: 'Model directory',
+            modelHint: 'Where the models used by the app are stored.',
+            work: 'Work directory',
+            workHint: 'Where temporary files are stored during processing.',
+            isDefault: 'default',
+            move: 'Move...',
+            change: 'Change...',
+            resetDefault: 'Reset to Default Location',
+            moreActions: 'More actions',
+            moveTitle: 'Move "{{name}}"',
+            moveMessage: 'The contents are moved to the chosen folder. This can take a while depending on their size.',
+            moveRun: 'Move',
+            moving: 'Moving "{{name}}"',
+            moved: '"{{name}}" was moved.',
+            cancelled: 'The move was cancelled. The original location is still used.',
+            previousRemains:
+                'The previous location ({{path}}) could not be removed and remains. Delete it if you do not need it.',
+            workChanged: 'The work directory was changed.',
+            rebuildRequired: 'Some package sets stopped working after the move. Download them again.',
+            nonAscii:
+                'Locations with non-ASCII characters may not work correctly. A location with ASCII characters only is recommended.',
+            errors: {
+                STORAGE_MOVE_NESTED: 'It cannot be moved into its current location or into a folder that contains it.',
+                STORAGE_OVERLAP:
+                    'A location that overlaps another storage location (library, model or work directory) cannot be chosen.',
+                STORAGE_TARGET_NOT_EMPTY: 'The chosen folder is not empty. Choose an empty folder. ({{detail}})',
+                STORAGE_IN_USE:
+                    'It could not be moved because files in it are in use by another program. The current location is kept. Close that program and try again. ({{detail}})',
+                STORAGE_LINK_LOOP:
+                    'It cannot be moved because a link inside the folder points back to the folder itself. ({{detail}})',
+                WORK_DIR_IN_USE:
+                    'It cannot be changed while something is being processed or work results (such as candidates) remain. Change it after processing finishes or after discarding the work.',
+                SETTINGS_SAVE_FAILED: 'The settings could not be saved. ({{detail}})',
+            },
+        },
+    },
+    settingsLoadError: {
+        title: 'The settings file could not be loaded',
+        message:
+            'The settings file is damaged or cannot be read. Continue with the default settings, or quit the app and check the file.',
+        keepNote:
+            'If you continue with the default settings, the file that could not be loaded is kept in the same place under another name (settings.broken-<date>.json).',
+        continue: 'Continue with Default Settings',
+        quit: 'Quit',
+        kept: 'The settings file that could not be loaded was kept as {{path}}.',
     },
     updater: {
         confirm: 'A new version v{{version}} is available. Update now?',
@@ -251,4 +315,5 @@ export default {
         retry: 'Retry',
         close: 'Close',
     },
+    voice: enVoice,
 };

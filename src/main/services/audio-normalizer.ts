@@ -244,12 +244,10 @@ export async function normalizeFiles(
             const filePath = files[i];
             const outputPath = resolveOutputPath(filePath, options.outputDir);
             const outputDir = path.dirname(outputPath);
-            const overwriting = path.resolve(outputPath) === path.resolve(filePath);
-            // ffmpeg は読み込み中のファイルへ直接書けないため、上書き時は一時ファイルへ出力してから置き換える
-            const extension = path.extname(filePath);
-            const writePath = overwriting
-                ? path.join(outputDir, `${path.basename(filePath, extension)}.kura-tmp${extension}`)
-                : outputPath;
+            // 出力は同じフォルダに別の名前で書き、完成してから正式な名前にする (上書きする場合に、途中で
+            // 失敗しても元のファイルが残るようにするため。ffmpeg は読み込み中のファイルへ直接書けない)
+            const extension = path.extname(outputPath);
+            const writePath = path.join(outputDir, `${path.basename(outputPath, extension)}.kura-tmp${extension}`);
             const item: AudioNormalizeItem = { path: filePath, outputPath, ok: false };
             emitJobEvent({
                 jobId,
@@ -317,17 +315,12 @@ export async function normalizeFiles(
                         });
                     },
                 });
-                if (overwriting) {
-                    // 変換が終わってから元のファイルを置き換える (途中で失敗しても元のファイルは残る)
-                    fs.renameSync(writePath, outputPath);
-                }
+                fs.renameSync(writePath, outputPath);
                 item.ok = true;
             } catch (error) {
-                // 書きかけの出力ファイルを削除 (上書き時は一時ファイルなので元のファイルは消さない)
+                // 書きかけの出力ファイルを削除 (別の名前に書いているため、上書きする元のファイルは残る)
                 try {
-                    if (fs.existsSync(writePath) && path.resolve(writePath) !== path.resolve(filePath)) {
-                        fs.unlinkSync(writePath);
-                    }
+                    if (fs.existsSync(writePath)) fs.unlinkSync(writePath);
                 } catch {
                     // 削除失敗は無視
                 }

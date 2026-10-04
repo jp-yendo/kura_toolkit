@@ -12,12 +12,21 @@ import AudioNormalizerPage from './pages/audio/AudioNormalizerPage';
 import ChapterCutPage from './pages/video/ChapterCutPage';
 import SvgConverterPage from './pages/image/SvgConverterPage';
 import CleanupPage from './pages/tools/CleanupPage';
+import SeparationPage from './pages/voice/SeparationPage';
+import ConversionPage from './pages/voice/ConversionPage';
+import TtsPage from './pages/voice/TtsPage';
+import VoiceModelsPage from './pages/voice/VoiceModelsPage';
+import RvcTrainingPage from './pages/voice/RvcTrainingPage';
+import TtsTrainingPage from './pages/voice/TtsTrainingPage';
+import VoiceUpdatePrompt from './components/voice/VoiceUpdatePrompt';
+import VoiceLibraryDialog from './components/voice/VoiceLibraryDialog';
+import SettingsLoadErrorDialog from './components/settings/SettingsLoadErrorDialog';
 import { useSettingsStore } from './stores/settingsStore';
 import { showNotice } from './stores/noticeStore';
 
 export default function App() {
     const { t, i18n } = useTranslation();
-    const { settings, appInfo, initialized, saveError, init, clearSaveError } = useSettingsStore();
+    const { settings, appInfo, initialized, loadError, saveError, init, clearSaveError } = useSettingsStore();
     const prefersDark = useMediaQuery('(prefers-color-scheme: dark)');
 
     React.useEffect(() => {
@@ -48,9 +57,28 @@ export default function App() {
         return null;
     }
 
+    if (loadError) {
+        // 設定ファイルを読み込めなかった場合は、続け方を選ぶまでほかの画面を出さない
+        // (既定の設定のまま各機能が動き出さないようにするため)
+        return (
+            <ThemeProvider theme={muiTheme}>
+                <CssBaseline enableColorScheme />
+                {/* タイトルバーは画面の切り替え (ルーター) を使うため、ルーターの中に置く */}
+                <HashRouter>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+                        <TitleBar info={appInfo ?? undefined} />
+                        <Box sx={{ flexGrow: 1, bgcolor: 'background.default' }} />
+                    </Box>
+                </HashRouter>
+                <SettingsLoadErrorDialog error={loadError} />
+            </ThemeProvider>
+        );
+    }
+
     return (
         <ThemeProvider theme={muiTheme}>
-            <CssBaseline />
+            {/* color-scheme をテーマに合わせ、ダークでも入力欄や一覧のスクロールバーを暗い配色にする */}
+            <CssBaseline enableColorScheme />
             <HashRouter>
                 <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
                     <TitleBar info={appInfo ?? undefined} />
@@ -61,10 +89,24 @@ export default function App() {
                             <Route path='/video/chapter-cut' element={<ChapterCutPage />} />
                             <Route path='/image/svg-converter' element={<SvgConverterPage />} />
                             <Route path='/tools/cleanup' element={<CleanupPage />} />
+                            <Route path='/audio/separation' element={<SeparationPage />} />
+                            <Route path='/audio/conversion' element={<ConversionPage />} />
+                            <Route
+                                path='/audio/conversion/models'
+                                element={<VoiceModelsPage key='converter' feature='converter' />}
+                            />
+                            <Route path='/audio/conversion/training' element={<RvcTrainingPage />} />
+                            <Route path='/audio/tts' element={<TtsPage />} />
+                            <Route path='/audio/tts/models' element={<VoiceModelsPage key='tts' feature='tts' />} />
+                            <Route path='/audio/tts/training' element={<TtsTrainingPage />} />
                             <Route path='/settings' element={<SettingsPage />} />
                         </Routes>
                     </Box>
                 </Box>
+                {/* 音声機能のダウンロード物の更新が必要な場合、アプリの更新後の初回起動時に確認する */}
+                <VoiceUpdatePrompt />
+                {/* 音声機能のダウンロード。必要な箇所から呼び出すダイアログ */}
+                <VoiceLibraryDialog />
             </HashRouter>
             {/* アップデート通知と画面内の一時通知をまとめて右下に表示する */}
             <NotificationArea />

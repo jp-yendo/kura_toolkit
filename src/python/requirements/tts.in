@@ -1,0 +1,22 @@
+# 読み上げ (Style-Bert-VITS2 の派生版 style-bert-vits2-mk) の推論。主要な依存は派生版の uv.lock と同じ版にそろえる
+style-bert-vits2-mk[torch]==2.8.8
+torch==2.11.0
+transformers==5.13.0
+tokenizers==0.22.2
+huggingface-hub==1.22.0
+accelerate==1.14.0
+onnxruntime==1.24.3
+numpy==2.4.6
+numba==0.66.0
+llvmlite==0.48.0
+pyopenjtalk-plus==0.4.1.post8
+e2k==0.6.2
+pydantic==2.12.3
+safetensors==0.8.0
+sentencepiece==0.2.1
+g2p-en==2.1.0
+nltk==3.8.1
+pyworld-prebuilt==0.3.5.post2
+sudachipy==0.6.11
+sudachidict-core==20260428
+soundfile==0.14.0

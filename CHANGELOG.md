@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Audio Separation
+- Voice Conversion
+- Text to Speech
+- Voice model management and model training for Voice Conversion and Text to Speech
+- Downloads for the Python runtime, package sets and models used by the voice features
+- App Settings: storage locations for libraries, models and temporary files
+
+### Changed
+
+- The license changed from MIT to the GNU Affero General Public License v3.0 (AGPL-3.0).
+- Only one copy of the app runs at a time. Starting it again brings the open window to the front.
+- Chapter Cut: intermediate files are kept in the work directory set in App Settings.
+
+### Fixed
+
+- In the dark theme, scroll bars inside lists and text boxes are dark as well.
+- Audio Normalizer and Chapter Cut: when overwriting a file fails or is cancelled, the existing file
+  is kept.
+- A settings file that cannot be read is never overwritten. At startup the app asks whether to
+  continue with the default settings, keeping the unreadable file under another name, or to quit.
+
 ## [0.2.1] - 2026-08-27
 
 ### Added

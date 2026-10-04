@@ -130,6 +130,8 @@ export default function ChapterCutPage() {
         if (message.includes('NO_SPLIT_POINT')) return t('chapterPage.noSplitPoint');
         if (message.includes('DUPLICATE_OUTPUTS')) return t('chapterPage.duplicateOutputs');
         if (message.includes('OUTPUT_EQUALS_INPUT')) return t('chapterPage.outputEqualsInput');
+        const workDir = /WORK_DIR_MISSING: (.*)/.exec(message);
+        if (workDir) return t('common.workDirMissing', { detail: workDir[1] });
         return message;
     };
 
@@ -497,7 +499,6 @@ export default function ChapterCutPage() {
                     <Button variant='contained' onClick={run} disabled={job !== null || loading} sx={{ flexShrink: 0 }}>
                         {t('chapterPage.run')}
                     </Button>
-
                 </>
             )}
 
@@ -517,7 +518,6 @@ export default function ChapterCutPage() {
                 }
             />
 
-
             <AppDialog open={resultOutputs !== null} onClose={() => setResultOutputs(null)} maxWidth='sm' fullWidth>
                 <DialogTitle>{t('common.done')}</DialogTitle>
                 <DialogContent>
@@ -530,7 +530,9 @@ export default function ChapterCutPage() {
                         </Typography>
                     ))}
                     {/* 処理の詳細は普段は隠しておき、必要なときだけ開く */}
-                    {logOpen && store.logs.length > 0 && <LogView lines={store.logs} sx={{ mt: 1.5, maxHeight: 240 }} />}
+                    {logOpen && store.logs.length > 0 && (
+                        <LogView lines={store.logs} sx={{ mt: 1.5, maxHeight: 240 }} />
+                    )}
                 </DialogContent>
                 <DialogActions sx={{ justifyContent: 'space-between' }}>
                     <Button
@@ -598,7 +600,12 @@ export default function ChapterCutPage() {
             </AppDialog>
 
             {/* 既存のファイルを上書きする場合の確認 (取り消せない操作のため実行前に必ず挟む) */}
-            <AppDialog open={overwriteTargets !== null} onClose={() => setOverwriteTargets(null)} maxWidth='sm' fullWidth>
+            <AppDialog
+                open={overwriteTargets !== null}
+                onClose={() => setOverwriteTargets(null)}
+                maxWidth='sm'
+                fullWidth
+            >
                 <DialogTitle>{t('chapterPage.overwriteTitle')}</DialogTitle>
                 <DialogContent>
                     <Typography sx={{ mb: 1, lineHeight: 1.6 }}>

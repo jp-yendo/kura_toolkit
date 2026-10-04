@@ -1,5 +1,15 @@
 import React from 'react';
-import { Box, Typography, IconButton, Button, Menu, MenuItem, ListItemIcon, ListItemText, Divider } from '@mui/material';
+import {
+    Box,
+    Typography,
+    IconButton,
+    Button,
+    Menu,
+    MenuItem,
+    ListItemIcon,
+    ListItemText,
+    Divider,
+} from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { AppInfo } from '@shared/types';
@@ -123,11 +133,7 @@ export default function TitleBar({ info }: Props) {
             </Box>
 
             {/* カテゴリドロップダウン */}
-            <Menu
-                anchorEl={categoryAnchor?.element ?? null}
-                open={categoryAnchor !== null}
-                onClose={closeMenus}
-            >
+            <Menu anchorEl={categoryAnchor?.element ?? null} open={categoryAnchor !== null} onClose={closeMenus}>
                 {(categoryAnchor ? featuresByCategory(categoryAnchor.category) : []).map(feature => {
                     const Icon = feature.icon;
                     return (

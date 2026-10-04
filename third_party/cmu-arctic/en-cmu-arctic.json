@@ -1,0 +1,5669 @@
+{
+ "language": "en",
+ "name": "CMU ARCTIC prompts",
+ "source": "http://www.festvox.org/cmu_arctic/",
+ "license": "CMU ARCTIC license (see LICENSE.txt)",
+ "modifications": "Converted from cmuarctic.data into JSON (utterance id, set and prompt text). The prompt text itself is unchanged. Kura Toolkit presents the first 100 prompts of set A as the \"quick\" sentence set and all 1,132 prompts as the \"accurate\" set.",
+ "sentences": [
+  {
+   "id": "arctic_a0001",
+   "set": "a",
+   "text": "Author of the danger trail, Philip Steels, etc."
+  },
+  {
+   "id": "arctic_a0002",
+   "set": "a",
+   "text": "Not at this particular case, Tom, apologized Whittemore."
+  },
+  {
+   "id": "arctic_a0003",
+   "set": "a",
+   "text": "For the twentieth time that evening the two men shook hands."
+  },
+  {
+   "id": "arctic_a0004",
+   "set": "a",
+   "text": "Lord, but I'm glad to see you again, Phil."
+  },
+  {
+   "id": "arctic_a0005",
+   "set": "a",
+   "text": "Will we ever forget it."
+  },
+  {
+   "id": "arctic_a0006",
+   "set": "a",
+   "text": "God bless 'em, I hope I'll go on seeing them forever."
+  },
+  {
+   "id": "arctic_a0007",
+   "set": "a",
+   "text": "And you always want to see it in the superlative degree."
+  },
+  {
+   "id": "arctic_a0008",
+   "set": "a",
+   "text": "Gad, your letter came just in time."
+  },
+  {
+   "id": "arctic_a0009",
+   "set": "a",
+   "text": "He turned sharply, and faced Gregson across the table."
+  },
+  {
+   "id": "arctic_a0010",
+   "set": "a",
+   "text": "I'm playing a single hand in what looks like a losing game."
+  },
+  {
+   "id": "arctic_a0011",
+   "set": "a",
+   "text": "If I ever needed a fighter in my life I need one now."
+  },
+  {
+   "id": "arctic_a0012",
+   "set": "a",
+   "text": "Gregson shoved back his chair and rose to his feet."
+  },
+  {
+   "id": "arctic_a0013",
+   "set": "a",
+   "text": "He was a head shorter than his companion, of almost delicate physique."
+  },
+  {
+   "id": "arctic_a0014",
+   "set": "a",
+   "text": "Now you're coming down to business, Phil, he exclaimed."
+  },
+  {
+   "id": "arctic_a0015",
+   "set": "a",
+   "text": "It's the aurora borealis."
+  },
+  {
+   "id": "arctic_a0016",
+   "set": "a",
+   "text": "There's Fort Churchill, a rifle-shot beyond the ridge, asleep."
+  },
+  {
+   "id": "arctic_a0017",
+   "set": "a",
+   "text": "From that moment his friendship for Belize turns to hatred and jealousy."
+  },
+  {
+   "id": "arctic_a0018",
+   "set": "a",
+   "text": "There was a change now."
+  },
+  {
+   "id": "arctic_a0019",
+   "set": "a",
+   "text": "I followed the line of the proposed railroad, looking for chances."
+  },
+  {
+   "id": "arctic_a0020",
+   "set": "a",
+   "text": "Clubs and balls and cities grew to be only memories."
+  },
+  {
+   "id": "arctic_a0021",
+   "set": "a",
+   "text": "It fairly clubbed me into recognizing it."
+  },
+  {
+   "id": "arctic_a0022",
+   "set": "a",
+   "text": "Hardly were our plans made public before we were met by powerful opposition."
+  },
+  {
+   "id": "arctic_a0023",
+   "set": "a",
+   "text": "A combination of Canadian capital quickly organized and petitioned for the same privileges."
+  },
+  {
+   "id": "arctic_a0024",
+   "set": "a",
+   "text": "It was my reports from the north which chiefly induced people to buy."
+  },
+  {
+   "id": "arctic_a0025",
+   "set": "a",
+   "text": "I was about to do this when cooler judgment prevailed."
+  },
+  {
+   "id": "arctic_a0026",
+   "set": "a",
+   "text": "It occurred to me that there would have to be an accounting."
+  },
+  {
+   "id": "arctic_a0027",
+   "set": "a",
+   "text": "To my surprise he began to show actual enthusiasm in my favor."
+  },
+  {
+   "id": "arctic_a0028",
+   "set": "a",
+   "text": "Robbery, bribery, fraud, "
+  },
+  {
+   "id": "arctic_a0029",
+   "set": "a",
+   "text": "Their forces were already moving into the north country."
+  },
+  {
+   "id": "arctic_a0030",
+   "set": "a",
+   "text": "I had faith in them."
+  },
+  {
+   "id": "arctic_a0031",
+   "set": "a",
+   "text": "They were three hundred yards apart."
+  },
+  {
+   "id": "arctic_a0032",
+   "set": "a",
+   "text": "Since then some mysterious force has been fighting us at every step."
+  },
+  {
+   "id": "arctic_a0033",
+   "set": "a",
+   "text": "He unfolded a long typewritten letter, and handed it to Gregson."
+  },
+  {
+   "id": "arctic_a0034",
+   "set": "a",
+   "text": "Men of Selden's stamp don't stop at women and children."
+  },
+  {
+   "id": "arctic_a0035",
+   "set": "a",
+   "text": "He stopped, and Philip nodded at the horrified question in his eyes."
+  },
+  {
+   "id": "arctic_a0036",
+   "set": "a",
+   "text": "She turned in at the hotel."
+  },
+  {
+   "id": "arctic_a0037",
+   "set": "a",
+   "text": "I was the only one who remained sitting."
+  },
+  {
+   "id": "arctic_a0038",
+   "set": "a",
+   "text": "We'll have to watch our chances."
+  },
+  {
+   "id": "arctic_a0039",
+   "set": "a",
+   "text": "The ship should be in within a week or ten days."
+  },
+  {
+   "id": "arctic_a0040",
+   "set": "a",
+   "text": "I suppose you wonder why she is coming up here."
+  },
+  {
+   "id": "arctic_a0041",
+   "set": "a",
+   "text": "Meanwhile I'll go out to breathe a spell."
+  },
+  {
+   "id": "arctic_a0042",
+   "set": "a",
+   "text": "How could he explain his possession of the sketch."
+  },
+  {
+   "id": "arctic_a0043",
+   "set": "a",
+   "text": "It seemed nearer to him since he had seen and talked with Gregson."
+  },
+  {
+   "id": "arctic_a0044",
+   "set": "a",
+   "text": "Her own betrayal of herself was like tonic to Philip."
+  },
+  {
+   "id": "arctic_a0045",
+   "set": "a",
+   "text": "He moved away as quietly as he had come."
+  },
+  {
+   "id": "arctic_a0046",
+   "set": "a",
+   "text": "The girl faced him, her eyes shining with sudden fear."
+  },
+  {
+   "id": "arctic_a0047",
+   "set": "a",
+   "text": "Close beside him gleamed the white fangs of the wolf-dog."
+  },
+  {
+   "id": "arctic_a0048",
+   "set": "a",
+   "text": "He looked at the handkerchief more, closely."
+  },
+  {
+   "id": "arctic_a0049",
+   "set": "a",
+   "text": "Gregson was asleep when he re-entered the cabin."
+  },
+  {
+   "id": "arctic_a0050",
+   "set": "a",
+   "text": "In spite of their absurdity the words affected Philip curiously."
+  },
+  {
+   "id": "arctic_a0051",
+   "set": "a",
+   "text": "The lace was of a delicate ivory color, faintly tinted with yellow."
+  },
+  {
+   "id": "arctic_a0052",
+   "set": "a",
+   "text": "It was a curious coincidence."
+  },
+  {
+   "id": "arctic_a0053",
+   "set": "a",
+   "text": "Suddenly his fingers closed tightly over the handkerchief."
+  },
+  {
+   "id": "arctic_a0054",
+   "set": "a",
+   "text": "There was nothing on the rock."
+  },
+  {
+   "id": "arctic_a0055",
+   "set": "a",
+   "text": "Philip stood undecided, his ears strained to catch the slightest sound."
+  },
+  {
+   "id": "arctic_a0056",
+   "set": "a",
+   "text": "Pearce's little eyes were fixed on him shrewdly."
+  },
+  {
+   "id": "arctic_a0057",
+   "set": "a",
+   "text": "I have no idea, replied Philip."
+  },
+  {
+   "id": "arctic_a0058",
+   "set": "a",
+   "text": "I came for information more out of curiosity than anything else."
+  },
+  {
+   "id": "arctic_a0059",
+   "set": "a",
+   "text": "His immaculate appearance was gone."
+  },
+  {
+   "id": "arctic_a0060",
+   "set": "a",
+   "text": "Anyway, no one saw her like that."
+  },
+  {
+   "id": "arctic_a0061",
+   "set": "a",
+   "text": "Philip snatched at the letter which Gregson held out to him."
+  },
+  {
+   "id": "arctic_a0062",
+   "set": "a",
+   "text": "The men stared into each other's face."
+  },
+  {
+   "id": "arctic_a0063",
+   "set": "a",
+   "text": "Yes, it was a man who asked, a stranger."
+  },
+  {
+   "id": "arctic_a0064",
+   "set": "a",
+   "text": "The fourth and fifth days passed without any developments."
+  },
+  {
+   "id": "arctic_a0065",
+   "set": "a",
+   "text": "They closed now until his fingers were like cords of steel."
+  },
+  {
+   "id": "arctic_a0066",
+   "set": "a",
+   "text": "He saw Jeanne falter for a moment."
+  },
+  {
+   "id": "arctic_a0067",
+   "set": "a",
+   "text": "Surely I will excuse you, she cried."
+  },
+  {
+   "id": "arctic_a0068",
+   "set": "a",
+   "text": "In a flash Philip followed its direction."
+  },
+  {
+   "id": "arctic_a0069",
+   "set": "a",
+   "text": "It was his intention to return to Eileen and her father."
+  },
+  {
+   "id": "arctic_a0070",
+   "set": "a",
+   "text": "He would first hunt up Gregson and begin his work there."
+  },
+  {
+   "id": "arctic_a0071",
+   "set": "a",
+   "text": "What was the object of your little sensation."
+  },
+  {
+   "id": "arctic_a0072",
+   "set": "a",
+   "text": "But who was Eileen's double."
+  },
+  {
+   "id": "arctic_a0073",
+   "set": "a",
+   "text": "The promoter's eyes were heavy, with little puffy bags under them."
+  },
+  {
+   "id": "arctic_a0074",
+   "set": "a",
+   "text": "And now, down there, Eileen was waiting for him."
+  },
+  {
+   "id": "arctic_a0075",
+   "set": "a",
+   "text": "There has been a change, she interrupted him."
+  },
+  {
+   "id": "arctic_a0076",
+   "set": "a",
+   "text": "The gray eyes faltered; the flush deepened."
+  },
+  {
+   "id": "arctic_a0077",
+   "set": "a",
+   "text": "It is the fire, partly, she said."
+  },
+  {
+   "id": "arctic_a0078",
+   "set": "a",
+   "text": "Then, and at supper, he tried to fathom her."
+  },
+  {
+   "id": "arctic_a0079",
+   "set": "a",
+   "text": "It was a large canoe."
+  },
+  {
+   "id": "arctic_a0080",
+   "set": "a",
+   "text": "What if Jeanne failed him."
+  },
+  {
+   "id": "arctic_a0081",
+   "set": "a",
+   "text": "What if she did not come to the rock."
+  },
+  {
+   "id": "arctic_a0082",
+   "set": "a",
+   "text": "His face was streaming with blood."
+  },
+  {
+   "id": "arctic_a0083",
+   "set": "a",
+   "text": "A shadow was creeping over Pierre's eyes."
+  },
+  {
+   "id": "arctic_a0084",
+   "set": "a",
+   "text": "Scarcely had he uttered the name when Pierre's closing eyes shot open."
+  },
+  {
+   "id": "arctic_a0085",
+   "set": "a",
+   "text": "A trickle of fresh blood ran over his face."
+  },
+  {
+   "id": "arctic_a0086",
+   "set": "a",
+   "text": "Death had come with terrible suddenness."
+  },
+  {
+   "id": "arctic_a0087",
+   "set": "a",
+   "text": "Philip bent lower, and stared into the face of the dead man."
+  },
+  {
+   "id": "arctic_a0088",
+   "set": "a",
+   "text": "He made sure that the magazine was loaded, and resumed his paddling."
+  },
+  {
+   "id": "arctic_a0089",
+   "set": "a",
+   "text": "The nightglow was treacherous to shoot by."
+  },
+  {
+   "id": "arctic_a0090",
+   "set": "a",
+   "text": "The singing voice approached rapidly."
+  },
+  {
+   "id": "arctic_a0091",
+   "set": "a",
+   "text": "His blood grew hot with rage at the thought."
+  },
+  {
+   "id": "arctic_a0092",
+   "set": "a",
+   "text": "He went down in midstream, searching the shadows of both shores."
+  },
+  {
+   "id": "arctic_a0093",
+   "set": "a",
+   "text": "For a full minute he crouched and listened."
+  },
+  {
+   "id": "arctic_a0094",
+   "set": "a",
+   "text": "He had barely entered this when he saw the glow of a fire."
+  },
+  {
+   "id": "arctic_a0095",
+   "set": "a",
+   "text": "A big canvas tent was the first thing to come within his vision."
+  },
+  {
+   "id": "arctic_a0096",
+   "set": "a",
+   "text": "Perhaps she had already met her fate a little deeper in the forest."
+  },
+  {
+   "id": "arctic_a0097",
+   "set": "a",
+   "text": "Then you can arrange yourself comfortably among these robes in the bow."
+  },
+  {
+   "id": "arctic_a0098",
+   "set": "a",
+   "text": "Shall I carry you."
+  },
+  {
+   "id": "arctic_a0099",
+   "set": "a",
+   "text": "A maddening joy pounded in his brain."
+  },
+  {
+   "id": "arctic_a0100",
+   "set": "a",
+   "text": "You must sleep, he urged."
+  },
+  {
+   "id": "arctic_a0101",
+   "set": "a",
+   "text": "You, you would not keep the truth from me."
+  },
+  {
+   "id": "arctic_a0102",
+   "set": "a",
+   "text": "He will follow us soon."
+  },
+  {
+   "id": "arctic_a0103",
+   "set": "a",
+   "text": "But there came no promise from the bow of the canoe."
+  },
+  {
+   "id": "arctic_a0104",
+   "set": "a",
+   "text": "She was sleeping under his protection as sweetly as a child."
+  },
+  {
+   "id": "arctic_a0105",
+   "set": "a",
+   "text": "Only, it is so wonderful, so almost impossible to believe."
+  },
+  {
+   "id": "arctic_a0106",
+   "set": "a",
+   "text": "The emotion which she had suppressed burst forth now in a choking sob."
+  },
+  {
+   "id": "arctic_a0107",
+   "set": "a",
+   "text": "If you only could know how I thank you."
+  },
+  {
+   "id": "arctic_a0108",
+   "set": "a",
+   "text": "He waded into the edge of the water and began scrubbing himself."
+  },
+  {
+   "id": "arctic_a0109",
+   "set": "a",
+   "text": "Do you know that you are shaking my confidence in you."
+  },
+  {
+   "id": "arctic_a0110",
+   "set": "a",
+   "text": "Much, replied Jeanne, as tersely."
+  },
+  {
+   "id": "arctic_a0111",
+   "set": "a",
+   "text": "Instead, he joined her; and they ate like two hungry children."
+  },
+  {
+   "id": "arctic_a0112",
+   "set": "a",
+   "text": "He was wounded in the arm."
+  },
+  {
+   "id": "arctic_a0113",
+   "set": "a",
+   "text": "I suppose you picked that lingo up among the Indians."
+  },
+  {
+   "id": "arctic_a0114",
+   "set": "a",
+   "text": "Her words sent a strange chill through Philip."
+  },
+  {
+   "id": "arctic_a0115",
+   "set": "a",
+   "text": "He had no excuse for the feelings which were aroused in him."
+  },
+  {
+   "id": "arctic_a0116",
+   "set": "a",
+   "text": "Was it the rendezvous of those who were striving to work his ruin."
+  },
+  {
+   "id": "arctic_a0117",
+   "set": "a",
+   "text": "She added, with genuine sympathy in her face and voice."
+  },
+  {
+   "id": "arctic_a0118",
+   "set": "a",
+   "text": "Pierre obeys me when we are together."
+  },
+  {
+   "id": "arctic_a0119",
+   "set": "a",
+   "text": "Jeanne was turning the bow shoreward."
+  },
+  {
+   "id": "arctic_a0120",
+   "set": "a",
+   "text": "My right foot feels like that of a Chinese debutante."
+  },
+  {
+   "id": "arctic_a0121",
+   "set": "a",
+   "text": "They ate dinner at the fifth, and rested for two hours."
+  },
+  {
+   "id": "arctic_a0122",
+   "set": "a",
+   "text": "Two years ago I gave up civilization for this."
+  },
+  {
+   "id": "arctic_a0123",
+   "set": "a",
+   "text": "She had died from cold and starvation."
+  },
+  {
+   "id": "arctic_a0124",
+   "set": "a",
+   "text": "It was Jeanne singing softly over beyond the rocks."
+  },
+  {
+   "id": "arctic_a0125",
+   "set": "a",
+   "text": "He was determined now to maintain a more certain hold upon himself."
+  },
+  {
+   "id": "arctic_a0126",
+   "set": "a",
+   "text": "Each day she became a more vital part of him."
+  },
+  {
+   "id": "arctic_a0127",
+   "set": "a",
+   "text": "It was a temptation, but he resisted it."
+  },
+  {
+   "id": "arctic_a0128",
+   "set": "a",
+   "text": "This one hope was destroyed as quickly as it was born."
+  },
+  {
+   "id": "arctic_a0129",
+   "set": "a",
+   "text": "Her face was against his breast."
+  },
+  {
+   "id": "arctic_a0130",
+   "set": "a",
+   "text": "She was his now, forever."
+  },
+  {
+   "id": "arctic_a0131",
+   "set": "a",
+   "text": "Providence had delivered him through the maelstrom."
+  },
+  {
+   "id": "arctic_a0132",
+   "set": "a",
+   "text": "A cry of joy burst from Philip's lips."
+  },
+  {
+   "id": "arctic_a0133",
+   "set": "a",
+   "text": "Philip began to feel that he had foolishly overestimated his strength."
+  },
+  {
+   "id": "arctic_a0134",
+   "set": "a",
+   "text": "He obeyed the pressure of her hand."
+  },
+  {
+   "id": "arctic_a0135",
+   "set": "a",
+   "text": "I am going to surprise father, and you will go with Pierre."
+  },
+  {
+   "id": "arctic_a0136",
+   "set": "a",
+   "text": "About him, everywhere, were the evidences of luxury and of age."
+  },
+  {
+   "id": "arctic_a0137",
+   "set": "a",
+   "text": "Then he stepped back with a low cry of pleasure."
+  },
+  {
+   "id": "arctic_a0138",
+   "set": "a",
+   "text": "In the picture he saw each moment a greater resemblance to Jeanne."
+  },
+  {
+   "id": "arctic_a0139",
+   "set": "a",
+   "text": "He told himself that as he washed himself and groomed his disheveled clothes."
+  },
+  {
+   "id": "arctic_a0140",
+   "set": "a",
+   "text": "Accept a father's blessing, and with it, this."
+  },
+  {
+   "id": "arctic_a0141",
+   "set": "a",
+   "text": "It seems like a strange pointing of the hand of God."
+  },
+  {
+   "id": "arctic_a0142",
+   "set": "a",
+   "text": "Such things had occurred before, he told Philip."
+  },
+  {
+   "id": "arctic_a0143",
+   "set": "a",
+   "text": "Ah, I had forgotten, he exclaimed."
+  },
+  {
+   "id": "arctic_a0144",
+   "set": "a",
+   "text": "But there was something even more startling than this resemblance."
+  },
+  {
+   "id": "arctic_a0145",
+   "set": "a",
+   "text": "I have to be careful of them, as they tear very easily."
+  },
+  {
+   "id": "arctic_a0146",
+   "set": "a",
+   "text": "Of course, that is uninteresting, she continued."
+  },
+  {
+   "id": "arctic_a0147",
+   "set": "a",
+   "text": "A moment before he was intoxicated by a joy that was almost madness."
+  },
+  {
+   "id": "arctic_a0148",
+   "set": "a",
+   "text": "Now these things had been struck dead within him."
+  },
+  {
+   "id": "arctic_a0149",
+   "set": "a",
+   "text": "For an instant he saw Pierre drawn like a silhouette against the sky."
+  },
+  {
+   "id": "arctic_a0150",
+   "set": "a",
+   "text": "Goodbye, Pierre, he shouted."
+  },
+  {
+   "id": "arctic_a0151",
+   "set": "a",
+   "text": "And MacDougall was beyond the trail, with three weeks to spare."
+  },
+  {
+   "id": "arctic_a0152",
+   "set": "a",
+   "text": "Philip thrust himself against it and entered."
+  },
+  {
+   "id": "arctic_a0153",
+   "set": "a",
+   "text": "MacDougall tapped his forehead suspiciously with a stubby forefinger."
+  },
+  {
+   "id": "arctic_a0154",
+   "set": "a",
+   "text": "He was smooth-shaven, and his hair and eyes were black."
+  },
+  {
+   "id": "arctic_a0155",
+   "set": "a",
+   "text": "Won't you draw up, gentlemen."
+  },
+  {
+   "id": "arctic_a0156",
+   "set": "a",
+   "text": "A strange fire burned in his eyes when Thorpe turned."
+  },
+  {
+   "id": "arctic_a0157",
+   "set": "a",
+   "text": "He had worshiped her, as Dante might have worshiped Beatrice."
+  },
+  {
+   "id": "arctic_a0158",
+   "set": "a",
+   "text": "Does that look good."
+  },
+  {
+   "id": "arctic_a0159",
+   "set": "a",
+   "text": "They look as though he had been drumming a piano all his life."
+  },
+  {
+   "id": "arctic_a0160",
+   "set": "a",
+   "text": "You want to go over and see his gang throw dirt."
+  },
+  {
+   "id": "arctic_a0161",
+   "set": "a",
+   "text": "Take away their foreman and they wouldn't be worth their grub."
+  },
+  {
+   "id": "arctic_a0162",
+   "set": "a",
+   "text": "That's the sub-foreman, explained Thorpe."
+  },
+  {
+   "id": "arctic_a0163",
+   "set": "a",
+   "text": "Philip made no effort to follow."
+  },
+  {
+   "id": "arctic_a0164",
+   "set": "a",
+   "text": "He came first a year ago, and revealed himself to Jeanne."
+  },
+  {
+   "id": "arctic_a0165",
+   "set": "a",
+   "text": "They are to attack your camp tomorrow night."
+  },
+  {
+   "id": "arctic_a0166",
+   "set": "a",
+   "text": "Two days ago Jeanne learned where her father's men were hiding."
+  },
+  {
+   "id": "arctic_a0167",
+   "set": "a",
+   "text": "I was near the cabin, and saw you."
+  },
+  {
+   "id": "arctic_a0168",
+   "set": "a",
+   "text": "Low bush whipped him in the face and left no sting."
+  },
+  {
+   "id": "arctic_a0169",
+   "set": "a",
+   "text": "Suddenly Jeanne stopped for an instant."
+  },
+  {
+   "id": "arctic_a0170",
+   "set": "a",
+   "text": "There was none of the joy of meeting in his face."
+  },
+  {
+   "id": "arctic_a0171",
+   "set": "a",
+   "text": "And when you come back in a few days, bring Eileen."
+  },
+  {
+   "id": "arctic_a0172",
+   "set": "a",
+   "text": "Gregson had left the outer door slightly ajar."
+  },
+  {
+   "id": "arctic_a0173",
+   "set": "a",
+   "text": "The date was nearly eighteen years old."
+  },
+  {
+   "id": "arctic_a0174",
+   "set": "a",
+   "text": "They were the presage of storm."
+  },
+  {
+   "id": "arctic_a0175",
+   "set": "a",
+   "text": "Down there the earth was already swelling with life."
+  },
+  {
+   "id": "arctic_a0176",
+   "set": "a",
+   "text": "For the first time in his life he was yearning for a scrap."
+  },
+  {
+   "id": "arctic_a0177",
+   "set": "a",
+   "text": "She had been thoroughly and efficiently mauled."
+  },
+  {
+   "id": "arctic_a0178",
+   "set": "a",
+   "text": "Every bone in her aged body seemed broken or dislocated."
+  },
+  {
+   "id": "arctic_a0179",
+   "set": "a",
+   "text": "Tomorrow I'm going after that bear, he said."
+  },
+  {
+   "id": "arctic_a0180",
+   "set": "a",
+   "text": "If not, let's say our prayers and go to bed."
+  },
+  {
+   "id": "arctic_a0181",
+   "set": "a",
+   "text": "So cheer up, and give us your paw."
+  },
+  {
+   "id": "arctic_a0182",
+   "set": "a",
+   "text": "This time he did not yap for mercy."
+  },
+  {
+   "id": "arctic_a0183",
+   "set": "a",
+   "text": "And the air was growing chilly."
+  },
+  {
+   "id": "arctic_a0184",
+   "set": "a",
+   "text": "Don't you see, I'm chewing this thing in two."
+  },
+  {
+   "id": "arctic_a0185",
+   "set": "a",
+   "text": "The questions may have come vaguely in his mind."
+  },
+  {
+   "id": "arctic_a0186",
+   "set": "a",
+   "text": "Like a flash he launched himself into the feathered mass of the owl."
+  },
+  {
+   "id": "arctic_a0187",
+   "set": "a",
+   "text": "Ahead of them they saw a glimmer of sunshine."
+  },
+  {
+   "id": "arctic_a0188",
+   "set": "a",
+   "text": "Two gigantic owls were tearing at the carcass."
+  },
+  {
+   "id": "arctic_a0189",
+   "set": "a",
+   "text": "The big-eyed, clucking moose-birds were most annoying."
+  },
+  {
+   "id": "arctic_a0190",
+   "set": "a",
+   "text": "Next to them the Canada jays were most persistent."
+  },
+  {
+   "id": "arctic_a0191",
+   "set": "a",
+   "text": "For a time the exciting thrill of his adventure was gone."
+  },
+  {
+   "id": "arctic_a0192",
+   "set": "a",
+   "text": "He did not rush in."
+  },
+  {
+   "id": "arctic_a0193",
+   "set": "a",
+   "text": "It was edged with ice."
+  },
+  {
+   "id": "arctic_a0194",
+   "set": "a",
+   "text": "He drank of the water cautiously."
+  },
+  {
+   "id": "arctic_a0195",
+   "set": "a",
+   "text": "But a strange thing happened."
+  },
+  {
+   "id": "arctic_a0196",
+   "set": "a",
+   "text": "He began to follow the footprints of the dog."
+  },
+  {
+   "id": "arctic_a0197",
+   "set": "a",
+   "text": "Such a dog the wise driver kills, or turns loose."
+  },
+  {
+   "id": "arctic_a0198",
+   "set": "a",
+   "text": "Sometimes her dreams were filled with visions."
+  },
+  {
+   "id": "arctic_a0199",
+   "set": "a",
+   "text": "Thus had the raw wilderness prepared him for this day."
+  },
+  {
+   "id": "arctic_a0200",
+   "set": "a",
+   "text": "He leapt again, and the club caught him once more."
+  },
+  {
+   "id": "arctic_a0201",
+   "set": "a",
+   "text": "He cried, and swung the club wildly."
+  },
+  {
+   "id": "arctic_a0202",
+   "set": "a",
+   "text": "She turned, fearing that Jacques might see what was in her face."
+  },
+  {
+   "id": "arctic_a0203",
+   "set": "a",
+   "text": "They were following the shore of a lake."
+  },
+  {
+   "id": "arctic_a0204",
+   "set": "a",
+   "text": "The wolf-dog thrust his gaunt muzzle toward him."
+  },
+  {
+   "id": "arctic_a0205",
+   "set": "a",
+   "text": "From now on we're pals."
+  },
+  {
+   "id": "arctic_a0206",
+   "set": "a",
+   "text": "He says he bought him of Jacques Le Beau."
+  },
+  {
+   "id": "arctic_a0207",
+   "set": "a",
+   "text": "How much was it."
+  },
+  {
+   "id": "arctic_a0208",
+   "set": "a",
+   "text": "Youth had come back to her, freed from the yoke of oppression."
+  },
+  {
+   "id": "arctic_a0209",
+   "set": "a",
+   "text": "It was not a large lake, and almost round."
+  },
+  {
+   "id": "arctic_a0210",
+   "set": "a",
+   "text": "Its diameter was not more than two hundred yards."
+  },
+  {
+   "id": "arctic_a0211",
+   "set": "a",
+   "text": "It drowned all sound that brute agony and death may have made."
+  },
+  {
+   "id": "arctic_a0212",
+   "set": "a",
+   "text": "Fresh cases, still able to walk, they clustered about the spokesman."
+  },
+  {
+   "id": "arctic_a0213",
+   "set": "a",
+   "text": "Between him and the beach was the cane-grass fence of the compound."
+  },
+  {
+   "id": "arctic_a0214",
+   "set": "a",
+   "text": "Besides, he was paid one case of tobacco per head."
+  },
+  {
+   "id": "arctic_a0215",
+   "set": "a",
+   "text": "They die out of spite."
+  },
+  {
+   "id": "arctic_a0216",
+   "set": "a",
+   "text": "The other felt a sudden wave of irritation rush through him."
+  },
+  {
+   "id": "arctic_a0217",
+   "set": "a",
+   "text": "Oppressive as the heat had been, it was now even more oppressive."
+  },
+  {
+   "id": "arctic_a0218",
+   "set": "a",
+   "text": "The ringing of the big bell aroused him."
+  },
+  {
+   "id": "arctic_a0219",
+   "set": "a",
+   "text": "At first he puzzled over something untoward he was sure had happened."
+  },
+  {
+   "id": "arctic_a0220",
+   "set": "a",
+   "text": "A dead man is of no use on a plantation."
+  },
+  {
+   "id": "arctic_a0221",
+   "set": "a",
+   "text": "I don't know why you're here at all."
+  },
+  {
+   "id": "arctic_a0222",
+   "set": "a",
+   "text": "What part of the United States is your home."
+  },
+  {
+   "id": "arctic_a0223",
+   "set": "a",
+   "text": "My, I'm almost homesick for it already."
+  },
+  {
+   "id": "arctic_a0224",
+   "set": "a",
+   "text": "She nodded, and her eyes grew soft and moist."
+  },
+  {
+   "id": "arctic_a0225",
+   "set": "a",
+   "text": "I was brought up the way most girls in Hawaii are brought up."
+  },
+  {
+   "id": "arctic_a0226",
+   "set": "a",
+   "text": "That came before my A B C's."
+  },
+  {
+   "id": "arctic_a0227",
+   "set": "a",
+   "text": "It was the same way with our revolvers and rifles."
+  },
+  {
+   "id": "arctic_a0228",
+   "set": "a",
+   "text": "But it contributed to the smash."
+  },
+  {
+   "id": "arctic_a0229",
+   "set": "a",
+   "text": "The last one I knew was an overseer."
+  },
+  {
+   "id": "arctic_a0230",
+   "set": "a",
+   "text": "Do you know any good land around here."
+  },
+  {
+   "id": "arctic_a0231",
+   "set": "a",
+   "text": "The Resident Commissioner is away in Australia."
+  },
+  {
+   "id": "arctic_a0232",
+   "set": "a",
+   "text": "I cannot follow you, she said."
+  },
+  {
+   "id": "arctic_a0233",
+   "set": "a",
+   "text": "I never allow what can't be changed to annoy me."
+  },
+  {
+   "id": "arctic_a0234",
+   "set": "a",
+   "text": "Why, the average review is more nauseating than cod liver oil."
+  },
+  {
+   "id": "arctic_a0235",
+   "set": "a",
+   "text": "His voice was passionately rebellious."
+  },
+  {
+   "id": "arctic_a0236",
+   "set": "a",
+   "text": "Don't you see I hate you."
+  },
+  {
+   "id": "arctic_a0237",
+   "set": "a",
+   "text": "So Hughie and I did the managing ourselves."
+  },
+  {
+   "id": "arctic_a0238",
+   "set": "a",
+   "text": "It happened to him at the Gallina Society in Oakland one afternoon."
+  },
+  {
+   "id": "arctic_a0239",
+   "set": "a",
+   "text": "He cried in such genuine dismay that she broke into hearty laughter."
+  },
+  {
+   "id": "arctic_a0240",
+   "set": "a",
+   "text": "Wash your hands of me."
+  },
+  {
+   "id": "arctic_a0241",
+   "set": "a",
+   "text": "I think it's much nicer to quarrel."
+  },
+  {
+   "id": "arctic_a0242",
+   "set": "a",
+   "text": "I saw it when she rolled."
+  },
+  {
+   "id": "arctic_a0243",
+   "set": "a",
+   "text": "I only read the quotations."
+  },
+  {
+   "id": "arctic_a0244",
+   "set": "a",
+   "text": "He was the soul of devotion to his employers."
+  },
+  {
+   "id": "arctic_a0245",
+   "set": "a",
+   "text": "Out of his eighteen hundred, he laid aside sixteen hundred each year."
+  },
+  {
+   "id": "arctic_a0246",
+   "set": "a",
+   "text": "You have heard always how he was the lover of the Princess Naomi."
+  },
+  {
+   "id": "arctic_a0247",
+   "set": "a",
+   "text": "They ought to pass here some time today."
+  },
+  {
+   "id": "arctic_a0248",
+   "set": "a",
+   "text": "I had been sad too long already."
+  },
+  {
+   "id": "arctic_a0249",
+   "set": "a",
+   "text": "All eyes, however, were staring at him in certitude of expectancy."
+  },
+  {
+   "id": "arctic_a0250",
+   "set": "a",
+   "text": "He had observed the business life of Hawaii and developed a vaulting ambition."
+  },
+  {
+   "id": "arctic_a0251",
+   "set": "a",
+   "text": "I may manage to freight a cargo back as well."
+  },
+  {
+   "id": "arctic_a0252",
+   "set": "a",
+   "text": "O'Brien had been a clean living young man with ideals."
+  },
+  {
+   "id": "arctic_a0253",
+   "set": "a",
+   "text": "He it was that lived to found the family of the Patino."
+  },
+  {
+   "id": "arctic_a0254",
+   "set": "a",
+   "text": "Straight out they swam, their heads growing smaller and smaller."
+  },
+  {
+   "id": "arctic_a0255",
+   "set": "a",
+   "text": "You won't die of malnutrition, be sure of that."
+  },
+  {
+   "id": "arctic_a0256",
+   "set": "a",
+   "text": "See the length of the body and that elongated neck."
+  },
+  {
+   "id": "arctic_a0257",
+   "set": "a",
+   "text": "They are coming ashore, whoever they are."
+  },
+  {
+   "id": "arctic_a0258",
+   "set": "a",
+   "text": "Soaked in seawater they offset the heat rays."
+  },
+  {
+   "id": "arctic_a0259",
+   "set": "a",
+   "text": "Think of investing in such an adventure."
+  },
+  {
+   "id": "arctic_a0260",
+   "set": "a",
+   "text": "Nobody knew his history, they of the Junta least of all."
+  },
+  {
+   "id": "arctic_a0261",
+   "set": "a",
+   "text": "I have been doubly baptized."
+  },
+  {
+   "id": "arctic_a0262",
+   "set": "a",
+   "text": "They wouldn't be sweeping a big vessel like the Martha."
+  },
+  {
+   "id": "arctic_a0263",
+   "set": "a",
+   "text": "Joan looked triumphantly at Sheldon, who bowed."
+  },
+  {
+   "id": "arctic_a0264",
+   "set": "a",
+   "text": "And I hope you've got plenty of chain out, Captain Young."
+  },
+  {
+   "id": "arctic_a0265",
+   "set": "a",
+   "text": "The discovery seemed to have been made on the spur of the moment."
+  },
+  {
+   "id": "arctic_a0266",
+   "set": "a",
+   "text": "They handled two men already, both grub-thieves."
+  },
+  {
+   "id": "arctic_a0267",
+   "set": "a",
+   "text": "Eli Harding asked, as Shunk started to follow."
+  },
+  {
+   "id": "arctic_a0268",
+   "set": "a",
+   "text": "Now go ahead and tell me in a straightforward way what has happened."
+  },
+  {
+   "id": "arctic_a0269",
+   "set": "a",
+   "text": "That's where they cut off the Scottish Chiefs and killed all hands."
+  },
+  {
+   "id": "arctic_a0270",
+   "set": "a",
+   "text": "And after the bath a shave would not be bad."
+  },
+  {
+   "id": "arctic_a0271",
+   "set": "a",
+   "text": "Now please give a plain statement of what occurred."
+  },
+  {
+   "id": "arctic_a0272",
+   "set": "a",
+   "text": "You can take a vacation on pay."
+  },
+  {
+   "id": "arctic_a0273",
+   "set": "a",
+   "text": "They are big trees and require plenty of room."
+  },
+  {
+   "id": "arctic_a0274",
+   "set": "a",
+   "text": "And Raoul listened again to the tale of the house."
+  },
+  {
+   "id": "arctic_a0275",
+   "set": "a",
+   "text": "There are no kiddies and half grown youths among them."
+  },
+  {
+   "id": "arctic_a0276",
+   "set": "a",
+   "text": "Oolong Atoll was one hundred and forty miles in circumference."
+  },
+  {
+   "id": "arctic_a0277",
+   "set": "a",
+   "text": "McCoy found a stifling, poisonous atmosphere in the pent cabin."
+  },
+  {
+   "id": "arctic_a0278",
+   "set": "a",
+   "text": "It would give me nervous prostration."
+  },
+  {
+   "id": "arctic_a0279",
+   "set": "a",
+   "text": "She said with chattering teeth."
+  },
+  {
+   "id": "arctic_a0280",
+   "set": "a",
+   "text": "I'll be out of my head in fifteen minutes."
+  },
+  {
+   "id": "arctic_a0281",
+   "set": "a",
+   "text": "I do not blame you for anything; remember that."
+  },
+  {
+   "id": "arctic_a0282",
+   "set": "a",
+   "text": "If you mean to insinuate -- Brentwood began hotly."
+  },
+  {
+   "id": "arctic_a0283",
+   "set": "a",
+   "text": "The woman in you is only incidental, accidental, and irrelevant."
+  },
+  {
+   "id": "arctic_a0284",
+   "set": "a",
+   "text": "There was no forecasting this strange girl's processes."
+  },
+  {
+   "id": "arctic_a0285",
+   "set": "a",
+   "text": "But what they want with your toothbrush is more than I can imagine."
+  },
+  {
+   "id": "arctic_a0286",
+   "set": "a",
+   "text": "Give them their choice between a fine or an official whipping."
+  },
+  {
+   "id": "arctic_a0287",
+   "set": "a",
+   "text": "Keep an eye on him."
+  },
+  {
+   "id": "arctic_a0288",
+   "set": "a",
+   "text": "Those are my oysters, he said at last."
+  },
+  {
+   "id": "arctic_a0289",
+   "set": "a",
+   "text": "They are not regular oyster pirates, Nicholas continued."
+  },
+  {
+   "id": "arctic_a0290",
+   "set": "a",
+   "text": "One by one the boys were captured."
+  },
+  {
+   "id": "arctic_a0291",
+   "set": "a",
+   "text": "The weeks had gone by, and no overt acts had been attempted."
+  },
+  {
+   "id": "arctic_a0292",
+   "set": "a",
+   "text": "Here, in the midmorning, the first casualty occurred."
+  },
+  {
+   "id": "arctic_a0293",
+   "set": "a",
+   "text": "They were deep in the primeval forest."
+  },
+  {
+   "id": "arctic_a0294",
+   "set": "a",
+   "text": "He had been foiled in his attempt to escape."
+  },
+  {
+   "id": "arctic_a0295",
+   "set": "a",
+   "text": "And twenty men could hold it with spears and arrows."
+  },
+  {
+   "id": "arctic_a0296",
+   "set": "a",
+   "text": "Bassett was a fastidious man."
+  },
+  {
+   "id": "arctic_a0297",
+   "set": "a",
+   "text": "There's a big English general right now whose name is Roberts."
+  },
+  {
+   "id": "arctic_a0298",
+   "set": "a",
+   "text": "This tacit promise of continued acquaintance gave Saxon a little joy-thrill."
+  },
+  {
+   "id": "arctic_a0299",
+   "set": "a",
+   "text": "I tell you I am disgusted with this adventure tomfoolery and rot."
+  },
+  {
+   "id": "arctic_a0300",
+   "set": "a",
+   "text": "From my earliest recollection my sleep was a period of terror."
+  },
+  {
+   "id": "arctic_a0301",
+   "set": "a",
+   "text": "But all my dreams violated this law."
+  },
+  {
+   "id": "arctic_a0302",
+   "set": "a",
+   "text": "It is very plausible to such people, a most convincing hypothesis."
+  },
+  {
+   "id": "arctic_a0303",
+   "set": "a",
+   "text": "But they make the mistake of ignoring their own duality."
+  },
+  {
+   "id": "arctic_a0304",
+   "set": "a",
+   "text": "I graduated last of my class."
+  },
+  {
+   "id": "arctic_a0305",
+   "set": "a",
+   "text": "They had no fixed values, to be altered by adjectives and adverbs."
+  },
+  {
+   "id": "arctic_a0306",
+   "set": "a",
+   "text": "He was pressing beyond the limits of his vocabulary."
+  },
+  {
+   "id": "arctic_a0307",
+   "set": "a",
+   "text": "Very early in my life, I separated from my mother."
+  },
+  {
+   "id": "arctic_a0308",
+   "set": "a",
+   "text": "His infernal chattering worries me even now as I think of it."
+  },
+  {
+   "id": "arctic_a0309",
+   "set": "a",
+   "text": "White Leghorns, said Mrs Mortimer."
+  },
+  {
+   "id": "arctic_a0310",
+   "set": "a",
+   "text": "Massage under tension, was the cryptic reply."
+  },
+  {
+   "id": "arctic_a0311",
+   "set": "a",
+   "text": "Therefore, hurrah for the game."
+  },
+  {
+   "id": "arctic_a0312",
+   "set": "a",
+   "text": "It lived in perpetual apprehension of that quarter of the compass."
+  },
+  {
+   "id": "arctic_a0313",
+   "set": "a",
+   "text": "Broken-Tooth yelled with fright and pain."
+  },
+  {
+   "id": "arctic_a0314",
+   "set": "a",
+   "text": "Thus was momentum gained in the Younger World."
+  },
+  {
+   "id": "arctic_a0315",
+   "set": "a",
+   "text": "Saxon waited, for she knew a fresh idea had struck Billy."
+  },
+  {
+   "id": "arctic_a0316",
+   "set": "a",
+   "text": "We had been chased by them ourselves, more than once."
+  },
+  {
+   "id": "arctic_a0317",
+   "set": "a",
+   "text": "He was a wise hyena."
+  },
+  {
+   "id": "arctic_a0318",
+   "set": "a",
+   "text": "Production is doubling and quadrupling upon itself."
+  },
+  {
+   "id": "arctic_a0319",
+   "set": "a",
+   "text": "And the Edinburgh Evening News says, with editorial gloom."
+  },
+  {
+   "id": "arctic_a0320",
+   "set": "a",
+   "text": "With my strength I slammed it full into Red-Eye's face."
+  },
+  {
+   "id": "arctic_a0321",
+   "set": "a",
+   "text": "The log on which Lop-Ear was lying got adrift."
+  },
+  {
+   "id": "arctic_a0322",
+   "set": "a",
+   "text": "This is a common experience with all of us."
+  },
+  {
+   "id": "arctic_a0323",
+   "set": "a",
+   "text": "He considered the victory already his and stepped forward to the meat."
+  },
+  {
+   "id": "arctic_a0324",
+   "set": "a",
+   "text": "It was not Red-Eye's way to forego revenge so easily."
+  },
+  {
+   "id": "arctic_a0325",
+   "set": "a",
+   "text": "Whiz-zip-bang. Lop-Ear screamed with sudden anguish."
+  },
+  {
+   "id": "arctic_a0326",
+   "set": "a",
+   "text": "Cherokee identified himself with his instinct."
+  },
+  {
+   "id": "arctic_a0327",
+   "set": "a",
+   "text": "They were less stooped than we, less springy in their movements."
+  },
+  {
+   "id": "arctic_a0328",
+   "set": "a",
+   "text": "The Fire People, like ourselves, lived in caves."
+  },
+  {
+   "id": "arctic_a0329",
+   "set": "a",
+   "text": "Ah, indeed."
+  },
+  {
+   "id": "arctic_a0330",
+   "set": "a",
+   "text": "Red-Eye never committed a more outrageous deed."
+  },
+  {
+   "id": "arctic_a0331",
+   "set": "a",
+   "text": "Poor little Crooked-Leg was terribly scared."
+  },
+  {
+   "id": "arctic_a0332",
+   "set": "a",
+   "text": "Unconsciously, our yells and exclamations yielded to this rhythm."
+  },
+  {
+   "id": "arctic_a0333",
+   "set": "a",
+   "text": "This is no place for you."
+  },
+  {
+   "id": "arctic_a0334",
+   "set": "a",
+   "text": "He'll knock you off a few sticks in no time."
+  },
+  {
+   "id": "arctic_a0335",
+   "set": "a",
+   "text": "Red-Eye swung back and forth on the branch farther down."
+  },
+  {
+   "id": "arctic_a0336",
+   "set": "a",
+   "text": "So unexpected was my charge that I knocked him off his feet."
+  },
+  {
+   "id": "arctic_a0337",
+   "set": "a",
+   "text": "Encouraged by my conduct, Big-Face became a sudden ally."
+  },
+  {
+   "id": "arctic_a0338",
+   "set": "a",
+   "text": "The fighting had now become intermittent."
+  },
+  {
+   "id": "arctic_a0339",
+   "set": "a",
+   "text": "They obeyed him, and went here and there at his commands."
+  },
+  {
+   "id": "arctic_a0340",
+   "set": "a",
+   "text": "It was like the beating of hoofs."
+  },
+  {
+   "id": "arctic_a0341",
+   "set": "a",
+   "text": "Why, doggone you all, shake again."
+  },
+  {
+   "id": "arctic_a0342",
+   "set": "a",
+   "text": "Seventeen, no, eighteen days ago."
+  },
+  {
+   "id": "arctic_a0343",
+   "set": "a",
+   "text": "You mean for this State, General, Alberta."
+  },
+  {
+   "id": "arctic_a0344",
+   "set": "a",
+   "text": "He seemed to fill it with his tremendous vitality."
+  },
+  {
+   "id": "arctic_a0345",
+   "set": "a",
+   "text": "She was trying to pass the apron string around him."
+  },
+  {
+   "id": "arctic_a0346",
+   "set": "a",
+   "text": "Get down and dig in."
+  },
+  {
+   "id": "arctic_a0347",
+   "set": "a",
+   "text": "They are greatly delighted with anything that is bright or giveth a sound."
+  },
+  {
+   "id": "arctic_a0348",
+   "set": "a",
+   "text": "They only lifted seven hundred and fifty."
+  },
+  {
+   "id": "arctic_a0349",
+   "set": "a",
+   "text": "It was simple, in its way, and no virtue of his."
+  },
+  {
+   "id": "arctic_a0350",
+   "set": "a",
+   "text": "Is that Pat Hanrahan's mug looking hungry and willing."
+  },
+  {
+   "id": "arctic_a0351",
+   "set": "a",
+   "text": "It was more like sugar."
+  },
+  {
+   "id": "arctic_a0352",
+   "set": "a",
+   "text": "I'm sure going along with you all, Elijah."
+  },
+  {
+   "id": "arctic_a0353",
+   "set": "a",
+   "text": "Here the explosion of mirth drowned him out."
+  },
+  {
+   "id": "arctic_a0354",
+   "set": "a",
+   "text": "Fresh meat they failed to obtain."
+  },
+  {
+   "id": "arctic_a0355",
+   "set": "a",
+   "text": "A burst of laughter was his reward."
+  },
+  {
+   "id": "arctic_a0356",
+   "set": "a",
+   "text": "You don't catch me at any such foolishness."
+  },
+  {
+   "id": "arctic_a0357",
+   "set": "a",
+   "text": "A month passed by, and Bonanza Creek remained quiet."
+  },
+  {
+   "id": "arctic_a0358",
+   "set": "a",
+   "text": "They continued valiantly to lie, but the truth continued to outrun them."
+  },
+  {
+   "id": "arctic_a0359",
+   "set": "a",
+   "text": "Earth and gravel seemed to fill the pan."
+  },
+  {
+   "id": "arctic_a0360",
+   "set": "a",
+   "text": "But he no longer cared quite so much for that form of diversion."
+  },
+  {
+   "id": "arctic_a0361",
+   "set": "a",
+   "text": "But he did not broach it, preferring to mature it carefully."
+  },
+  {
+   "id": "arctic_a0362",
+   "set": "a",
+   "text": "Nope, not the slightest idea."
+  },
+  {
+   "id": "arctic_a0363",
+   "set": "a",
+   "text": "It is not an attempt to smash the market."
+  },
+  {
+   "id": "arctic_a0364",
+   "set": "a",
+   "text": "We have plenty of capital ourselves, and yet we want more."
+  },
+  {
+   "id": "arctic_a0365",
+   "set": "a",
+   "text": "These rumors may even originate with us."
+  },
+  {
+   "id": "arctic_a0366",
+   "set": "a",
+   "text": "A wildly exciting time was his during the week preceding Thursday the eighteenth."
+  },
+  {
+   "id": "arctic_a0367",
+   "set": "a",
+   "text": "There is not an iota of truth in it, certainly not."
+  },
+  {
+   "id": "arctic_a0368",
+   "set": "a",
+   "text": "I just do appreciate it without being able to express my feelings."
+  },
+  {
+   "id": "arctic_a0369",
+   "set": "a",
+   "text": "In partnership with Daylight, the pair raided the San Jose Interurban."
+  },
+  {
+   "id": "arctic_a0370",
+   "set": "a",
+   "text": "He saw all men in the business game doing this."
+  },
+  {
+   "id": "arctic_a0371",
+   "set": "a",
+   "text": "It issued a rate of forty two dollars a car on charcoal."
+  },
+  {
+   "id": "arctic_a0372",
+   "set": "a",
+   "text": "He saw only the effect in a general, sketchy way."
+  },
+  {
+   "id": "arctic_a0373",
+   "set": "a",
+   "text": "Points of view, new ideas, life."
+  },
+  {
+   "id": "arctic_a0374",
+   "set": "a",
+   "text": "But life's worth more than cash, she argued."
+  },
+  {
+   "id": "arctic_a0375",
+   "set": "a",
+   "text": "The butchers and meat cutters refused to handle meat destined for unfair restaurants."
+  },
+  {
+   "id": "arctic_a0376",
+   "set": "a",
+   "text": "Your price, my son, is just about thirty per week."
+  },
+  {
+   "id": "arctic_a0377",
+   "set": "a",
+   "text": "This sound did not disturb the hush and awe of the place."
+  },
+  {
+   "id": "arctic_a0378",
+   "set": "a",
+   "text": "That's why its boundaries are all gouged and jagged."
+  },
+  {
+   "id": "arctic_a0379",
+   "set": "a",
+   "text": "How old are you, daddy."
+  },
+  {
+   "id": "arctic_a0380",
+   "set": "a",
+   "text": "But in the canyons water was plentiful and also a luxuriant forest growth."
+  },
+  {
+   "id": "arctic_a0381",
+   "set": "a",
+   "text": "My name's Ferguson."
+  },
+  {
+   "id": "arctic_a0382",
+   "set": "a",
+   "text": "Daylight found himself charmed and made curious by the little man."
+  },
+  {
+   "id": "arctic_a0383",
+   "set": "a",
+   "text": "To his surprise, her answer was flat and uncompromising."
+  },
+  {
+   "id": "arctic_a0384",
+   "set": "a",
+   "text": "The farmer works the soil and produces grain."
+  },
+  {
+   "id": "arctic_a0385",
+   "set": "a",
+   "text": "That's what Carnegie did."
+  },
+  {
+   "id": "arctic_a0386",
+   "set": "a",
+   "text": "I can't argue with you, and you know that."
+  },
+  {
+   "id": "arctic_a0387",
+   "set": "a",
+   "text": "Bob, growing disgusted, turned back suddenly and attempted to pass Mab."
+  },
+  {
+   "id": "arctic_a0388",
+   "set": "a",
+   "text": "It was my idea to a tee."
+  },
+  {
+   "id": "arctic_a0389",
+   "set": "a",
+   "text": "Mab, she said."
+  },
+  {
+   "id": "arctic_a0390",
+   "set": "a",
+   "text": "I'll go over tomorrow afternoon."
+  },
+  {
+   "id": "arctic_a0391",
+   "set": "a",
+   "text": "But he reconciled himself to it by an act of faith."
+  },
+  {
+   "id": "arctic_a0392",
+   "set": "a",
+   "text": "There is that magnificent Bob, eating his head off in the stable."
+  },
+  {
+   "id": "arctic_a0393",
+   "set": "a",
+   "text": "Already he had begun borrowing from the banks."
+  },
+  {
+   "id": "arctic_a0394",
+   "set": "a",
+   "text": "It's the strap hangers that'll keep us from going under."
+  },
+  {
+   "id": "arctic_a0395",
+   "set": "a",
+   "text": "As for himself, weren't the street railway earnings increasing steadily."
+  },
+  {
+   "id": "arctic_a0396",
+   "set": "a",
+   "text": "A rising tide of fat had submerged them."
+  },
+  {
+   "id": "arctic_a0397",
+   "set": "a",
+   "text": "Call me that again, he murmured ecstatically."
+  },
+  {
+   "id": "arctic_a0398",
+   "set": "a",
+   "text": "In the car were Unwin and Harrison, while Jones sat with the chauffeur."
+  },
+  {
+   "id": "arctic_a0399",
+   "set": "a",
+   "text": "And here's another idea."
+  },
+  {
+   "id": "arctic_a0400",
+   "set": "a",
+   "text": "Manuel had one besetting sin."
+  },
+  {
+   "id": "arctic_a0401",
+   "set": "a",
+   "text": "The man smiled grimly, and brought a hatchet and a club."
+  },
+  {
+   "id": "arctic_a0402",
+   "set": "a",
+   "text": "Curly rushed her antagonist, who struck again and leaped aside."
+  },
+  {
+   "id": "arctic_a0403",
+   "set": "a",
+   "text": "His newborn cunning gave him poise and control."
+  },
+  {
+   "id": "arctic_a0404",
+   "set": "a",
+   "text": "Perrault found one with head buried in the grub box."
+  },
+  {
+   "id": "arctic_a0405",
+   "set": "a",
+   "text": "It seemed the ordained order of things that dogs should work."
+  },
+  {
+   "id": "arctic_a0406",
+   "set": "a",
+   "text": "And that was the last of Francois and Perrault."
+  },
+  {
+   "id": "arctic_a0407",
+   "set": "a",
+   "text": "Mercedes screamed, cried, laughed, and manifested the chaotic abandonment of hysteria."
+  },
+  {
+   "id": "arctic_a0408",
+   "set": "a",
+   "text": "The Eldorado emptied its occupants into the street to see the test."
+  },
+  {
+   "id": "arctic_a0409",
+   "set": "a",
+   "text": "He could feel a new stir in the land."
+  },
+  {
+   "id": "arctic_a0410",
+   "set": "a",
+   "text": "So we have to fit the boat throughout with oil lamps as well."
+  },
+  {
+   "id": "arctic_a0411",
+   "set": "a",
+   "text": "It will break our hearts and our backs to hoist anchor by hand."
+  },
+  {
+   "id": "arctic_a0412",
+   "set": "a",
+   "text": "There is another virtue in these bulkheads."
+  },
+  {
+   "id": "arctic_a0413",
+   "set": "a",
+   "text": "But I am at the end of my resources."
+  },
+  {
+   "id": "arctic_a0414",
+   "set": "a",
+   "text": "Now our figuring was all right."
+  },
+  {
+   "id": "arctic_a0415",
+   "set": "a",
+   "text": "It lasted as a deterrent for two days."
+  },
+  {
+   "id": "arctic_a0416",
+   "set": "a",
+   "text": "The added weight had a velocity of fifteen miles per hour."
+  },
+  {
+   "id": "arctic_a0417",
+   "set": "a",
+   "text": "It is also an insidious, deceitful sun."
+  },
+  {
+   "id": "arctic_a0418",
+   "set": "a",
+   "text": "The Portuguese boy crawled nearer and nearer."
+  },
+  {
+   "id": "arctic_a0419",
+   "set": "a",
+   "text": "The Portuguese boy passed the Hawaiian."
+  },
+  {
+   "id": "arctic_a0420",
+   "set": "a",
+   "text": "When I came to I was waving my hat and murmuring ecstatically."
+  },
+  {
+   "id": "arctic_a0421",
+   "set": "a",
+   "text": "By golly, the boy wins."
+  },
+  {
+   "id": "arctic_a0422",
+   "set": "a",
+   "text": "Halfway around the track one donkey got into an argument with its rider."
+  },
+  {
+   "id": "arctic_a0423",
+   "set": "a",
+   "text": "McVeigh when he returns from a trip to Honolulu."
+  },
+  {
+   "id": "arctic_a0424",
+   "set": "a",
+   "text": "Obviously, it was a disease that could be contracted by contact."
+  },
+  {
+   "id": "arctic_a0425",
+   "set": "a",
+   "text": "Otherwise no restriction is put upon their seafaring."
+  },
+  {
+   "id": "arctic_a0426",
+   "set": "a",
+   "text": "They do not know the length of time of incubation."
+  },
+  {
+   "id": "arctic_a0427",
+   "set": "a",
+   "text": "Enters now the psychology of the situation."
+  },
+  {
+   "id": "arctic_a0428",
+   "set": "a",
+   "text": "It was not exactly a deportation."
+  },
+  {
+   "id": "arctic_a0429",
+   "set": "a",
+   "text": "Quick was the disappointment in his face, yet smiling was the acquiescence."
+  },
+  {
+   "id": "arctic_a0430",
+   "set": "a",
+   "text": "Nevertheless we found ourselves once more in the high seat of abundance."
+  },
+  {
+   "id": "arctic_a0431",
+   "set": "a",
+   "text": "Wada and Nakata were in a bit of a funk."
+  },
+  {
+   "id": "arctic_a0432",
+   "set": "a",
+   "text": "The boy at the wheel lost his head."
+  },
+  {
+   "id": "arctic_a0433",
+   "set": "a",
+   "text": "To her the bridge was tambo, which is the native for taboo."
+  },
+  {
+   "id": "arctic_a0434",
+   "set": "a",
+   "text": "A half a case of tobacco was worth three pounds."
+  },
+  {
+   "id": "arctic_a0435",
+   "set": "a",
+   "text": "What do you mean by this outrageous conduct."
+  },
+  {
+   "id": "arctic_a0436",
+   "set": "a",
+   "text": "But Martin smiled a superior smile."
+  },
+  {
+   "id": "arctic_a0437",
+   "set": "a",
+   "text": "By that answer my professional medical prestige stood or fell."
+  },
+  {
+   "id": "arctic_a0438",
+   "set": "a",
+   "text": "At sea, Monday, March 16, 1908."
+  },
+  {
+   "id": "arctic_a0439",
+   "set": "a",
+   "text": "At sea, Wednesday, March 18, 1908."
+  },
+  {
+   "id": "arctic_a0440",
+   "set": "a",
+   "text": "Yes, sir, I corrected."
+  },
+  {
+   "id": "arctic_a0441",
+   "set": "a",
+   "text": "Violent life and athletic sports had never appealed to me."
+  },
+  {
+   "id": "arctic_a0442",
+   "set": "a",
+   "text": "You live on an income which your father earned."
+  },
+  {
+   "id": "arctic_a0443",
+   "set": "a",
+   "text": "He was worth nothing to the world."
+  },
+  {
+   "id": "arctic_a0444",
+   "set": "a",
+   "text": "Then you don't believe in altruism."
+  },
+  {
+   "id": "arctic_a0445",
+   "set": "a",
+   "text": "The creative joy, I murmured."
+  },
+  {
+   "id": "arctic_a0446",
+   "set": "a",
+   "text": "He deluged me, overwhelmed me with argument."
+  },
+  {
+   "id": "arctic_a0447",
+   "set": "a",
+   "text": "Ah, it is growing dark and darker."
+  },
+  {
+   "id": "arctic_a0448",
+   "set": "a",
+   "text": "I was Hump, cabin boy on the schooner Ghost."
+  },
+  {
+   "id": "arctic_a0449",
+   "set": "a",
+   "text": "A sinewy hand, dripping with water, was clutching the rail."
+  },
+  {
+   "id": "arctic_a0450",
+   "set": "a",
+   "text": "No man ate of the seal meat or the oil."
+  },
+  {
+   "id": "arctic_a0451",
+   "set": "a",
+   "text": "I noticed blood spouting from Kerfoot's left hand."
+  },
+  {
+   "id": "arctic_a0452",
+   "set": "a",
+   "text": "Three oilers and a fourth engineer, was his greeting."
+  },
+  {
+   "id": "arctic_a0453",
+   "set": "a",
+   "text": "Eighteen hundred, he calculated."
+  },
+  {
+   "id": "arctic_a0454",
+   "set": "a",
+   "text": "The sharp voice of Wolf Larsen aroused me."
+  },
+  {
+   "id": "arctic_a0455",
+   "set": "a",
+   "text": "I obeyed, and a minute or two later they stood before him."
+  },
+  {
+   "id": "arctic_a0456",
+   "set": "a",
+   "text": "But it won't continue, she said with easy confidence."
+  },
+  {
+   "id": "arctic_a0457",
+   "set": "a",
+   "text": "What I saw I could not at first believe."
+  },
+  {
+   "id": "arctic_a0458",
+   "set": "a",
+   "text": "The stout wood was crushed like an eggshell."
+  },
+  {
+   "id": "arctic_a0459",
+   "set": "a",
+   "text": "There's too much of the schoolboy in me."
+  },
+  {
+   "id": "arctic_a0460",
+   "set": "a",
+   "text": "I had forgotten their existence."
+  },
+  {
+   "id": "arctic_a0461",
+   "set": "a",
+   "text": "Ah, we were very close together in that moment."
+  },
+  {
+   "id": "arctic_a0462",
+   "set": "a",
+   "text": "But she swung obediently on her heel into the wind."
+  },
+  {
+   "id": "arctic_a0463",
+   "set": "a",
+   "text": "They are his tongue, by which he makes his knowledge articulate."
+  },
+  {
+   "id": "arctic_a0464",
+   "set": "a",
+   "text": "Between the rush of the cascades, streaks of rust showed everywhere."
+  },
+  {
+   "id": "arctic_a0465",
+   "set": "a",
+   "text": "He'll never do a tap of work the whole Voyage."
+  },
+  {
+   "id": "arctic_a0466",
+   "set": "a",
+   "text": "Captain West may be a Samurai, but he is also human."
+  },
+  {
+   "id": "arctic_a0467",
+   "set": "a",
+   "text": "And so early in the voyage, too."
+  },
+  {
+   "id": "arctic_a0468",
+   "set": "a",
+   "text": "In the matter of curry she is a sheer genius."
+  },
+  {
+   "id": "arctic_a0469",
+   "set": "a",
+   "text": "The eastern heavens were equally spectacular."
+  },
+  {
+   "id": "arctic_a0470",
+   "set": "a",
+   "text": "He spat it out like so much venom."
+  },
+  {
+   "id": "arctic_a0471",
+   "set": "a",
+   "text": "I saw Mr Pike nod his head grimly and sarcastically."
+  },
+  {
+   "id": "arctic_a0472",
+   "set": "a",
+   "text": "He is too keenly intelligent, too sharply sensitive, successfully to endure."
+  },
+  {
+   "id": "arctic_a0473",
+   "set": "a",
+   "text": "The night was calm and snowy."
+  },
+  {
+   "id": "arctic_a0474",
+   "set": "a",
+   "text": "I sailed third mate in the little Vampire before you were born."
+  },
+  {
+   "id": "arctic_a0475",
+   "set": "a",
+   "text": "His outstretched arm dropped to his side, and he paused."
+  },
+  {
+   "id": "arctic_a0476",
+   "set": "a",
+   "text": "At this moment I felt a stir at my shoulder."
+  },
+  {
+   "id": "arctic_a0477",
+   "set": "a",
+   "text": "Wada, Louis, and the steward are servants of Asiatic breed."
+  },
+  {
+   "id": "arctic_a0478",
+   "set": "a",
+   "text": "Also, she has forbidden them smoking their pipes in the after-room."
+  },
+  {
+   "id": "arctic_a0479",
+   "set": "a",
+   "text": "I tried to read George Moore last night, and was dreadfully bored."
+  },
+  {
+   "id": "arctic_a0480",
+   "set": "a",
+   "text": "Tom Spink has a harpoon."
+  },
+  {
+   "id": "arctic_a0481",
+   "set": "a",
+   "text": "Nimrod replied, with a slight manifestation of sensitiveness."
+  },
+  {
+   "id": "arctic_a0482",
+   "set": "a",
+   "text": "And their chief virtue lies in that they will never wear out."
+  },
+  {
+   "id": "arctic_a0483",
+   "set": "a",
+   "text": "Beyond dispute, Corry Hutchinson had married Mabel Holmes."
+  },
+  {
+   "id": "arctic_a0484",
+   "set": "a",
+   "text": "No-sir-ee."
+  },
+  {
+   "id": "arctic_a0485",
+   "set": "a",
+   "text": "Each insult added to the value of the claim."
+  },
+  {
+   "id": "arctic_a0486",
+   "set": "a",
+   "text": "For the rest, he was a mere automaton."
+  },
+  {
+   "id": "arctic_a0487",
+   "set": "a",
+   "text": "The river bared its bosom, and snorting steamboats challenged the wilderness."
+  },
+  {
+   "id": "arctic_a0488",
+   "set": "a",
+   "text": "Their love burned with increasing brightness."
+  },
+  {
+   "id": "arctic_a0489",
+   "set": "a",
+   "text": "They were artists, not biologists."
+  },
+  {
+   "id": "arctic_a0490",
+   "set": "a",
+   "text": "Both Johnny and his mother shuffled their feet as they walked."
+  },
+  {
+   "id": "arctic_a0491",
+   "set": "a",
+   "text": "And as in denial of guilt, the one-legged boy replied."
+  },
+  {
+   "id": "arctic_a0492",
+   "set": "a",
+   "text": "Burnt out like the crater of a volcano."
+  },
+  {
+   "id": "arctic_a0493",
+   "set": "a",
+   "text": "The boy, O'Brien, was specially maltreated."
+  },
+  {
+   "id": "arctic_a0494",
+   "set": "a",
+   "text": "O'Brien took off his coat and bared his right arm."
+  },
+  {
+   "id": "arctic_a0495",
+   "set": "a",
+   "text": "He bore no grudges and had few enemies."
+  },
+  {
+   "id": "arctic_a0496",
+   "set": "a",
+   "text": "And Tom King patiently endured."
+  },
+  {
+   "id": "arctic_a0497",
+   "set": "a",
+   "text": "King took every advantage he knew."
+  },
+  {
+   "id": "arctic_a0498",
+   "set": "a",
+   "text": "The lines were now very taut."
+  },
+  {
+   "id": "arctic_a0499",
+   "set": "a",
+   "text": "And right there I saw and knew it all."
+  },
+  {
+   "id": "arctic_a0500",
+   "set": "a",
+   "text": "Who the devil gave it to you to be judge and jury."
+  },
+  {
+   "id": "arctic_a0501",
+   "set": "a",
+   "text": "You're joking me, sir, the other managed to articulate."
+  },
+  {
+   "id": "arctic_a0502",
+   "set": "a",
+   "text": "Anything unusual or abnormal was sufficient to send a fellow to Molokai."
+  },
+  {
+   "id": "arctic_a0503",
+   "set": "a",
+   "text": "His beady black eyes saw bargains where other men saw bankruptcy."
+  },
+  {
+   "id": "arctic_a0504",
+   "set": "a",
+   "text": "He was an athlete and a giant."
+  },
+  {
+   "id": "arctic_a0505",
+   "set": "a",
+   "text": "We fished sharks on Niihau together."
+  },
+  {
+   "id": "arctic_a0506",
+   "set": "a",
+   "text": "The Claudine was leaving next morning for Honolulu."
+  },
+  {
+   "id": "arctic_a0507",
+   "set": "a",
+   "text": "In short, my joyous individualism was dominated by the orthodox bourgeois ethics."
+  },
+  {
+   "id": "arctic_a0508",
+   "set": "a",
+   "text": "Soon shall it be thrust back from off prostrate humanity."
+  },
+  {
+   "id": "arctic_a0509",
+   "set": "a",
+   "text": "Yet, in accordance with Ernest's test of truth, it worked."
+  },
+  {
+   "id": "arctic_a0510",
+   "set": "a",
+   "text": "Much more Ernest told them of themselves and of his disillusionment."
+  },
+  {
+   "id": "arctic_a0511",
+   "set": "a",
+   "text": "There is more behind this than a mere university ideal."
+  },
+  {
+   "id": "arctic_a0512",
+   "set": "a",
+   "text": "No, it is a palace, wherein there are many servants."
+  },
+  {
+   "id": "arctic_a0513",
+   "set": "a",
+   "text": "We must give ourselves and not our money alone."
+  },
+  {
+   "id": "arctic_a0514",
+   "set": "a",
+   "text": "We are consumed in our own flesh-pots."
+  },
+  {
+   "id": "arctic_a0515",
+   "set": "a",
+   "text": "But here amongst ourselves let us speak out."
+  },
+  {
+   "id": "arctic_a0516",
+   "set": "a",
+   "text": "Also, there was awe in their faces."
+  },
+  {
+   "id": "arctic_a0517",
+   "set": "a",
+   "text": "Out of abstractions Ernest had conjured a vision and made them see it."
+  },
+  {
+   "id": "arctic_a0518",
+   "set": "a",
+   "text": "Illuminating oil was becoming all profit."
+  },
+  {
+   "id": "arctic_a0519",
+   "set": "a",
+   "text": "Such an act was in direct violation of the laws of the land."
+  },
+  {
+   "id": "arctic_a0520",
+   "set": "a",
+   "text": "He was fond of quoting a fragment from a certain poem."
+  },
+  {
+   "id": "arctic_a0521",
+   "set": "a",
+   "text": "Without them he could not run his empire."
+  },
+  {
+   "id": "arctic_a0522",
+   "set": "a",
+   "text": "For such countries nothing remained but reorganization."
+  },
+  {
+   "id": "arctic_a0523",
+   "set": "a",
+   "text": "They could not continue their method of producing surpluses."
+  },
+  {
+   "id": "arctic_a0524",
+   "set": "a",
+   "text": "At once would be instituted a dozen cooperative commonwealth states."
+  },
+  {
+   "id": "arctic_a0525",
+   "set": "a",
+   "text": "The Oligarchy wanted violence, and it set its agents provocateurs to work."
+  },
+  {
+   "id": "arctic_a0526",
+   "set": "a",
+   "text": "Nowhere did the raw earth appear."
+  },
+  {
+   "id": "arctic_a0527",
+   "set": "a",
+   "text": "The lush vegetation of that sheltered spot make a natural shield."
+  },
+  {
+   "id": "arctic_a0528",
+   "set": "a",
+   "text": "Men who endure it, call it living death."
+  },
+  {
+   "id": "arctic_a0529",
+   "set": "a",
+   "text": "As I say, he had tapped the message very rapidly."
+  },
+  {
+   "id": "arctic_a0530",
+   "set": "a",
+   "text": "Ask him, I laughed, then turned to Pasquini."
+  },
+  {
+   "id": "arctic_a0531",
+   "set": "a",
+   "text": "In what bucolic school of fence he had been taught was beyond imagining."
+  },
+  {
+   "id": "arctic_a0532",
+   "set": "a",
+   "text": "May drought destroy your crops."
+  },
+  {
+   "id": "arctic_a0533",
+   "set": "a",
+   "text": "Dunham, can your boy go along with Jesse."
+  },
+  {
+   "id": "arctic_a0534",
+   "set": "a",
+   "text": "But Johannes could, and did."
+  },
+  {
+   "id": "arctic_a0535",
+   "set": "a",
+   "text": "A new preacher and a new doctrine come to Jerusalem."
+  },
+  {
+   "id": "arctic_a0536",
+   "set": "a",
+   "text": "He would destroy all things that are fixed."
+  },
+  {
+   "id": "arctic_a0537",
+   "set": "a",
+   "text": "He was an enthusiast and a desert dweller."
+  },
+  {
+   "id": "arctic_a0538",
+   "set": "a",
+   "text": "What Pascal glimpsed with the vision of a seer, I have lived."
+  },
+  {
+   "id": "arctic_a0539",
+   "set": "a",
+   "text": "I should like to engage just for one whole life in that."
+  },
+  {
+   "id": "arctic_a0540",
+   "set": "a",
+   "text": "Yea, so are all the lesser animals of today clean."
+  },
+  {
+   "id": "arctic_a0541",
+   "set": "a",
+   "text": "The Warden with a quart of champagne."
+  },
+  {
+   "id": "arctic_a0542",
+   "set": "a",
+   "text": "Without a doubt, some of them have dinner engagements."
+  },
+  {
+   "id": "arctic_a0543",
+   "set": "a",
+   "text": "I had been born with no organic, chemical predisposition toward alcohol."
+  },
+  {
+   "id": "arctic_a0544",
+   "set": "a",
+   "text": "He may anticipate the day of his death."
+  },
+  {
+   "id": "arctic_a0545",
+   "set": "a",
+   "text": "The Italian rancho was a bachelor establishment."
+  },
+  {
+   "id": "arctic_a0546",
+   "set": "a",
+   "text": "I lost my balance and pitched head foremost into the ooze."
+  },
+  {
+   "id": "arctic_a0547",
+   "set": "a",
+   "text": "Men like Joe Goose dated existence from drunk to drunk."
+  },
+  {
+   "id": "arctic_a0548",
+   "set": "a",
+   "text": "Also, churches and preachers I had never known."
+  },
+  {
+   "id": "arctic_a0549",
+   "set": "a",
+   "text": "Do you know that we weigh every pound of coal we burn."
+  },
+  {
+   "id": "arctic_a0550",
+   "set": "a",
+   "text": "This also became part of the daily schedule."
+  },
+  {
+   "id": "arctic_a0551",
+   "set": "a",
+   "text": "All an appearance can know is mirage."
+  },
+  {
+   "id": "arctic_a0552",
+   "set": "a",
+   "text": "Yet he dreams he is immortal, I argue feebly."
+  },
+  {
+   "id": "arctic_a0553",
+   "set": "a",
+   "text": "I am writing these lines in Honolulu, Hawaii."
+  },
+  {
+   "id": "arctic_a0554",
+   "set": "a",
+   "text": "Jack London, Waikiki Beach, Honolulu, Oahu."
+  },
+  {
+   "id": "arctic_a0555",
+   "set": "a",
+   "text": "Jerry was so secure in his nook that he did not roll away."
+  },
+  {
+   "id": "arctic_a0556",
+   "set": "a",
+   "text": "Why, he's bought forty pounds of goods from you already."
+  },
+  {
+   "id": "arctic_a0557",
+   "set": "a",
+   "text": "The last refugee had passed."
+  },
+  {
+   "id": "arctic_a0558",
+   "set": "a",
+   "text": "And the foundation stone of service, in his case, was obedience."
+  },
+  {
+   "id": "arctic_a0559",
+   "set": "a",
+   "text": "Peace be unto you and grace before the Lord."
+  },
+  {
+   "id": "arctic_a0560",
+   "set": "a",
+   "text": "His mouth opened; words shaped vainly on his lips."
+  },
+  {
+   "id": "arctic_a0561",
+   "set": "a",
+   "text": "Bill lingered, contemplating his work with artistic appreciation."
+  },
+  {
+   "id": "arctic_a0562",
+   "set": "a",
+   "text": "What the flaming."
+  },
+  {
+   "id": "arctic_a0563",
+   "set": "a",
+   "text": "Mrs McFee's jaws brought together with a snap."
+  },
+  {
+   "id": "arctic_a0564",
+   "set": "a",
+   "text": "Then it is as I said, Womble announced with finality."
+  },
+  {
+   "id": "arctic_a0565",
+   "set": "a",
+   "text": "With them were Indians, also three other men."
+  },
+  {
+   "id": "arctic_a0566",
+   "set": "a",
+   "text": "Dennin's hands were released long enough for him to sign the document."
+  },
+  {
+   "id": "arctic_a0567",
+   "set": "a",
+   "text": "Now Irvine was a man of impulse, a poet."
+  },
+  {
+   "id": "arctic_a0568",
+   "set": "a",
+   "text": "He was just bursting with joy, joy over what."
+  },
+  {
+   "id": "arctic_a0569",
+   "set": "a",
+   "text": "At Lake Linderman I had one canoe, very good Peterborough canoe."
+  },
+  {
+   "id": "arctic_a0570",
+   "set": "a",
+   "text": "Behind him lay the thousand-years-long road across all Siberia and Russia."
+  },
+  {
+   "id": "arctic_a0571",
+   "set": "a",
+   "text": "He had forgotten to build a fire and thaw out."
+  },
+  {
+   "id": "arctic_a0572",
+   "set": "a",
+   "text": "I never saw anything like her in my life."
+  },
+  {
+   "id": "arctic_a0573",
+   "set": "a",
+   "text": "There was no law on the Yukon save what they made for themselves."
+  },
+  {
+   "id": "arctic_a0574",
+   "set": "a",
+   "text": "Good business man, Curly, O'Brien was saying."
+  },
+  {
+   "id": "arctic_a0575",
+   "set": "a",
+   "text": "There weren't any missions, and he was the man to know."
+  },
+  {
+   "id": "arctic_a0576",
+   "set": "a",
+   "text": "And the big Persian knew of his existence before he did of hers."
+  },
+  {
+   "id": "arctic_a0577",
+   "set": "a",
+   "text": "Once the jews harp began emitting its barbaric rhythms, Michael was helpless."
+  },
+  {
+   "id": "arctic_a0578",
+   "set": "a",
+   "text": "But we'll just postpone this."
+  },
+  {
+   "id": "arctic_a0579",
+   "set": "a",
+   "text": "There was the Emma Louisa."
+  },
+  {
+   "id": "arctic_a0580",
+   "set": "a",
+   "text": "This is my fifth voyage."
+  },
+  {
+   "id": "arctic_a0581",
+   "set": "a",
+   "text": "It was this proposition that started the big idea in Daughtry's mind."
+  },
+  {
+   "id": "arctic_a0582",
+   "set": "a",
+   "text": "Daughtry elaborated on the counting trick by bringing Cocky along."
+  },
+  {
+   "id": "arctic_a0583",
+   "set": "a",
+   "text": "Enjoy it he did, but principally for Steward's sake."
+  },
+  {
+   "id": "arctic_a0584",
+   "set": "a",
+   "text": "I have long noted your thirst unquenchable."
+  },
+  {
+   "id": "arctic_a0585",
+   "set": "a",
+   "text": "Wonder if he's a lion dog, Charles suggested."
+  },
+  {
+   "id": "arctic_a0586",
+   "set": "a",
+   "text": "We don't see ourselves as foolish."
+  },
+  {
+   "id": "arctic_a0587",
+   "set": "a",
+   "text": "He had comparatively no advantages at first."
+  },
+  {
+   "id": "arctic_a0588",
+   "set": "a",
+   "text": "He had proved it today, with his amateurish and sophomoric productions."
+  },
+  {
+   "id": "arctic_a0589",
+   "set": "a",
+   "text": "I was sick once -- typhoid."
+  },
+  {
+   "id": "arctic_a0590",
+   "set": "a",
+   "text": "In a way he is my protege."
+  },
+  {
+   "id": "arctic_a0591",
+   "set": "a",
+   "text": "We are both children together."
+  },
+  {
+   "id": "arctic_a0592",
+   "set": "a",
+   "text": "It's only his indigestion I find fault with."
+  },
+  {
+   "id": "arctic_a0593",
+   "set": "a",
+   "text": "She'd make a good wife for the cashier."
+  },
+  {
+   "id": "arctic_b0001",
+   "set": "b",
+   "text": "Gad, do I remember it."
+  },
+  {
+   "id": "arctic_b0002",
+   "set": "b",
+   "text": "You got out by fighting, and I through a pretty girl."
+  },
+  {
+   "id": "arctic_b0003",
+   "set": "b",
+   "text": "I can see that knife now."
+  },
+  {
+   "id": "arctic_b0004",
+   "set": "b",
+   "text": "When I can't see beauty in woman I want to die."
+  },
+  {
+   "id": "arctic_b0005",
+   "set": "b",
+   "text": "His slim fingers closed like steel about Philip's."
+  },
+  {
+   "id": "arctic_b0006",
+   "set": "b",
+   "text": "He seized Gregson by the arm and led him to the door."
+  },
+  {
+   "id": "arctic_b0007",
+   "set": "b",
+   "text": "Hear the Indian dogs wailing down at Churchill."
+  },
+  {
+   "id": "arctic_b0008",
+   "set": "b",
+   "text": "Burke himself had criticized it because of the smile."
+  },
+  {
+   "id": "arctic_b0009",
+   "set": "b",
+   "text": "I'd say there was going to be a glorious scrap."
+  },
+  {
+   "id": "arctic_b0010",
+   "set": "b",
+   "text": "He turned the map to Gregson, pointing with his finger."
+  },
+  {
+   "id": "arctic_b0011",
+   "set": "b",
+   "text": "His eyes never took themselves for an instant from his companion's face."
+  },
+  {
+   "id": "arctic_b0012",
+   "set": "b",
+   "text": "Something that Whittemore had not yet said thrilled him."
+  },
+  {
+   "id": "arctic_b0013",
+   "set": "b",
+   "text": "Lakes and rivers, hundreds of them, thousands of them."
+  },
+  {
+   "id": "arctic_b0014",
+   "set": "b",
+   "text": "Whitefish, Gregson, whitefish and trout."
+  },
+  {
+   "id": "arctic_b0015",
+   "set": "b",
+   "text": "They robbed me a few years later."
+  },
+  {
+   "id": "arctic_b0016",
+   "set": "b",
+   "text": "He chuckled as he pulled out his pipe and began filling it."
+  },
+  {
+   "id": "arctic_b0017",
+   "set": "b",
+   "text": "Everything was working smoothly, better than I had expected."
+  },
+  {
+   "id": "arctic_b0018",
+   "set": "b",
+   "text": "I was completely lost in my work."
+  },
+  {
+   "id": "arctic_b0019",
+   "set": "b",
+   "text": "His slim hands gripped the edges of the table."
+  },
+  {
+   "id": "arctic_b0020",
+   "set": "b",
+   "text": "He made no reply as he waited for Whittemore to continue."
+  },
+  {
+   "id": "arctic_b0021",
+   "set": "b",
+   "text": "Philip dropped back into his chair."
+  },
+  {
+   "id": "arctic_b0022",
+   "set": "b",
+   "text": "If I was out of the game it would be easily made."
+  },
+  {
+   "id": "arctic_b0023",
+   "set": "b",
+   "text": "MacDougall, my engineer, believes it."
+  },
+  {
+   "id": "arctic_b0024",
+   "set": "b",
+   "text": "It is growing, every day, every hour."
+  },
+  {
+   "id": "arctic_b0025",
+   "set": "b",
+   "text": "Now, you understand."
+  },
+  {
+   "id": "arctic_b0026",
+   "set": "b",
+   "text": "You have associated with some of these men."
+  },
+  {
+   "id": "arctic_b0027",
+   "set": "b",
+   "text": "And there's no chivalry, no quarter shown in this fight."
+  },
+  {
+   "id": "arctic_b0028",
+   "set": "b",
+   "text": "Lord Fitzhugh is the key to the whole situation."
+  },
+  {
+   "id": "arctic_b0029",
+   "set": "b",
+   "text": "All operations have been carried on from Montreal and Toronto."
+  },
+  {
+   "id": "arctic_b0030",
+   "set": "b",
+   "text": "Gregson held a lighted match until it burnt his fingertips."
+  },
+  {
+   "id": "arctic_b0031",
+   "set": "b",
+   "text": "Gregson had seated himself under the lamp and was sharpening a pencil."
+  },
+  {
+   "id": "arctic_b0032",
+   "set": "b",
+   "text": "He caught himself with a jerk."
+  },
+  {
+   "id": "arctic_b0033",
+   "set": "b",
+   "text": "How does your wager look now."
+  },
+  {
+   "id": "arctic_b0034",
+   "set": "b",
+   "text": "He confessed that the sketch had startled him."
+  },
+  {
+   "id": "arctic_b0035",
+   "set": "b",
+   "text": "After all, the picture was only a resemblance."
+  },
+  {
+   "id": "arctic_b0036",
+   "set": "b",
+   "text": "He wondered, too, where Roscoe was."
+  },
+  {
+   "id": "arctic_b0037",
+   "set": "b",
+   "text": "Philip knew that she was not an Indian."
+  },
+  {
+   "id": "arctic_b0038",
+   "set": "b",
+   "text": "In her haste to get away she had forgotten these things."
+  },
+  {
+   "id": "arctic_b0039",
+   "set": "b",
+   "text": "Philip took a step toward Gregson, half determined to awaken him."
+  },
+  {
+   "id": "arctic_b0040",
+   "set": "b",
+   "text": "The thought set his blood tingling."
+  },
+  {
+   "id": "arctic_b0041",
+   "set": "b",
+   "text": "But if Pierre did not return, until tomorrow."
+  },
+  {
+   "id": "arctic_b0042",
+   "set": "b",
+   "text": "Ten minutes had not elapsed since he had dropped the handkerchief."
+  },
+  {
+   "id": "arctic_b0043",
+   "set": "b",
+   "text": "It won't be for sale."
+  },
+  {
+   "id": "arctic_b0044",
+   "set": "b",
+   "text": "For a few moments he ate in silence."
+  },
+  {
+   "id": "arctic_b0045",
+   "set": "b",
+   "text": "Philip did not pursue the subject."
+  },
+  {
+   "id": "arctic_b0046",
+   "set": "b",
+   "text": "Philip produced a couple of cigars and took a chair opposite him."
+  },
+  {
+   "id": "arctic_b0047",
+   "set": "b",
+   "text": "Suppose you saw me at work through the window."
+  },
+  {
+   "id": "arctic_b0048",
+   "set": "b",
+   "text": "He looked like one who had passed through an uncomfortable hour or two."
+  },
+  {
+   "id": "arctic_b0049",
+   "set": "b",
+   "text": "There was nothing more, except a large ink blot under the words."
+  },
+  {
+   "id": "arctic_b0050",
+   "set": "b",
+   "text": "All this day Gregson remained in the cabin."
+  },
+  {
+   "id": "arctic_b0051",
+   "set": "b",
+   "text": "The sixth day he spent in the cabin with Gregson."
+  },
+  {
+   "id": "arctic_b0052",
+   "set": "b",
+   "text": "The flush was gone from her face."
+  },
+  {
+   "id": "arctic_b0053",
+   "set": "b",
+   "text": "That is why I am, am rattled, he laughed."
+  },
+  {
+   "id": "arctic_b0054",
+   "set": "b",
+   "text": "He understood the meaning of the look."
+  },
+  {
+   "id": "arctic_b0055",
+   "set": "b",
+   "text": "She was even more beautiful than when I saw her, before."
+  },
+  {
+   "id": "arctic_b0056",
+   "set": "b",
+   "text": "I'll give a thousand if you produce her, retorted Gregson."
+  },
+  {
+   "id": "arctic_b0057",
+   "set": "b",
+   "text": "They have won popular sentiment through the newspapers."
+  },
+  {
+   "id": "arctic_b0058",
+   "set": "b",
+   "text": "We must achieve our own salvation."
+  },
+  {
+   "id": "arctic_b0059",
+   "set": "b",
+   "text": "In moments of mental energy Philip was restless."
+  },
+  {
+   "id": "arctic_b0060",
+   "set": "b",
+   "text": "He would keep his faith with Gregson for the promised day or two."
+  },
+  {
+   "id": "arctic_b0061",
+   "set": "b",
+   "text": "Something about it seemed to fascinate him, to challenge his presence."
+  },
+  {
+   "id": "arctic_b0062",
+   "set": "b",
+   "text": "Now it was missing from the wall."
+  },
+  {
+   "id": "arctic_b0063",
+   "set": "b",
+   "text": "He boiled himself some coffee and sat down to wait."
+  },
+  {
+   "id": "arctic_b0064",
+   "set": "b",
+   "text": "I'm going down there with you, and I'm going to fight."
+  },
+  {
+   "id": "arctic_b0065",
+   "set": "b",
+   "text": "Now have you got anything to say against me, Mr Philip."
+  },
+  {
+   "id": "arctic_b0066",
+   "set": "b",
+   "text": "If I meet her again I shall apologize, said Eileen."
+  },
+  {
+   "id": "arctic_b0067",
+   "set": "b",
+   "text": "Below him the shadow was broken into a pool of rippling starlight."
+  },
+  {
+   "id": "arctic_b0068",
+   "set": "b",
+   "text": "Only the chance sound had led him to observe them."
+  },
+  {
+   "id": "arctic_b0069",
+   "set": "b",
+   "text": "Could the incident have anything to do with Jeanne and Pierre."
+  },
+  {
+   "id": "arctic_b0070",
+   "set": "b",
+   "text": "There was no chance to fire without hitting him."
+  },
+  {
+   "id": "arctic_b0071",
+   "set": "b",
+   "text": "There was no answer from the other side."
+  },
+  {
+   "id": "arctic_b0072",
+   "set": "b",
+   "text": "Then he hastened on, as Pierre had guided him."
+  },
+  {
+   "id": "arctic_b0073",
+   "set": "b",
+   "text": "With these arguments he convinced himself that he should go on alone."
+  },
+  {
+   "id": "arctic_b0074",
+   "set": "b",
+   "text": "Yet, behind them there was another and more powerful motive."
+  },
+  {
+   "id": "arctic_b0075",
+   "set": "b",
+   "text": "In that case he could not miss them, if he used caution."
+  },
+  {
+   "id": "arctic_b0076",
+   "set": "b",
+   "text": "Before Philip could recover himself Jeanne's startled guards were upon him."
+  },
+  {
+   "id": "arctic_b0077",
+   "set": "b",
+   "text": "It is the nearest refuge."
+  },
+  {
+   "id": "arctic_b0078",
+   "set": "b",
+   "text": "There was pride and strength, the ring of triumph in his voice."
+  },
+  {
+   "id": "arctic_b0079",
+   "set": "b",
+   "text": "The truth of it set Jeanne quivering."
+  },
+  {
+   "id": "arctic_b0080",
+   "set": "b",
+   "text": "Tomorrow it will be strong enough for you to stand upon."
+  },
+  {
+   "id": "arctic_b0081",
+   "set": "b",
+   "text": "You were going to leave after you saw me on the rock."
+  },
+  {
+   "id": "arctic_b0082",
+   "set": "b",
+   "text": "He bit his tongue, and cursed himself at this fresh break."
+  },
+  {
+   "id": "arctic_b0083",
+   "set": "b",
+   "text": "In it there was something that was almost tragedy."
+  },
+  {
+   "id": "arctic_b0084",
+   "set": "b",
+   "text": "Your face is red with blood."
+  },
+  {
+   "id": "arctic_b0085",
+   "set": "b",
+   "text": "Her eyes smiled truth at him as he came up the bank."
+  },
+  {
+   "id": "arctic_b0086",
+   "set": "b",
+   "text": "He can care for himself."
+  },
+  {
+   "id": "arctic_b0087",
+   "set": "b",
+   "text": "They will search for us between their camp and Churchill."
+  },
+  {
+   "id": "arctic_b0088",
+   "set": "b",
+   "text": "Until I die, he exclaimed."
+  },
+  {
+   "id": "arctic_b0089",
+   "set": "b",
+   "text": "Her beautiful hair was done up in shining coils."
+  },
+  {
+   "id": "arctic_b0090",
+   "set": "b",
+   "text": "The Churchill narrowed and its current became swifter as they progressed."
+  },
+  {
+   "id": "arctic_b0091",
+   "set": "b",
+   "text": "For a full half minute Jeanne looked at him without speaking."
+  },
+  {
+   "id": "arctic_b0092",
+   "set": "b",
+   "text": "I want to die in it."
+  },
+  {
+   "id": "arctic_b0093",
+   "set": "b",
+   "text": "Darkness hid him from Jeanne."
+  },
+  {
+   "id": "arctic_b0094",
+   "set": "b",
+   "text": "And yet if she came he had no words to say."
+  },
+  {
+   "id": "arctic_b0095",
+   "set": "b",
+   "text": "He heard a sound which brought him quickly into consciousness of day."
+  },
+  {
+   "id": "arctic_b0096",
+   "set": "b",
+   "text": "Within himself he called it no longer his own."
+  },
+  {
+   "id": "arctic_b0097",
+   "set": "b",
+   "text": "Besides, that noise makes me deaf."
+  },
+  {
+   "id": "arctic_b0098",
+   "set": "b",
+   "text": "Philip looked back from the crest and saw Jeanne leaning over the canoe."
+  },
+  {
+   "id": "arctic_b0099",
+   "set": "b",
+   "text": "Fifty yards ahead of her were the first of the rocks."
+  },
+  {
+   "id": "arctic_b0100",
+   "set": "b",
+   "text": "There was one chance, and only one, of saving Jeanne."
+  },
+  {
+   "id": "arctic_b0101",
+   "set": "b",
+   "text": "You're a devil for fighting, and will surely win."
+  },
+  {
+   "id": "arctic_b0102",
+   "set": "b",
+   "text": "I'll only be in the way."
+  },
+  {
+   "id": "arctic_b0103",
+   "set": "b",
+   "text": "He lifted his eyes, and a strange cry burst from his lips."
+  },
+  {
+   "id": "arctic_b0104",
+   "set": "b",
+   "text": "Shooting pains passed like flashes of electricity through his body."
+  },
+  {
+   "id": "arctic_b0105",
+   "set": "b",
+   "text": "I know that you are in charge there, and Jeanne knows."
+  },
+  {
+   "id": "arctic_b0106",
+   "set": "b",
+   "text": "For a full minute the two men stared into each other's face."
+  },
+  {
+   "id": "arctic_b0107",
+   "set": "b",
+   "text": "He was sure, now, of but few things."
+  },
+  {
+   "id": "arctic_b0108",
+   "set": "b",
+   "text": "It was a miracle, and I owe you my life."
+  },
+  {
+   "id": "arctic_b0109",
+   "set": "b",
+   "text": "Philip ate lightly of the food which Pierre had ready for him."
+  },
+  {
+   "id": "arctic_b0110",
+   "set": "b",
+   "text": "Such men believe, when they come together."
+  },
+  {
+   "id": "arctic_b0111",
+   "set": "b",
+   "text": "The journey was continued at dawn."
+  },
+  {
+   "id": "arctic_b0112",
+   "set": "b",
+   "text": "Jeanne and Pierre both gazed toward the great rock."
+  },
+  {
+   "id": "arctic_b0113",
+   "set": "b",
+   "text": "There was something pathetic in the girl's attitude now."
+  },
+  {
+   "id": "arctic_b0114",
+   "set": "b",
+   "text": "He moved his position, and the illusion was gone."
+  },
+  {
+   "id": "arctic_b0115",
+   "set": "b",
+   "text": "For two hours not a word passed between them."
+  },
+  {
+   "id": "arctic_b0116",
+   "set": "b",
+   "text": "I have hunted along this ridge, replied Philip."
+  },
+  {
+   "id": "arctic_b0117",
+   "set": "b",
+   "text": "That's Thorpe's, said the young engineer."
+  },
+  {
+   "id": "arctic_b0118",
+   "set": "b",
+   "text": "We saw your light, and thought you wouldn't mind a call."
+  },
+  {
+   "id": "arctic_b0119",
+   "set": "b",
+   "text": "Billinger may arrive in time."
+  },
+  {
+   "id": "arctic_b0120",
+   "set": "b",
+   "text": "There's the hitch, replied Thorpe, rolling a cigarette."
+  },
+  {
+   "id": "arctic_b0121",
+   "set": "b",
+   "text": "I want my men to work by themselves."
+  },
+  {
+   "id": "arctic_b0122",
+   "set": "b",
+   "text": "Philip saw MacDougall soon after his short talk with Thorpe."
+  },
+  {
+   "id": "arctic_b0123",
+   "set": "b",
+   "text": "Neither could they understand the growing disaffection among Thorpe's men."
+  },
+  {
+   "id": "arctic_b0124",
+   "set": "b",
+   "text": "Two weeks passed, and in that time Thorpe left camp three times."
+  },
+  {
+   "id": "arctic_b0125",
+   "set": "b",
+   "text": "It was the third or fourth time that Philip had heard MacDougall swear."
+  },
+  {
+   "id": "arctic_b0126",
+   "set": "b",
+   "text": "Blood was oozing slowly from the wounded man's right breast."
+  },
+  {
+   "id": "arctic_b0127",
+   "set": "b",
+   "text": "He destroyed everything that had belonged to the woman."
+  },
+  {
+   "id": "arctic_b0128",
+   "set": "b",
+   "text": "Philip bent low over Pierre."
+  },
+  {
+   "id": "arctic_b0129",
+   "set": "b",
+   "text": "Did Thorpe go to see any one in Churchill."
+  },
+  {
+   "id": "arctic_b0130",
+   "set": "b",
+   "text": "She saw the answer in his face."
+  },
+  {
+   "id": "arctic_b0131",
+   "set": "b",
+   "text": "Thorpe and his men were to destroy this camp, and kill you."
+  },
+  {
+   "id": "arctic_b0132",
+   "set": "b",
+   "text": "There is no need of further detail, now -- for you can understand."
+  },
+  {
+   "id": "arctic_b0133",
+   "set": "b",
+   "text": "There followed a roar that shook the earth."
+  },
+  {
+   "id": "arctic_b0134",
+   "set": "b",
+   "text": "Blind with rage, he darted in."
+  },
+  {
+   "id": "arctic_b0135",
+   "set": "b",
+   "text": "In it was the joy of life."
+  },
+  {
+   "id": "arctic_b0136",
+   "set": "b",
+   "text": "Swiftly his eyes measured the situation."
+  },
+  {
+   "id": "arctic_b0137",
+   "set": "b",
+   "text": "But this little defect did not worry him."
+  },
+  {
+   "id": "arctic_b0138",
+   "set": "b",
+   "text": "And then, steadily, he began to chew."
+  },
+  {
+   "id": "arctic_b0139",
+   "set": "b",
+   "text": "Together they ate the rabbit."
+  },
+  {
+   "id": "arctic_b0140",
+   "set": "b",
+   "text": "They edged nearer, and stood shoulder to shoulder facing their world."
+  },
+  {
+   "id": "arctic_b0141",
+   "set": "b",
+   "text": "It was beating and waiting in the ambush of those black pits."
+  },
+  {
+   "id": "arctic_b0142",
+   "set": "b",
+   "text": "Something vastly more thrilling had come into it now."
+  },
+  {
+   "id": "arctic_b0143",
+   "set": "b",
+   "text": "It took him half an hour to reach the edge of it."
+  },
+  {
+   "id": "arctic_b0144",
+   "set": "b",
+   "text": "But there was no longer the mother yearning in his heart."
+  },
+  {
+   "id": "arctic_b0145",
+   "set": "b",
+   "text": "Besides, had he not whipped the big owl in the forest."
+  },
+  {
+   "id": "arctic_b0146",
+   "set": "b",
+   "text": "After all, it was simply a mistake in judgment."
+  },
+  {
+   "id": "arctic_b0147",
+   "set": "b",
+   "text": "Had it struck squarely it would have killed him."
+  },
+  {
+   "id": "arctic_b0148",
+   "set": "b",
+   "text": "The Indian even poked his stick into the thick ground spruce."
+  },
+  {
+   "id": "arctic_b0149",
+   "set": "b",
+   "text": "Pebbles and dirt flew along with hair and fur."
+  },
+  {
+   "id": "arctic_b0150",
+   "set": "b",
+   "text": "And he was filled with a strange and foreboding fear."
+  },
+  {
+   "id": "arctic_b0151",
+   "set": "b",
+   "text": "It was steel, a fisher trap."
+  },
+  {
+   "id": "arctic_b0152",
+   "set": "b",
+   "text": "OW, a wild dog, he growled."
+  },
+  {
+   "id": "arctic_b0153",
+   "set": "b",
+   "text": "He was a pariah; a wanderer without a friend or a home."
+  },
+  {
+   "id": "arctic_b0154",
+   "set": "b",
+   "text": "That is the strange part of it."
+  },
+  {
+   "id": "arctic_b0155",
+   "set": "b",
+   "text": "His freshly caught furs he flung to the floor."
+  },
+  {
+   "id": "arctic_b0156",
+   "set": "b",
+   "text": "For that reason Le Beau had chosen him to fight the big fight."
+  },
+  {
+   "id": "arctic_b0157",
+   "set": "b",
+   "text": "In the crib the baby sat up and began to prattle."
+  },
+  {
+   "id": "arctic_b0158",
+   "set": "b",
+   "text": "She obeyed, shrinking back with the baby in her arms."
+  },
+  {
+   "id": "arctic_b0159",
+   "set": "b",
+   "text": "His teeth shut with a last click."
+  },
+  {
+   "id": "arctic_b0160",
+   "set": "b",
+   "text": "It was over when he made his way through the ring of spectators."
+  },
+  {
+   "id": "arctic_b0161",
+   "set": "b",
+   "text": "In a flash he was on his feet, facing him."
+  },
+  {
+   "id": "arctic_b0162",
+   "set": "b",
+   "text": "He thought he saw a shudder pass through the Factor's shoulders."
+  },
+  {
+   "id": "arctic_b0163",
+   "set": "b",
+   "text": "The moon had already begun its westward decline."
+  },
+  {
+   "id": "arctic_b0164",
+   "set": "b",
+   "text": "They laughed like two happy children."
+  },
+  {
+   "id": "arctic_b0165",
+   "set": "b",
+   "text": "He pulled, and the log crashed down to break his back."
+  },
+  {
+   "id": "arctic_b0166",
+   "set": "b",
+   "text": "Fast, but endure."
+  },
+  {
+   "id": "arctic_b0167",
+   "set": "b",
+   "text": "A little before dawn of the day following, the fire relief came."
+  },
+  {
+   "id": "arctic_b0168",
+   "set": "b",
+   "text": "The Indian felt the worship of her warm in his heart."
+  },
+  {
+   "id": "arctic_b0169",
+   "set": "b",
+   "text": "He drew in a deep breath as he looked at them."
+  },
+  {
+   "id": "arctic_b0170",
+   "set": "b",
+   "text": "Then he shouted, Shut up."
+  },
+  {
+   "id": "arctic_b0171",
+   "set": "b",
+   "text": "He changed his seat for a steamer reclining chair."
+  },
+  {
+   "id": "arctic_b0172",
+   "set": "b",
+   "text": "On the far corner of the compound fence a hawk brooded."
+  },
+  {
+   "id": "arctic_b0173",
+   "set": "b",
+   "text": "To these he gave castor oil."
+  },
+  {
+   "id": "arctic_b0174",
+   "set": "b",
+   "text": "Hatred and murder and lust for revenge they possessed to overflowing."
+  },
+  {
+   "id": "arctic_b0175",
+   "set": "b",
+   "text": "Sheldon glanced at the thermometer."
+  },
+  {
+   "id": "arctic_b0176",
+   "set": "b",
+   "text": "I'll see to poor Hughie."
+  },
+  {
+   "id": "arctic_b0177",
+   "set": "b",
+   "text": "Her gray eyes were flashing, and her lips were quivering."
+  },
+  {
+   "id": "arctic_b0178",
+   "set": "b",
+   "text": "Also, I want information."
+  },
+  {
+   "id": "arctic_b0179",
+   "set": "b",
+   "text": "Let them go out and eat with my boys."
+  },
+  {
+   "id": "arctic_b0180",
+   "set": "b",
+   "text": "I, I beg pardon, he drawled."
+  },
+  {
+   "id": "arctic_b0181",
+   "set": "b",
+   "text": "And you preferred a cannibal isle and a cartridge belt."
+  },
+  {
+   "id": "arctic_b0182",
+   "set": "b",
+   "text": "I was in New York when the crash came."
+  },
+  {
+   "id": "arctic_b0183",
+   "set": "b",
+   "text": "No, I did not fall among thieves."
+  },
+  {
+   "id": "arctic_b0184",
+   "set": "b",
+   "text": "Such things in her brain were like so many oaths on her lips."
+  },
+  {
+   "id": "arctic_b0185",
+   "set": "b",
+   "text": "Your being wrecked here has been a godsend to me."
+  },
+  {
+   "id": "arctic_b0186",
+   "set": "b",
+   "text": "I can't go elsewhere, by your own account."
+  },
+  {
+   "id": "arctic_b0187",
+   "set": "b",
+   "text": "Her achievements with cocoanuts were a revelation."
+  },
+  {
+   "id": "arctic_b0188",
+   "set": "b",
+   "text": "He glanced down at her helplessly, and moistened his lips."
+  },
+  {
+   "id": "arctic_b0189",
+   "set": "b",
+   "text": "That is what distinguishes all of us from the lower animals."
+  },
+  {
+   "id": "arctic_b0190",
+   "set": "b",
+   "text": "Idealism led him to philosophic anarchy, and his family threw him off."
+  },
+  {
+   "id": "arctic_b0191",
+   "set": "b",
+   "text": "He also contended that better confidence was established by carrying no weapons."
+  },
+  {
+   "id": "arctic_b0192",
+   "set": "b",
+   "text": "Outsiders are allowed five minute speeches, the sick man urged."
+  },
+  {
+   "id": "arctic_b0193",
+   "set": "b",
+   "text": "So was Packard's finish suicide."
+  },
+  {
+   "id": "arctic_b0194",
+   "set": "b",
+   "text": "Joan cried, with shining eyes."
+  },
+  {
+   "id": "arctic_b0195",
+   "set": "b",
+   "text": "Nobody knows how the natives got them."
+  },
+  {
+   "id": "arctic_b0196",
+   "set": "b",
+   "text": "How can you manage all alone, Mr Young."
+  },
+  {
+   "id": "arctic_b0197",
+   "set": "b",
+   "text": "The planters are already considering the matter."
+  },
+  {
+   "id": "arctic_b0198",
+   "set": "b",
+   "text": "I use great trouble advisedly."
+  },
+  {
+   "id": "arctic_b0199",
+   "set": "b",
+   "text": "Dear Sir, Your second victim has fallen on schedule time."
+  },
+  {
+   "id": "arctic_b0200",
+   "set": "b",
+   "text": "We leave the eventuality to time and law."
+  },
+  {
+   "id": "arctic_b0201",
+   "set": "b",
+   "text": "I also understand that similar branch organizations have made their appearance in Europe."
+  },
+  {
+   "id": "arctic_b0202",
+   "set": "b",
+   "text": "Society is shaken to its foundations."
+  },
+  {
+   "id": "arctic_b0203",
+   "set": "b",
+   "text": "A month in Australia would finish me."
+  },
+  {
+   "id": "arctic_b0204",
+   "set": "b",
+   "text": "Down through the perfume weighted air fluttered the snowy fluffs of the cottonwoods."
+  },
+  {
+   "id": "arctic_b0205",
+   "set": "b",
+   "text": "You were destroying my life."
+  },
+  {
+   "id": "arctic_b0206",
+   "set": "b",
+   "text": "Horses and rifles had been her toys, camp and trail her nursery."
+  },
+  {
+   "id": "arctic_b0207",
+   "set": "b",
+   "text": "I'm as good as a man, she urged."
+  },
+  {
+   "id": "arctic_b0208",
+   "set": "b",
+   "text": "You read the quotations in today's paper."
+  },
+  {
+   "id": "arctic_b0209",
+   "set": "b",
+   "text": "He's terribly touchy about his black wards, as he calls them."
+  },
+  {
+   "id": "arctic_b0210",
+   "set": "b",
+   "text": "Whatever he guessed he locked away in the taboo room of Naomi."
+  },
+  {
+   "id": "arctic_b0211",
+   "set": "b",
+   "text": "This is eighteen eighty."
+  },
+  {
+   "id": "arctic_b0212",
+   "set": "b",
+   "text": "Death is and has been ever since old Maui died."
+  },
+  {
+   "id": "arctic_b0213",
+   "set": "b",
+   "text": "Some boy, she laughed acquiescence."
+  },
+  {
+   "id": "arctic_b0214",
+   "set": "b",
+   "text": "Let us talk it over and find a way out."
+  },
+  {
+   "id": "arctic_b0215",
+   "set": "b",
+   "text": "It is a good property, and worth more than that."
+  },
+  {
+   "id": "arctic_b0216",
+   "set": "b",
+   "text": "I wish you were more adaptable, Joan retorted."
+  },
+  {
+   "id": "arctic_b0217",
+   "set": "b",
+   "text": "Such is my passage engaged on the steamer."
+  },
+  {
+   "id": "arctic_b0218",
+   "set": "b",
+   "text": "The issue was not in doubt."
+  },
+  {
+   "id": "arctic_b0219",
+   "set": "b",
+   "text": "Well, there are better men in Hawaii, that's all."
+  },
+  {
+   "id": "arctic_b0220",
+   "set": "b",
+   "text": "Harry Bancroft, Dave lied."
+  },
+  {
+   "id": "arctic_b0221",
+   "set": "b",
+   "text": "It's a Yankee, Joan cried."
+  },
+  {
+   "id": "arctic_b0222",
+   "set": "b",
+   "text": "He was the leader, and Tudor was his lieutenant."
+  },
+  {
+   "id": "arctic_b0223",
+   "set": "b",
+   "text": "They likewise are disinclined to being eaten."
+  },
+  {
+   "id": "arctic_b0224",
+   "set": "b",
+   "text": "But to culture the Revolution thus far had exhausted the Junta."
+  },
+  {
+   "id": "arctic_b0225",
+   "set": "b",
+   "text": "The President of the United States was his friend."
+  },
+  {
+   "id": "arctic_b0226",
+   "set": "b",
+   "text": "Your face was the personification of duplicity."
+  },
+  {
+   "id": "arctic_b0227",
+   "set": "b",
+   "text": "Shorty turned to their employers."
+  },
+  {
+   "id": "arctic_b0228",
+   "set": "b",
+   "text": "You were engaged."
+  },
+  {
+   "id": "arctic_b0229",
+   "set": "b",
+   "text": "I saw it all myself, and it was splendid."
+  },
+  {
+   "id": "arctic_b0230",
+   "set": "b",
+   "text": "Now run along, and tell them to hurry."
+  },
+  {
+   "id": "arctic_b0231",
+   "set": "b",
+   "text": "What's that grub-thief got to do with it."
+  },
+  {
+   "id": "arctic_b0232",
+   "set": "b",
+   "text": "It was a superb picture."
+  },
+  {
+   "id": "arctic_b0233",
+   "set": "b",
+   "text": "So she said, the irate skipper dashed on."
+  },
+  {
+   "id": "arctic_b0234",
+   "set": "b",
+   "text": "And watch out for wet feet, was his parting advice."
+  },
+  {
+   "id": "arctic_b0235",
+   "set": "b",
+   "text": "Raoul yelled, in order to make himself heard."
+  },
+  {
+   "id": "arctic_b0236",
+   "set": "b",
+   "text": "Oolong was two hundred and fifty miles from the nearest land."
+  },
+  {
+   "id": "arctic_b0237",
+   "set": "b",
+   "text": "They just lay off in the bush and plugged away."
+  },
+  {
+   "id": "arctic_b0238",
+   "set": "b",
+   "text": "The very thought of the effort to swim over was nauseating."
+  },
+  {
+   "id": "arctic_b0239",
+   "set": "b",
+   "text": "And there was a dog that barked."
+  },
+  {
+   "id": "arctic_b0240",
+   "set": "b",
+   "text": "There are four, all low, McCoy answered."
+  },
+  {
+   "id": "arctic_b0241",
+   "set": "b",
+   "text": "The women they carried away with them to the Big Valley."
+  },
+  {
+   "id": "arctic_b0242",
+   "set": "b",
+   "text": "The Japanese understood as we could never school ourselves or hope to understand."
+  },
+  {
+   "id": "arctic_b0243",
+   "set": "b",
+   "text": "They had been on the same lay as ourselves."
+  },
+  {
+   "id": "arctic_b0244",
+   "set": "b",
+   "text": "You are positively soulless, he said savagely."
+  },
+  {
+   "id": "arctic_b0245",
+   "set": "b",
+   "text": "Harrison is still my chauffeur."
+  },
+  {
+   "id": "arctic_b0246",
+   "set": "b",
+   "text": "The boy grew and prospered."
+  },
+  {
+   "id": "arctic_b0247",
+   "set": "b",
+   "text": "He wanted to give the finish to this foe already so far gone."
+  },
+  {
+   "id": "arctic_b0248",
+   "set": "b",
+   "text": "Exciting times are the lot of the fish patrol."
+  },
+  {
+   "id": "arctic_b0249",
+   "set": "b",
+   "text": "I know they are my oysters."
+  },
+  {
+   "id": "arctic_b0250",
+   "set": "b",
+   "text": "By this time Charley was as enraged as the Greek."
+  },
+  {
+   "id": "arctic_b0251",
+   "set": "b",
+   "text": "They must have been swept away by the chaotic currents."
+  },
+  {
+   "id": "arctic_b0252",
+   "set": "b",
+   "text": "It resembled tea less than lager beer resembles champagne."
+  },
+  {
+   "id": "arctic_b0253",
+   "set": "b",
+   "text": "The very opposite is true; they are discouraged vagabonds."
+  },
+  {
+   "id": "arctic_b0254",
+   "set": "b",
+   "text": "At the same time spears and arrows began to fall among the invaders."
+  },
+  {
+   "id": "arctic_b0255",
+   "set": "b",
+   "text": "Then, again, Tudor had such an irritating way about him."
+  },
+  {
+   "id": "arctic_b0256",
+   "set": "b",
+   "text": "Outwardly, he maintained a calm and smiling aspect."
+  },
+  {
+   "id": "arctic_b0257",
+   "set": "b",
+   "text": "Tudor surveyed him with withering disgust."
+  },
+  {
+   "id": "arctic_b0258",
+   "set": "b",
+   "text": "You fired me out of your house, in short."
+  },
+  {
+   "id": "arctic_b0259",
+   "set": "b",
+   "text": "Her mouth opened, but instead of speaking she drew a long sigh."
+  },
+  {
+   "id": "arctic_b0260",
+   "set": "b",
+   "text": "It's worth eight dollars."
+  },
+  {
+   "id": "arctic_b0261",
+   "set": "b",
+   "text": "And he did hurt my arm."
+  },
+  {
+   "id": "arctic_b0262",
+   "set": "b",
+   "text": "Saxon's onto her job."
+  },
+  {
+   "id": "arctic_b0263",
+   "set": "b",
+   "text": "Only once did I confide the strangeness of it all to another."
+  },
+  {
+   "id": "arctic_b0264",
+   "set": "b",
+   "text": "But this time it was Saxon who rebelled."
+  },
+  {
+   "id": "arctic_b0265",
+   "set": "b",
+   "text": "I was not to cry out in the face of fear."
+  },
+  {
+   "id": "arctic_b0266",
+   "set": "b",
+   "text": "And now put yourself in my place for a moment."
+  },
+  {
+   "id": "arctic_b0267",
+   "set": "b",
+   "text": "The boy threw back his head with pride."
+  },
+  {
+   "id": "arctic_b0268",
+   "set": "b",
+   "text": "Saxon nodded, and the boy frowned."
+  },
+  {
+   "id": "arctic_b0269",
+   "set": "b",
+   "text": "Why not like any railroad station or ferry depot."
+  },
+  {
+   "id": "arctic_b0270",
+   "set": "b",
+   "text": "We could throw stones with our feet."
+  },
+  {
+   "id": "arctic_b0271",
+   "set": "b",
+   "text": "It was put together in a casual, helter-skelter sort of way."
+  },
+  {
+   "id": "arctic_b0272",
+   "set": "b",
+   "text": "These were merely stout sticks an inch or so in diameter."
+  },
+  {
+   "id": "arctic_b0273",
+   "set": "b",
+   "text": "Then it was that a strange thing happened."
+  },
+  {
+   "id": "arctic_b0274",
+   "set": "b",
+   "text": "From the source of light a harsh voice said."
+  },
+  {
+   "id": "arctic_b0275",
+   "set": "b",
+   "text": "But I did not enjoy it long."
+  },
+  {
+   "id": "arctic_b0276",
+   "set": "b",
+   "text": "We were now good friends."
+  },
+  {
+   "id": "arctic_b0277",
+   "set": "b",
+   "text": "Two of the Folk were already up."
+  },
+  {
+   "id": "arctic_b0278",
+   "set": "b",
+   "text": "Now animals do not like mockery."
+  },
+  {
+   "id": "arctic_b0279",
+   "set": "b",
+   "text": "He gave one last snarl and slid from view among the trees."
+  },
+  {
+   "id": "arctic_b0280",
+   "set": "b",
+   "text": "Again the girls applauded, and Mrs Hall cried."
+  },
+  {
+   "id": "arctic_b0281",
+   "set": "b",
+   "text": "Just the same I'd sooner be myself than have book indigestion."
+  },
+  {
+   "id": "arctic_b0282",
+   "set": "b",
+   "text": "Some of the smaller veins had doubtless been ruptured."
+  },
+  {
+   "id": "arctic_b0283",
+   "set": "b",
+   "text": "But we were without this momentum."
+  },
+  {
+   "id": "arctic_b0284",
+   "set": "b",
+   "text": "There was one difficulty, however."
+  },
+  {
+   "id": "arctic_b0285",
+   "set": "b",
+   "text": "The hyena proceeded to dine."
+  },
+  {
+   "id": "arctic_b0286",
+   "set": "b",
+   "text": "The time was considered auspicious."
+  },
+  {
+   "id": "arctic_b0287",
+   "set": "b",
+   "text": "Or have they already devised one."
+  },
+  {
+   "id": "arctic_b0288",
+   "set": "b",
+   "text": "We would not spend another such night."
+  },
+  {
+   "id": "arctic_b0289",
+   "set": "b",
+   "text": "At first his progress was slow and erratic."
+  },
+  {
+   "id": "arctic_b0290",
+   "set": "b",
+   "text": "He placed his paw on one, and its movements were accelerated."
+  },
+  {
+   "id": "arctic_b0291",
+   "set": "b",
+   "text": "The awe of man rushed over him again."
+  },
+  {
+   "id": "arctic_b0292",
+   "set": "b",
+   "text": "The Fire-Men wore animal skins around their waists and across their shoulders."
+  },
+  {
+   "id": "arctic_b0293",
+   "set": "b",
+   "text": "Between him and all domestic animals there must be no hostilities."
+  },
+  {
+   "id": "arctic_b0294",
+   "set": "b",
+   "text": "For a much longer time Lop-Ear and I remained and watched."
+  },
+  {
+   "id": "arctic_b0295",
+   "set": "b",
+   "text": "All right, Sir, replied Jock with great regret."
+  },
+  {
+   "id": "arctic_b0296",
+   "set": "b",
+   "text": "At times I wondered where Sir Archibald got his style."
+  },
+  {
+   "id": "arctic_b0297",
+   "set": "b",
+   "text": "Why should a fellow throw up the sponge after the first round."
+  },
+  {
+   "id": "arctic_b0298",
+   "set": "b",
+   "text": "His hand shot out and clutched Crooked-Leg by the neck."
+  },
+  {
+   "id": "arctic_b0299",
+   "set": "b",
+   "text": "Miss Brodie's smile was slightly sarcastic."
+  },
+  {
+   "id": "arctic_b0300",
+   "set": "b",
+   "text": "Does the old boy often go off at half-cock that way."
+  },
+  {
+   "id": "arctic_b0301",
+   "set": "b",
+   "text": "A flying arrow passed between us."
+  },
+  {
+   "id": "arctic_b0302",
+   "set": "b",
+   "text": "I pulled, suddenly, with all my might."
+  },
+  {
+   "id": "arctic_b0303",
+   "set": "b",
+   "text": "Here we allow our solicitors to look after our legal work."
+  },
+  {
+   "id": "arctic_b0304",
+   "set": "b",
+   "text": "His previous wives had never lived long enough to bear him children."
+  },
+  {
+   "id": "arctic_b0305",
+   "set": "b",
+   "text": "It was our river emerging like ourselves from the great swamp."
+  },
+  {
+   "id": "arctic_b0306",
+   "set": "b",
+   "text": "Cameron looked at his hands with their long, sinewy fingers."
+  },
+  {
+   "id": "arctic_b0307",
+   "set": "b",
+   "text": "We got few vegetables and fruits, and became fish eaters."
+  },
+  {
+   "id": "arctic_b0308",
+   "set": "b",
+   "text": "We never made another migration."
+  },
+  {
+   "id": "arctic_b0309",
+   "set": "b",
+   "text": "Nor was Elam Harnish an exception."
+  },
+  {
+   "id": "arctic_b0310",
+   "set": "b",
+   "text": "A little treatment, massage, with some help from the doctor."
+  },
+  {
+   "id": "arctic_b0311",
+   "set": "b",
+   "text": "The 29th very foggy."
+  },
+  {
+   "id": "arctic_b0312",
+   "set": "b",
+   "text": "Dig in; you're sure good, was Daylight's answer."
+  },
+  {
+   "id": "arctic_b0313",
+   "set": "b",
+   "text": "The apron string loomed near and he shied like an unbroken colt."
+  },
+  {
+   "id": "arctic_b0314",
+   "set": "b",
+   "text": "He had been born with this endowment."
+  },
+  {
+   "id": "arctic_b0315",
+   "set": "b",
+   "text": "And this was their sole conversation throughout the meal."
+  },
+  {
+   "id": "arctic_b0316",
+   "set": "b",
+   "text": "Though the aurora still flamed, another day had begun."
+  },
+  {
+   "id": "arctic_b0317",
+   "set": "b",
+   "text": "He did not believe in the burning of daylight for such a luxury."
+  },
+  {
+   "id": "arctic_b0318",
+   "set": "b",
+   "text": "Again he had done the big thing."
+  },
+  {
+   "id": "arctic_b0319",
+   "set": "b",
+   "text": "Daylight was tired, profoundly tired."
+  },
+  {
+   "id": "arctic_b0320",
+   "set": "b",
+   "text": "The regret in his voice was provocative of a second burst of laughter."
+  },
+  {
+   "id": "arctic_b0321",
+   "set": "b",
+   "text": "Instead, he arrived on the night of the second day."
+  },
+  {
+   "id": "arctic_b0322",
+   "set": "b",
+   "text": "Their supply of grub was gone."
+  },
+  {
+   "id": "arctic_b0323",
+   "set": "b",
+   "text": "Crickets began to chirp, and more geese and ducks flew overhead."
+  },
+  {
+   "id": "arctic_b0324",
+   "set": "b",
+   "text": "Not till the twentieth of May did the river break."
+  },
+  {
+   "id": "arctic_b0325",
+   "set": "b",
+   "text": "It was a gigantic inadequacy."
+  },
+  {
+   "id": "arctic_b0326",
+   "set": "b",
+   "text": "Our Mr Howison will call upon you at your hotel."
+  },
+  {
+   "id": "arctic_b0327",
+   "set": "b",
+   "text": "He had been so easy."
+  },
+  {
+   "id": "arctic_b0328",
+   "set": "b",
+   "text": "Change chairs, Daylight commanded."
+  },
+  {
+   "id": "arctic_b0329",
+   "set": "b",
+   "text": "I'd sooner have my chips back."
+  },
+  {
+   "id": "arctic_b0330",
+   "set": "b",
+   "text": "They only had a little thirty thousand dollar fire."
+  },
+  {
+   "id": "arctic_b0331",
+   "set": "b",
+   "text": "His partners had starved and died on the Stewart."
+  },
+  {
+   "id": "arctic_b0332",
+   "set": "b",
+   "text": "As to how she dressed, he had no ideas at all."
+  },
+  {
+   "id": "arctic_b0333",
+   "set": "b",
+   "text": "It does, was her audacious answer."
+  },
+  {
+   "id": "arctic_b0334",
+   "set": "b",
+   "text": "Oh, it's just a novel, a love story."
+  },
+  {
+   "id": "arctic_b0335",
+   "set": "b",
+   "text": "Whoever lived on the ranch did that."
+  },
+  {
+   "id": "arctic_b0336",
+   "set": "b",
+   "text": "How old are you, mother."
+  },
+  {
+   "id": "arctic_b0337",
+   "set": "b",
+   "text": "Here he got a fresh thrill."
+  },
+  {
+   "id": "arctic_b0338",
+   "set": "b",
+   "text": "It was unobtrusive, yet it was there."
+  },
+  {
+   "id": "arctic_b0339",
+   "set": "b",
+   "text": "Well, I'll be plumb gosh darned."
+  },
+  {
+   "id": "arctic_b0340",
+   "set": "b",
+   "text": "These quick little joys of hers were sources of joy to him."
+  },
+  {
+   "id": "arctic_b0341",
+   "set": "b",
+   "text": "I play that choice wide open to win."
+  },
+  {
+   "id": "arctic_b0342",
+   "set": "b",
+   "text": "Each improvement makes the value of everything else pump up."
+  },
+  {
+   "id": "arctic_b0343",
+   "set": "b",
+   "text": "But how are you going to do it."
+  },
+  {
+   "id": "arctic_b0344",
+   "set": "b",
+   "text": "Lots of men take women buggy riding."
+  },
+  {
+   "id": "arctic_b0345",
+   "set": "b",
+   "text": "Daylight made no answer, and the door closed behind him."
+  },
+  {
+   "id": "arctic_b0346",
+   "set": "b",
+   "text": "There's not an iota of truth in it."
+  },
+  {
+   "id": "arctic_b0347",
+   "set": "b",
+   "text": "But ever his gaze returned to that Crouched Venus on the piano."
+  },
+  {
+   "id": "arctic_b0348",
+   "set": "b",
+   "text": "Would you be satisfied with that one hundredth part of me."
+  },
+  {
+   "id": "arctic_b0349",
+   "set": "b",
+   "text": "In such a tumbling of values was no time to sell."
+  },
+  {
+   "id": "arctic_b0350",
+   "set": "b",
+   "text": "Stand off butcher and baker and all the rest."
+  },
+  {
+   "id": "arctic_b0351",
+   "set": "b",
+   "text": "Matthewson, who's this bookkeeper, Rogers."
+  },
+  {
+   "id": "arctic_b0352",
+   "set": "b",
+   "text": "Now just what do you want to know."
+  },
+  {
+   "id": "arctic_b0353",
+   "set": "b",
+   "text": "I want to know how all this is possible."
+  },
+  {
+   "id": "arctic_b0354",
+   "set": "b",
+   "text": "It's that much junk."
+  },
+  {
+   "id": "arctic_b0355",
+   "set": "b",
+   "text": "There was proper division of labor in the work they individually performed."
+  },
+  {
+   "id": "arctic_b0356",
+   "set": "b",
+   "text": "He loved to play Chinese lottery."
+  },
+  {
+   "id": "arctic_b0357",
+   "set": "b",
+   "text": "The Law of Club and Fang"
+  },
+  {
+   "id": "arctic_b0358",
+   "set": "b",
+   "text": "The temperature dropped to fifty below zero and remained there the whole trip."
+  },
+  {
+   "id": "arctic_b0359",
+   "set": "b",
+   "text": "And as never before, he was ready to obey."
+  },
+  {
+   "id": "arctic_b0360",
+   "set": "b",
+   "text": "This state of mind comes of an undue prominence of the ego."
+  },
+  {
+   "id": "arctic_b0361",
+   "set": "b",
+   "text": "There are the canals of China, and the Yang-tse River."
+  },
+  {
+   "id": "arctic_b0362",
+   "set": "b",
+   "text": "We threaten to be of the one mind before the voyage is completed."
+  },
+  {
+   "id": "arctic_b0363",
+   "set": "b",
+   "text": "She was built primarily to sail."
+  },
+  {
+   "id": "arctic_b0364",
+   "set": "b",
+   "text": "In the Bohemian Club of San Francisco there are some crack sailors."
+  },
+  {
+   "id": "arctic_b0365",
+   "set": "b",
+   "text": "My age, in years, is twenty two."
+  },
+  {
+   "id": "arctic_b0366",
+   "set": "b",
+   "text": "I forgot how easily I had taught myself from the printed page."
+  },
+  {
+   "id": "arctic_b0367",
+   "set": "b",
+   "text": "Any average young fellow can teach himself in a week."
+  },
+  {
+   "id": "arctic_b0368",
+   "set": "b",
+   "text": "Please do not think that I already know it all."
+  },
+  {
+   "id": "arctic_b0369",
+   "set": "b",
+   "text": "You see, we were teaching ourselves."
+  },
+  {
+   "id": "arctic_b0370",
+   "set": "b",
+   "text": "And now behold the perversity of things."
+  },
+  {
+   "id": "arctic_b0371",
+   "set": "b",
+   "text": "Yield yourself to the waters that are ripping and tearing at you."
+  },
+  {
+   "id": "arctic_b0372",
+   "set": "b",
+   "text": "Mr McVeigh told me about him."
+  },
+  {
+   "id": "arctic_b0373",
+   "set": "b",
+   "text": "Unlike Joshua, he stood in no need of divine assistance."
+  },
+  {
+   "id": "arctic_b0374",
+   "set": "b",
+   "text": "To say the least, Captain Cook was a rather thorough going empiricist."
+  },
+  {
+   "id": "arctic_b0375",
+   "set": "b",
+   "text": "Man could not conquer them."
+  },
+  {
+   "id": "arctic_b0376",
+   "set": "b",
+   "text": "Thought I, and a worthy fool he proved."
+  },
+  {
+   "id": "arctic_b0377",
+   "set": "b",
+   "text": "A scarlet loincloth completed his costume."
+  },
+  {
+   "id": "arctic_b0378",
+   "set": "b",
+   "text": "I like to speculate upon the glorious future of man."
+  },
+  {
+   "id": "arctic_b0379",
+   "set": "b",
+   "text": "Christmas is an easy problem compared with a Polynesian giving-feast."
+  },
+  {
+   "id": "arctic_b0380",
+   "set": "b",
+   "text": "He had peeled off his shirt and was wildly waving it."
+  },
+  {
+   "id": "arctic_b0381",
+   "set": "b",
+   "text": "And how would we ever find ourselves."
+  },
+  {
+   "id": "arctic_b0382",
+   "set": "b",
+   "text": "I defy any man to get a Solomon Island sore in California."
+  },
+  {
+   "id": "arctic_b0383",
+   "set": "b",
+   "text": "A bush chief had died a natural death."
+  },
+  {
+   "id": "arctic_b0384",
+   "set": "b",
+   "text": "The skipper's and Nakata's gymnastics served as a translation without words."
+  },
+  {
+   "id": "arctic_b0385",
+   "set": "b",
+   "text": "Last night he showed all the symptoms of coming down with pneumonia."
+  },
+  {
+   "id": "arctic_b0386",
+   "set": "b",
+   "text": "My idea was that he would have more influence over the natives."
+  },
+  {
+   "id": "arctic_b0387",
+   "set": "b",
+   "text": "It is merely the simple superlative."
+  },
+  {
+   "id": "arctic_b0388",
+   "set": "b",
+   "text": "I made no more overtures."
+  },
+  {
+   "id": "arctic_b0389",
+   "set": "b",
+   "text": "Among my minor afflictions, I may mention a new and mysterious one."
+  },
+  {
+   "id": "arctic_b0390",
+   "set": "b",
+   "text": "The voyage was our idea of a good time."
+  },
+  {
+   "id": "arctic_b0391",
+   "set": "b",
+   "text": "At sea, Tuesday, March 17, 1908."
+  },
+  {
+   "id": "arctic_b0392",
+   "set": "b",
+   "text": "Yes, sir, he answered, with cheerful alacrity."
+  },
+  {
+   "id": "arctic_b0393",
+   "set": "b",
+   "text": "I was still weak from my prolonged immersion."
+  },
+  {
+   "id": "arctic_b0394",
+   "set": "b",
+   "text": "The boy hesitated, then mastered his temper."
+  },
+  {
+   "id": "arctic_b0395",
+   "set": "b",
+   "text": "I was beneath the water, suffocating and drowning."
+  },
+  {
+   "id": "arctic_b0396",
+   "set": "b",
+   "text": "The pain from my hurt knee was agonizing."
+  },
+  {
+   "id": "arctic_b0397",
+   "set": "b",
+   "text": "The hunters were still arguing and roaring like some semi-human amphibious breed."
+  },
+  {
+   "id": "arctic_b0398",
+   "set": "b",
+   "text": "I have been robbed, sir, I amended."
+  },
+  {
+   "id": "arctic_b0399",
+   "set": "b",
+   "text": "You were looking squeamish this afternoon, he began."
+  },
+  {
+   "id": "arctic_b0400",
+   "set": "b",
+   "text": "How could I answer the question on the spur of the moment."
+  },
+  {
+   "id": "arctic_b0401",
+   "set": "b",
+   "text": "I learned it myself in English ships."
+  },
+  {
+   "id": "arctic_b0402",
+   "set": "b",
+   "text": "An altruistic act is an act performed for the welfare of others."
+  },
+  {
+   "id": "arctic_b0403",
+   "set": "b",
+   "text": "Knowing him, I review the old Scandinavian myths with clearer understanding."
+  },
+  {
+   "id": "arctic_b0404",
+   "set": "b",
+   "text": "Yes, and no, sir, was the slow reply."
+  },
+  {
+   "id": "arctic_b0405",
+   "set": "b",
+   "text": "And each year something happened, and I did not go."
+  },
+  {
+   "id": "arctic_b0406",
+   "set": "b",
+   "text": "How in hell did he know it was you in the dark."
+  },
+  {
+   "id": "arctic_b0407",
+   "set": "b",
+   "text": "Of course much grumbling went on, and little outbursts were continually occurring."
+  },
+  {
+   "id": "arctic_b0408",
+   "set": "b",
+   "text": "You have all the advantage."
+  },
+  {
+   "id": "arctic_b0409",
+   "set": "b",
+   "text": "The dirk mentioned by Wolf Larsen rested in its sheath on my hip."
+  },
+  {
+   "id": "arctic_b0410",
+   "set": "b",
+   "text": "Have you ever earned a dollar by your own labour."
+  },
+  {
+   "id": "arctic_b0411",
+   "set": "b",
+   "text": "He gave no reason, but his motive was obvious enough."
+  },
+  {
+   "id": "arctic_b0412",
+   "set": "b",
+   "text": "Ah, it was sweet in my ears."
+  },
+  {
+   "id": "arctic_b0413",
+   "set": "b",
+   "text": "He may desire to escape pain, or to enjoy pleasure."
+  },
+  {
+   "id": "arctic_b0414",
+   "set": "b",
+   "text": "It was impossible to hoist sail and claw off that shore."
+  },
+  {
+   "id": "arctic_b0415",
+   "set": "b",
+   "text": "There was nothing for us but the wide raw ocean."
+  },
+  {
+   "id": "arctic_b0416",
+   "set": "b",
+   "text": "I arose obediently and went down the beach."
+  },
+  {
+   "id": "arctic_b0417",
+   "set": "b",
+   "text": "The next thing to watch out for is bed sores."
+  },
+  {
+   "id": "arctic_b0418",
+   "set": "b",
+   "text": "At that moment I got the impression that she was willowy."
+  },
+  {
+   "id": "arctic_b0419",
+   "set": "b",
+   "text": "Your father's fifth command, he nodded."
+  },
+  {
+   "id": "arctic_b0420",
+   "set": "b",
+   "text": "On occasion, on this traverse, the Cape Verde Islands are raised."
+  },
+  {
+   "id": "arctic_b0421",
+   "set": "b",
+   "text": "She is essentially the life-giving, life-conserving female of the species."
+  },
+  {
+   "id": "arctic_b0422",
+   "set": "b",
+   "text": "This was when the explosion occurred."
+  },
+  {
+   "id": "arctic_b0423",
+   "set": "b",
+   "text": "Also, at regular intervals, he would mutter."
+  },
+  {
+   "id": "arctic_b0424",
+   "set": "b",
+   "text": "It is a very tenable hypothesis, and will bear looking into."
+  },
+  {
+   "id": "arctic_b0425",
+   "set": "b",
+   "text": "There were orange-green, gold-green, and a copper-green."
+  },
+  {
+   "id": "arctic_b0426",
+   "set": "b",
+   "text": "The Gabriel voice of the Samurai rang out."
+  },
+  {
+   "id": "arctic_b0427",
+   "set": "b",
+   "text": "The sunsets grow more bizarre and spectacular off this coast of the Argentine."
+  },
+  {
+   "id": "arctic_b0428",
+   "set": "b",
+   "text": "The history of our westward-faring race is written in it."
+  },
+  {
+   "id": "arctic_b0429",
+   "set": "b",
+   "text": "And the Eurasian Chinese-Englishman bowed himself away."
+  },
+  {
+   "id": "arctic_b0430",
+   "set": "b",
+   "text": "They were babbling and chattering all together."
+  },
+  {
+   "id": "arctic_b0431",
+   "set": "b",
+   "text": "Too much, he told me, with ominous rolling head."
+  },
+  {
+   "id": "arctic_b0432",
+   "set": "b",
+   "text": "He is a candidate, rising from the serf class to our class."
+  },
+  {
+   "id": "arctic_b0433",
+   "set": "b",
+   "text": "We are cooking on the coal stove and on the oil burners."
+  },
+  {
+   "id": "arctic_b0434",
+   "set": "b",
+   "text": "The steward has just tendered me a respectful bit of advice."
+  },
+  {
+   "id": "arctic_b0435",
+   "set": "b",
+   "text": "Well, did they eat."
+  },
+  {
+   "id": "arctic_b0436",
+   "set": "b",
+   "text": "Famine had been my great ally."
+  },
+  {
+   "id": "arctic_b0437",
+   "set": "b",
+   "text": "Nowhere in the North is the soil so prolific."
+  },
+  {
+   "id": "arctic_b0438",
+   "set": "b",
+   "text": "They ran the canoe in and climbed the high earth bank."
+  },
+  {
+   "id": "arctic_b0439",
+   "set": "b",
+   "text": "The land exchanged its austere robes for the garb of a smiling wanton."
+  },
+  {
+   "id": "arctic_b0440",
+   "set": "b",
+   "text": "There were stir and bustle, new faces, and fresh facts."
+  },
+  {
+   "id": "arctic_b0441",
+   "set": "b",
+   "text": "And there was Ethel Baird, whom also you must remember."
+  },
+  {
+   "id": "arctic_b0442",
+   "set": "b",
+   "text": "He had become a man very early in life."
+  },
+  {
+   "id": "arctic_b0443",
+   "set": "b",
+   "text": "I did not think you would be so early."
+  },
+  {
+   "id": "arctic_b0444",
+   "set": "b",
+   "text": "He did not know what went on in the minds of his superiors."
+  },
+  {
+   "id": "arctic_b0445",
+   "set": "b",
+   "text": "Mops, sir, eagerly answered the sailor at the wheel."
+  },
+  {
+   "id": "arctic_b0446",
+   "set": "b",
+   "text": "Some one had thrust a large sheath-knife into his hand."
+  },
+  {
+   "id": "arctic_b0447",
+   "set": "b",
+   "text": "O'Brien emitted a shriek that sank swiftly to a gurgling sob."
+  },
+  {
+   "id": "arctic_b0448",
+   "set": "b",
+   "text": "Sandel would never become a world champion."
+  },
+  {
+   "id": "arctic_b0449",
+   "set": "b",
+   "text": "Also, she wouldn't walk."
+  },
+  {
+   "id": "arctic_b0450",
+   "set": "b",
+   "text": "To my dearest and always appreciated friend, I submit myself."
+  },
+  {
+   "id": "arctic_b0451",
+   "set": "b",
+   "text": "You used to joyride like the very devil."
+  },
+  {
+   "id": "arctic_b0452",
+   "set": "b",
+   "text": "They saw each other for the first time in Boston."
+  },
+  {
+   "id": "arctic_b0453",
+   "set": "b",
+   "text": "Isaac Ford, the austere soldier of the Lord, the old hypocrite."
+  },
+  {
+   "id": "arctic_b0454",
+   "set": "b",
+   "text": "Eighteen, he added."
+  },
+  {
+   "id": "arctic_b0455",
+   "set": "b",
+   "text": "His reward should have been peace and repose."
+  },
+  {
+   "id": "arctic_b0456",
+   "set": "b",
+   "text": "He was an amphibian and a mountaineer."
+  },
+  {
+   "id": "arctic_b0457",
+   "set": "b",
+   "text": "It was sanctification and salvation."
+  },
+  {
+   "id": "arctic_b0458",
+   "set": "b",
+   "text": "The history of the eighteenth century is written, Ernest prompted."
+  },
+  {
+   "id": "arctic_b0459",
+   "set": "b",
+   "text": "They are not biologists nor sociologists."
+  },
+  {
+   "id": "arctic_b0460",
+   "set": "b",
+   "text": "The more his opponents grew excited, the more Ernest deliberately excited them."
+  },
+  {
+   "id": "arctic_b0461",
+   "set": "b",
+   "text": "By virtue of that power we shall remain in power."
+  },
+  {
+   "id": "arctic_b0462",
+   "set": "b",
+   "text": "One guess will do, Ernest retorted."
+  },
+  {
+   "id": "arctic_b0463",
+   "set": "b",
+   "text": "Take my advice and accept the vacation."
+  },
+  {
+   "id": "arctic_b0464",
+   "set": "b",
+   "text": "I could not agree with Ernest."
+  },
+  {
+   "id": "arctic_b0465",
+   "set": "b",
+   "text": "But such divergence of opinion would constitute no menace to society."
+  },
+  {
+   "id": "arctic_b0466",
+   "set": "b",
+   "text": "It is dog eat dog, and you ate them up."
+  },
+  {
+   "id": "arctic_b0467",
+   "set": "b",
+   "text": "Let us run them for ourselves."
+  },
+  {
+   "id": "arctic_b0468",
+   "set": "b",
+   "text": "It was introduced by Representative Dick of Ohio."
+  },
+  {
+   "id": "arctic_b0469",
+   "set": "b",
+   "text": "Very few people knew of the existence of this law."
+  },
+  {
+   "id": "arctic_b0470",
+   "set": "b",
+   "text": "The very thing, Ernest agreed."
+  },
+  {
+   "id": "arctic_b0471",
+   "set": "b",
+   "text": "Also a fellow Senator, Chauncey Depew, said."
+  },
+  {
+   "id": "arctic_b0472",
+   "set": "b",
+   "text": "Ernest saw in the affair the most sinister import."
+  },
+  {
+   "id": "arctic_b0473",
+   "set": "b",
+   "text": "Then there was the campaign."
+  },
+  {
+   "id": "arctic_b0474",
+   "set": "b",
+   "text": "He was manifestly distressed by my coming."
+  },
+  {
+   "id": "arctic_b0475",
+   "set": "b",
+   "text": "Not a wheel moved in his empire."
+  },
+  {
+   "id": "arctic_b0476",
+   "set": "b",
+   "text": "The reorganization of these countries took the form of revolution."
+  },
+  {
+   "id": "arctic_b0477",
+   "set": "b",
+   "text": "You're going in for grab sharing."
+  },
+  {
+   "id": "arctic_b0478",
+   "set": "b",
+   "text": "The Oligarchy will encourage such ambition and the consequent competition."
+  },
+  {
+   "id": "arctic_b0479",
+   "set": "b",
+   "text": "Violation of this law was made a high misdemeanor and punished accordingly."
+  },
+  {
+   "id": "arctic_b0480",
+   "set": "b",
+   "text": "Without discussion, it was the agents provocateurs who caused the Peasant Revolt."
+  },
+  {
+   "id": "arctic_b0481",
+   "set": "b",
+   "text": "The task we set ourselves was threefold."
+  },
+  {
+   "id": "arctic_b0482",
+   "set": "b",
+   "text": "Many other similar disconcerting omissions will be noticed in the Manuscript."
+  },
+  {
+   "id": "arctic_b0483",
+   "set": "b",
+   "text": "The flower of the artistic and intellectual world were revolutionists."
+  },
+  {
+   "id": "arctic_b0484",
+   "set": "b",
+   "text": "This the Iron Heel foresaw and laid its schemes accordingly."
+  },
+  {
+   "id": "arctic_b0485",
+   "set": "b",
+   "text": "The mob came on, but it could not advance."
+  },
+  {
+   "id": "arctic_b0486",
+   "set": "b",
+   "text": "But why continue the tirade, for tirade it was."
+  },
+  {
+   "id": "arctic_b0487",
+   "set": "b",
+   "text": "After all superfluous flesh is gone what is left is stringy and resistant."
+  },
+  {
+   "id": "arctic_b0488",
+   "set": "b",
+   "text": "Beyond refusing to sell us food, they left us to ourselves."
+  },
+  {
+   "id": "arctic_b0489",
+   "set": "b",
+   "text": "He was a merry monarch, especially so for an Asiatic."
+  },
+  {
+   "id": "arctic_b0490",
+   "set": "b",
+   "text": "What an excited whispering and conferring took place."
+  },
+  {
+   "id": "arctic_b0491",
+   "set": "b",
+   "text": "Jacob Brinker, who was his roadmate, brought the news."
+  },
+  {
+   "id": "arctic_b0492",
+   "set": "b",
+   "text": "Thus he turned the tenets and jargon of psychology back on me."
+  },
+  {
+   "id": "arctic_b0493",
+   "set": "b",
+   "text": "You yellow giant thing of the frost."
+  },
+  {
+   "id": "arctic_b0494",
+   "set": "b",
+   "text": "Never so strange a prophet came up to Jerusalem."
+  },
+  {
+   "id": "arctic_b0495",
+   "set": "b",
+   "text": "We who have endured so much surely can endure a little more."
+  },
+  {
+   "id": "arctic_b0496",
+   "set": "b",
+   "text": "I have seen myself that one man contemplated by Pascal's philosophic eye."
+  },
+  {
+   "id": "arctic_b0497",
+   "set": "b",
+   "text": "One great drawback to farming in California is our long dry summer."
+  },
+  {
+   "id": "arctic_b0498",
+   "set": "b",
+   "text": "I remembered the red wine of the Italian rancho, and shuddered inwardly."
+  },
+  {
+   "id": "arctic_b0499",
+   "set": "b",
+   "text": "I said, and dismissed the matter as not worth thinking about."
+  },
+  {
+   "id": "arctic_b0500",
+   "set": "b",
+   "text": "Then came my boy code."
+  },
+  {
+   "id": "arctic_b0501",
+   "set": "b",
+   "text": "And wherever I ranged, the way lay along alcohol-drenched roads."
+  },
+  {
+   "id": "arctic_b0502",
+   "set": "b",
+   "text": "And as we hurried up town, Joe Goose explained."
+  },
+  {
+   "id": "arctic_b0503",
+   "set": "b",
+   "text": "The scents of strange vegetation blew off the tropic land."
+  },
+  {
+   "id": "arctic_b0504",
+   "set": "b",
+   "text": "The life there was healthful and athletic, but too juvenile."
+  },
+  {
+   "id": "arctic_b0505",
+   "set": "b",
+   "text": "How valiantly I went at it that first day."
+  },
+  {
+   "id": "arctic_b0506",
+   "set": "b",
+   "text": "It would help to tide me along until I got steady employment."
+  },
+  {
+   "id": "arctic_b0507",
+   "set": "b",
+   "text": "Did I possess too much vitality."
+  },
+  {
+   "id": "arctic_b0508",
+   "set": "b",
+   "text": "In his anxiety and solicitude and love they did not count."
+  },
+  {
+   "id": "arctic_b0509",
+   "set": "b",
+   "text": "He had fulfilled his duty and paid properly."
+  },
+  {
+   "id": "arctic_b0510",
+   "set": "b",
+   "text": "He knew what taboos he was violating."
+  },
+  {
+   "id": "arctic_b0511",
+   "set": "b",
+   "text": "Do you value your hide."
+  },
+  {
+   "id": "arctic_b0512",
+   "set": "b",
+   "text": "You should have seen them when they heard me spitting Chinook."
+  },
+  {
+   "id": "arctic_b0513",
+   "set": "b",
+   "text": "He plodded on for half an hour, when the hallucination arose again."
+  },
+  {
+   "id": "arctic_b0514",
+   "set": "b",
+   "text": "Tomorrow or next day it might he gone."
+  },
+  {
+   "id": "arctic_b0515",
+   "set": "b",
+   "text": "But already he had composed himself."
+  },
+  {
+   "id": "arctic_b0516",
+   "set": "b",
+   "text": "Zilla relaxed her sour mouth long enough to sigh her satisfaction."
+  },
+  {
+   "id": "arctic_b0517",
+   "set": "b",
+   "text": "Eggshell is not good to eat."
+  },
+  {
+   "id": "arctic_b0518",
+   "set": "b",
+   "text": "But there was also talk of witchcraft in the village."
+  },
+  {
+   "id": "arctic_b0519",
+   "set": "b",
+   "text": "Yea, I will tell thee."
+  },
+  {
+   "id": "arctic_b0520",
+   "set": "b",
+   "text": "Hans hurled himself upon the prostrate man, striking madly with his fists."
+  },
+  {
+   "id": "arctic_b0521",
+   "set": "b",
+   "text": "And he thought of Oona, and of her words."
+  },
+  {
+   "id": "arctic_b0522",
+   "set": "b",
+   "text": "Nor would it thaw out his hands and feet."
+  },
+  {
+   "id": "arctic_b0523",
+   "set": "b",
+   "text": "The Russian music player, the Count, was her obedient slave."
+  },
+  {
+   "id": "arctic_b0524",
+   "set": "b",
+   "text": "So far as flags were concerned, they were beyond all jurisdiction."
+  },
+  {
+   "id": "arctic_b0525",
+   "set": "b",
+   "text": "New idea, he volunteered, brand new idea."
+  },
+  {
+   "id": "arctic_b0526",
+   "set": "b",
+   "text": "Thirty pounds, said the captain with finality."
+  },
+  {
+   "id": "arctic_b0527",
+   "set": "b",
+   "text": "The very idea of it was preposterous."
+  },
+  {
+   "id": "arctic_b0528",
+   "set": "b",
+   "text": "Captain Doane's orders were swiftly obeyed."
+  },
+  {
+   "id": "arctic_b0529",
+   "set": "b",
+   "text": "Come on, Del Mar challenged."
+  },
+  {
+   "id": "arctic_b0530",
+   "set": "b",
+   "text": "He had a big chimpanzee that was a winner."
+  },
+  {
+   "id": "arctic_b0531",
+   "set": "b",
+   "text": "I am sure it must have been some adventure."
+  },
+  {
+   "id": "arctic_b0532",
+   "set": "b",
+   "text": "That Longfellow chap most likely had written countless books of poetry."
+  },
+  {
+   "id": "arctic_b0533",
+   "set": "b",
+   "text": "His abnormal power of vision made abstractions take on concrete form."
+  },
+  {
+   "id": "arctic_b0534",
+   "set": "b",
+   "text": "I'll tell you, the librarian said with a brightening face."
+  },
+  {
+   "id": "arctic_b0535",
+   "set": "b",
+   "text": "He read his fragments aloud."
+  },
+  {
+   "id": "arctic_b0536",
+   "set": "b",
+   "text": "Typhoid -- did I tell you."
+  },
+  {
+   "id": "arctic_b0537",
+   "set": "b",
+   "text": "But she had become an automaton."
+  },
+  {
+   "id": "arctic_b0538",
+   "set": "b",
+   "text": "At the best, they were necessary accessories."
+  },
+  {
+   "id": "arctic_b0539",
+   "set": "b",
+   "text": "You were making them talk shop, Ruth charged him."
+  }
+ ]
+}

@@ -28,6 +28,21 @@ releaseInfo:
 asarUnpack:
   - "**/node_modules/@neplex/**"
 
+# 音声機能の Python 補助スクリプトと、外部から取り込んだデータ (学習用の読み上げ文とそのライセンス)。
+# 仮想環境の Python から直接読むため asar に入れない
+extraResources:
+  - from: src/python
+    to: python
+    filter:
+      - "**/*.py"
+      - "requirements/*.in"
+      - "requirements/*.lock.txt"
+  - from: third_party
+    to: third_party
+  # AGPL-3.0 で配布するため、ライセンス本文を配布物に含める
+  - from: LICENSE
+    to: LICENSE.txt
+
 files:
   - dist/**/*
   - public/**/*
@@ -78,6 +93,7 @@ mac:
     NSRemovableVolumesUsageDescription: "Kura Toolkit searches removable volumes for junk files to clean up."
     NSNetworkVolumesUsageDescription: "Kura Toolkit searches network volumes for junk files to clean up."
     NSFileProviderDomainUsageDescription: "Kura Toolkit searches cloud storage folders for junk files to clean up."
+    NSMicrophoneUsageDescription: "Kura Toolkit records your voice to train voice models for Voice Conversion and Text to Speech."
   target:
     - target: dmg
       arch:

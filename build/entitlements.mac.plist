@@ -33,6 +33,11 @@
     <key>com.apple.security.files.user-selected.read-write</key>
     <true/>
 
+    <!-- Allow microphone input under Hardened Runtime -->
+    <!-- Required to record training voices for Voice Conversion and Text to Speech -->
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
+
     <!-- Note on file access:
          The app is not sandboxed, so file access is governed by macOS TCC rather than
          entitlements. Reading protected locations (Desktop, Documents, Downloads,

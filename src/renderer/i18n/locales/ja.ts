@@ -1,3 +1,5 @@
+import jaVoice from './ja-voice';
+
 export default {
     appTitle: 'Kura Toolkit',
     common: {
@@ -11,6 +13,7 @@ export default {
         checkAll: '全てチェック',
         ffmpegNotFound: 'ffmpeg が見つかりません。アプリ設定でパスを指定してください。',
         ffprobeNotFound: 'ffprobe が見つかりません。アプリ設定でパスを指定してください。',
+        workDirMissing: '作業ディレクトリが見つかりません。アプリ設定の「保存場所」で確認してください。({{detail}})',
         dropHint: 'ここにファイルをドラッグ&ドロップ\nまたはクリックして選択',
     },
     nav: {
@@ -29,6 +32,18 @@ export default {
         audioNormalizer: {
             title: 'オーディオ正規化',
             desc: '音声ファイルのラウドネス (LUFS) を解析し、指定値へ正規化します。',
+        },
+        separation: {
+            title: '音声分離',
+            desc: '楽曲や音声をボーカル・伴奏・楽器などに分離します。結果を聞き比べて採用し、さらに分離を重ねられます。',
+        },
+        conversion: {
+            title: '音声変換',
+            desc: '歌声や話し声を別の声に変換し、伴奏と合わせて書き出します。声のモデルの学習もできます。',
+        },
+        tts: {
+            title: '読み上げ',
+            desc: 'テキストや字幕 (SRT/WebVTT) を指定した声で読み上げます。声のモデルの学習もできます。',
         },
         chapterCut: {
             title: 'チャプターカット',
@@ -240,6 +255,53 @@ export default {
         detectedPath: '検出されたパス: {{path}}',
         notDetected: '検出できませんでした',
         saveFailed: '設定の保存に失敗しました。変更はこの起動中のみ有効です。({{error}})',
+        storageSection: '保存場所',
+        storage: {
+            library: 'ライブラリディレクトリ',
+            libraryHint: 'アプリが使用するライブラリの保存先です。',
+            model: 'モデルディレクトリ',
+            modelHint: 'アプリが使用するモデルの保存先です。',
+            work: '作業ディレクトリ',
+            workHint: '処理中の一時ファイルの保存先です。',
+            isDefault: '既定',
+            move: '移動...',
+            change: '変更...',
+            resetDefault: '既定の場所に戻す',
+            moreActions: 'その他の操作',
+            moveTitle: '{{name}}を移動します',
+            moveMessage: '中身を選んだフォルダへ移動します。容量によっては時間がかかります。',
+            moveRun: '移動する',
+            moving: '{{name}}を移動しています',
+            moved: '{{name}}を移動しました。',
+            cancelled: '移動を中止しました。元の場所をそのまま使います。',
+            workChanged: '作業ディレクトリを変更しました。',
+            previousRemains: '元の場所 ({{path}}) は消せなかったため残っています。不要であれば削除してください。',
+            rebuildRequired: '移動後に使えなくなったパッケージ一式があります。取得し直してください。',
+            nonAscii:
+                '半角英数字以外の文字を含む場所では、正しく動かないことがあります。半角英数字だけの場所をおすすめします。',
+            errors: {
+                STORAGE_MOVE_NESTED: '今の場所の中や、今の場所を含む場所へは移動できません。',
+                STORAGE_OVERLAP: 'ほかの保存場所 (ライブラリ・モデル・作業ディレクトリ) と重なる場所は選べません。',
+                STORAGE_TARGET_NOT_EMPTY:
+                    '選んだフォルダが空ではありません。空のフォルダを選んでください。({{detail}})',
+                STORAGE_IN_USE:
+                    '中のファイルがほかのプログラムで使用中のため移動できませんでした。元の場所をそのまま使います。使用しているプログラムを閉じてから、もう一度お試しください。({{detail}})',
+                STORAGE_LINK_LOOP: 'フォルダの中に、自分自身を指すリンクがあるため移動できません。({{detail}})',
+                WORK_DIR_IN_USE:
+                    '処理中のものや作業中の結果 (候補など) があるため変更できません。処理が終わってから、または作業を破棄してから変更してください。',
+                SETTINGS_SAVE_FAILED: '設定を保存できませんでした。({{detail}})',
+            },
+        },
+    },
+    settingsLoadError: {
+        title: '設定ファイルを読み込めませんでした',
+        message:
+            '設定ファイルが壊れているか、読み込めない状態です。既定の設定で続けるか、アプリを終了してファイルを確認してください。',
+        keepNote:
+            '既定の設定で続けると、読み込めなかったファイルは同じ場所に別の名前 (settings.broken-日時.json) で残します。',
+        continue: '既定の設定で続ける',
+        quit: '終了する',
+        kept: '読み込めなかった設定ファイルを {{path}} として残しました。',
     },
     updater: {
         confirm: '新しいバージョン v{{version}} が利用可能です。アップデートしますか？',
@@ -251,4 +313,5 @@ export default {
         retry: '再試行',
         close: '閉じる',
     },
+    voice: jaVoice,
 };

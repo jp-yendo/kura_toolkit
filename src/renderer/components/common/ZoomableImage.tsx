@@ -26,7 +26,15 @@ type Props = {
 };
 
 // 画像の拡大縮小表示。Ctrl + ホイールで拡大縮小、はみ出しているときはドラッグで移動できる。
-export default function ZoomableImage({ src, alt, scale, onScaleChange, onEffectiveScaleChange, placeholder, sx }: Props) {
+export default function ZoomableImage({
+    src,
+    alt,
+    scale,
+    onScaleChange,
+    onEffectiveScaleChange,
+    placeholder,
+    sx,
+}: Props) {
     const containerRef = React.useRef<HTMLDivElement>(null);
     const [natural, setNatural] = React.useState<{ width: number; height: number } | null>(null);
     const [viewport, setViewport] = React.useState<{ width: number; height: number } | null>(null);

@@ -12,10 +12,7 @@ type Props = {
 // 画面内のセクション見出し。ダッシュボードのカテゴリ見出しと同じ体裁に揃える。
 export default function SectionLabel({ children, action, sx }: Props) {
     return (
-        <Stack
-            direction='row'
-            sx={{ justifyContent: 'space-between', alignItems: 'center', minHeight: 28, ...sx }}
-        >
+        <Stack direction='row' sx={{ justifyContent: 'space-between', alignItems: 'center', minHeight: 28, ...sx }}>
             <Typography
                 variant='overline'
                 sx={{ color: 'text.secondary', fontWeight: 700, letterSpacing: '0.08em', lineHeight: 1.6 }}

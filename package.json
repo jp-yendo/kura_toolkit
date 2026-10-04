@@ -16,7 +16,7 @@
     "dev:electron": "wait-on dist/main/index.js http://localhost:3001 && electron . --dev",
     "build": "tsc -p tsconfig.main.json && vite build",
     "start": "electron .",
-    "format": "prettier --write \"src/**/*.{ts,js,css,json}\"",
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,css,json}\"",
     "lint": "tsc --noEmit",
     "eslint": "eslint src",
     "dist:win": "yarn build && electron-builder --win --publish=never",
@@ -31,12 +31,14 @@
     "kura-toolkit"
   ],
   "author": "jp-yendo",
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "devDependencies": {
     "@types/archiver": "^7.0.0",
     "@types/node": "^22.20.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "@types/yauzl": "^3.4.0",
+    "@types/yazl": "^3.3.1",
     "@typescript-eslint/eslint-plugin": "^8.63.0",
     "@typescript-eslint/parser": "^8.63.0",
     "@vitejs/plugin-react": "^6.0.3",
@@ -67,6 +69,9 @@
     "react-dom": "^19.2.7",
     "react-i18next": "^17.0.9",
     "react-router-dom": "^7.18.1",
+    "tar": "^7.5.22",
+    "yauzl": "^3.4.0",
+    "yazl": "^3.3.1",
     "zustand": "^5.0.14"
   }
 }

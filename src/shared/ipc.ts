@@ -23,10 +23,148 @@ import type {
     FileFilter,
     ImagePreview,
     JobEvent,
+    SettingsLoadError,
     SettingsUpdateResult,
+    StorageInfo,
+    StorageKind,
+    StorageMoveResult,
     UpdateState,
     VectorizeParams,
 } from './types';
+import type { CorpusSetId, TtsEngineId, VoiceLanguage } from './voice/languages';
+import type {
+    AudioExportSettings,
+    ConversionCandidate,
+    ConversionRunRequest,
+    DatasetItem,
+    ExportItem,
+    ExportResult,
+    FeatureReadiness,
+    ImportInspection,
+    LibraryDownloadResult,
+    LibraryItem,
+    LibraryRemoveResult,
+    LibraryStatus,
+    MediaRef,
+    MixParams,
+    MixRenderRequest,
+    PreparedInput,
+    PresetKind,
+    PresetRecord,
+    SeparationCandidate,
+    SeparationModelList,
+    SeparationPresetParams,
+    SeparationRunRequest,
+    TtsInputKind,
+    TtsRunRequest,
+    TtsRunResult,
+    TtsTrainingDraft,
+    VoiceFeatureId,
+    VoiceModelFeature,
+    VoiceModelInfo,
+} from './voice/types';
+
+export type VoicePresetParams = SeparationPresetParams | MixParams;
+
+// 音声分離・音声変換・読み上げの API
+export type VoiceApi = {
+    library: {
+        getStatus(): Promise<LibraryStatus>;
+        // GPU やドライバーを検出し直す
+        refreshPlatform(): Promise<LibraryStatus>;
+        checkFeature(feature: VoiceFeatureId, extra?: string[]): Promise<FeatureReadiness>;
+        download(jobId: string, ids: string[]): Promise<LibraryDownloadResult>;
+        remove(ids: string[], options?: { removePython?: boolean }): Promise<LibraryRemoveResult>;
+        refreshSeparatorModels(): Promise<LibraryStatus>;
+        probeSeparatorSizes(): Promise<LibraryStatus>;
+        getPendingUpdates(): Promise<{ items: LibraryItem[]; promptNeeded: boolean }>;
+        markUpdatePrompted(): Promise<void>;
+    };
+    // https の URL を外部ブラウザで開く (ライセンス・配布元など)
+    openExternal(url: string): Promise<void>;
+    // マイクの利用許可 (macOS)
+    requestMicrophone(): Promise<boolean>;
+    media: {
+        prepareInput(jobId: string, workKey: string, sourcePath: string): Promise<PreparedInput>;
+        mix(jobId: string, workKey: string, paths: string[], channels: number): Promise<MediaRef>;
+        discard(paths: string[]): Promise<void>;
+        discardWork(workKey: string): Promise<void>;
+        // 作業ディレクトリ内の音声を再生できるようにする
+        ref(path: string): Promise<MediaRef>;
+    };
+    separation: {
+        listModels(refresh?: boolean): Promise<SeparationModelList>;
+        run(jobId: string, request: SeparationRunRequest): Promise<SeparationCandidate>;
+    };
+    conversion: {
+        run(jobId: string, request: ConversionRunRequest): Promise<ConversionCandidate>;
+        renderMix(jobId: string, request: MixRenderRequest): Promise<MediaRef>;
+        hasRubberband(): Promise<boolean>;
+    };
+    tts: {
+        run(jobId: string, request: TtsRunRequest): Promise<TtsRunResult>;
+        cancelConfirmation(token: string): Promise<void>;
+        loadText(path: string): Promise<{ text: string; kind: TtsInputKind }>;
+        saveText(path: string, text: string): Promise<void>;
+    };
+    models: {
+        list(feature: VoiceModelFeature): Promise<VoiceModelInfo[]>;
+        rename(feature: VoiceModelFeature, id: string, name: string): Promise<VoiceModelInfo>;
+        setLanguages(id: string, languages: VoiceLanguage[]): Promise<VoiceModelInfo>;
+        remove(feature: VoiceModelFeature, id: string): Promise<void>;
+        export(feature: VoiceModelFeature, id: string, destPath: string): Promise<void>;
+        inspectImport(feature: VoiceModelFeature, paths: string[]): Promise<ImportInspection>;
+        commitImport(
+            token: string,
+            options: { name: string; allowUnsafe: boolean; languages?: VoiceLanguage[] }
+        ): Promise<VoiceModelInfo>;
+        cancelImport(token: string): Promise<void>;
+        // 外部で入手したモデルの取り込みで、確認画面で選び直したファイルで調べ直す
+        chooseImportFiles(token: string, model: string, index: string | null): Promise<ImportInspection>;
+        openHubSearch(feature: VoiceModelFeature): Promise<void>;
+    };
+    presets: {
+        list(kind: PresetKind): Promise<PresetRecord<VoicePresetParams>[]>;
+        save(
+            kind: PresetKind,
+            preset: { id?: string; name: string; params: VoicePresetParams }
+        ): Promise<PresetRecord<VoicePresetParams>[]>;
+        rename(kind: PresetKind, id: string, name: string): Promise<PresetRecord<VoicePresetParams>[]>;
+        remove(kind: PresetKind, id: string): Promise<PresetRecord<VoicePresetParams>[]>;
+    };
+    training: {
+        rvcDataset(): Promise<DatasetItem[]>;
+        rvcAddFiles(jobId: string, paths: string[]): Promise<DatasetItem[]>;
+        rvcAddRecording(wav: Uint8Array, name: string): Promise<DatasetItem>;
+        rvcRemove(id: string): Promise<void>;
+        rvcClear(): Promise<void>;
+        rvcStart(jobId: string, name: string): Promise<VoiceModelInfo>;
+        ttsDraft(language: VoiceLanguage, set: CorpusSetId): Promise<TtsTrainingDraft>;
+        ttsSaveRecording(
+            language: VoiceLanguage,
+            set: CorpusSetId,
+            sentenceId: string,
+            wav: Uint8Array
+        ): Promise<DatasetItem>;
+        ttsSetFile(
+            jobId: string,
+            language: VoiceLanguage,
+            set: CorpusSetId,
+            sentenceId: string,
+            path: string
+        ): Promise<DatasetItem>;
+        ttsRemove(language: VoiceLanguage, set: CorpusSetId, sentenceId: string): Promise<void>;
+        ttsClear(language: VoiceLanguage, set: CorpusSetId): Promise<void>;
+        ttsStart(
+            jobId: string,
+            options: { language: VoiceLanguage; corpusSet: CorpusSetId; engine: TtsEngineId; name: string }
+        ): Promise<VoiceModelInfo>;
+    };
+    export: {
+        run(jobId: string, items: ExportItem[], settings: AudioExportSettings): Promise<ExportResult>;
+        existing(paths: string[]): Promise<string[]>;
+    };
+};
 
 // IPC APIの型定義
 export type IpcApi = {
@@ -47,6 +185,21 @@ export type IpcApi = {
         get(): Promise<AppSettings>;
         // 保存に失敗しても起動中の設定は更新され、理由が saveError で返る
         update(patch: DeepPartial<AppSettings>): Promise<SettingsUpdateResult>;
+        // 設定ファイルを読み込めなかった場合の内容 (読み込めた場合は null)
+        getLoadError(): Promise<SettingsLoadError | null>;
+        // 読み込めなかった設定ファイルを別の名前で残し、既定の設定で保存し直す。残した場所を返す
+        resetBroken(): Promise<string>;
+    };
+    // 保存場所 (ライブラリ・モデル・作業ディレクトリ)
+    storage: {
+        getInfo(): Promise<StorageInfo>;
+        // ライブラリ・モデルディレクトリの中身を選んだフォルダへ移動し、そのフォルダを新しい場所にする
+        // (進捗は job:event)。targetDir が null の場合は既定の場所へ戻す
+        move(jobId: string, kind: Exclude<StorageKind, 'work'>, targetDir: string | null): Promise<StorageMoveResult>;
+        // 作業ディレクトリの場所を変える (空文字で既定に戻す)
+        setWorkDir(dir: string): Promise<StorageInfo>;
+        // 移動を始める前に、移動先を選べるか (空のフォルダか、ほかの保存場所と重ならないか) を確かめる
+        checkMove(kind: Exclude<StorageKind, 'work'>, targetDir: string | null): Promise<void>;
     };
     // ffmpeg/ffprobe の自動検出
     ffmpeg: {
@@ -102,6 +255,8 @@ export type IpcApi = {
         scan(jobId: string, options: { roots: string[]; targets: CleanupTargetId[] }): Promise<CleanupScanResult>;
         remove(jobId: string, items: CleanupItem[]): Promise<CleanupRemoveResult>;
     };
+    // 音声分離・音声変換・読み上げ
+    voice: VoiceApi;
     // 自動アップデート (electron-updater)
     updater: {
         // 起動時の状態を取得 (UI 初期化に利用)

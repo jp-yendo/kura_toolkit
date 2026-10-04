@@ -1,5 +1,4 @@
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 import { isCancelledError, runFfmpeg } from '../ffmpeg/ffmpeg';
 import { findKeyframeBefore, findNearestKeyframe } from './keyframe';
@@ -8,6 +7,7 @@ import { buildMetadata } from './metadata';
 import { extractSubtitleRange, extractTextSubtitle, retimeSubtitleFile, TEXT_SUBTITLE_EXTRACT } from './subtitles';
 import { findVideoStreamIndex, probeMedia, probeSubtitlePalette, type FfStream } from './probe';
 import type { ChapterInfo } from '../../../shared/types';
+import { newJobTempDir, produceFile, removeTemp } from '../work-dir';
 
 // チャプター範囲の切り抜き本体 (元: cut-chapter.py の cut_range)
 
@@ -146,10 +146,10 @@ export async function cutRange(options: CutRangeOptions): Promise<void> {
     //   pass1: チャプターなしで切り抜く
     //   pass2: 実測した開始時刻ずれで補正したチャプターを付けてリマックス
     const outExt = path.extname(output);
-    const outBase = output.slice(0, output.length - outExt.length);
-    const tempOutput = `${outBase}.tmp${outExt}`;
-    let metaPath: string | null = null;
-    let pass2Started = false;
+    // 一時ファイル (pass1 の出力・切り出した字幕・カバーアート・チャプター情報) は作業ディレクトリの
+    // この処理用のフォルダに置き、終わったらフォルダごと消す
+    const tempDir = newJobTempDir('chapter');
+    const tempOutput = path.join(tempDir, `pass1${outExt}`);
     // 切り出した字幕ファイルと、pass2 で合流させるときに足す時刻のずれ
     const subTempPaths: Array<{ path: string; offset: number }> = [];
     // 取り出したカバーアートの画像
@@ -279,17 +279,12 @@ export async function cutRange(options: CutRangeOptions): Promise<void> {
             } catch (error) {
                 if (isCancelledError(error)) throw error;
                 log(`  note: cover art (v:${videoIndex}) could not be extracted; it is dropped`);
-                try {
-                    if (fs.existsSync(imagePath)) fs.unlinkSync(imagePath);
-                } catch {
-                    // 削除失敗は無視
-                }
             }
         }
 
         // メタデータは一時ファイル経由で渡す (書き込みを閉じてから ffmpeg を実行する)
         const metaText = buildMetadata(chapters, first, last, base);
-        metaPath = path.join(os.tmpdir(), `kura-chapter-meta-${process.pid}-${Date.now()}.txt`);
+        const metaPath = path.join(tempDir, 'chapters.txt');
         fs.writeFileSync(metaPath, metaText, 'utf-8');
 
         const pass2 = [
@@ -349,25 +344,12 @@ export async function cutRange(options: CutRangeOptions): Promise<void> {
             if (stream.disposition?.forced) flags.push('forced');
             pass2.push(`-disposition:s:${j}`, flags.length > 0 ? flags.join('+') : '0');
         }
-        pass2.push(output);
-        pass2Started = true;
-        await runFfmpeg(pass2, { jobId });
+        // 出力は同じフォルダに別の名前で書き、完成してから正式な名前にする。
+        // 失敗・キャンセルしたら書きかけだけを消す (上書きする場合も、元のファイルはそのまま残る)
+        await produceFile(output, target => runFfmpeg([...pass2, target], { jobId }));
         log('done');
-    } catch (error) {
-        // 失敗またはキャンセル時は書きかけの出力を削除する
-        try {
-            if (pass2Started && fs.existsSync(output)) fs.unlinkSync(output);
-        } catch {
-            // 削除失敗は無視
-        }
-        throw error;
     } finally {
-        for (const tempPath of [metaPath, tempOutput, ...subTempPaths.map(sub => sub.path), ...coverPaths]) {
-            try {
-                if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-            } catch {
-                // 一時ファイルの削除失敗は無視
-            }
-        }
+        // 成否・キャンセルを問わず消す (消せなかったものは次の起動時に消す)
+        await removeTemp(tempDir);
     }
 }
