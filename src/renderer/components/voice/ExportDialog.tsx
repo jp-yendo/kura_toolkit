@@ -132,7 +132,10 @@ export default function ExportDialog({ open, onClose, entries, sourcePath }: Pro
             if (result.failed.length > 0) {
                 showNotice(
                     'error',
-                    t('voice.export.failed', { count: result.failed.length, error: result.failed[0].error }),
+                    t('voice.export.failed', {
+                        count: result.failed.length,
+                        error: voiceErrorMessage(t, result.failed[0].error),
+                    }),
                     10000
                 );
                 return;

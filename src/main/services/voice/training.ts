@@ -1,10 +1,10 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { emitJobEvent, finishJob, startJob } from '../job-manager';
+import { emitJobEvent, finishJob, isCancelled, startJob } from '../job-manager';
 import { probeAudio } from './audio-tools';
 import { checkFeature, isItemInstalled } from './library';
-import { mediaUrl } from './media-protocol';
+import { forgetMedia, mediaUrl } from './media-protocol';
 import { bundledResourceDir, envPythonExecutable, libraryPaths, modelPaths } from './paths';
 import { cpuCount, getPlatformInfo } from './platform';
 import { buildPythonEnv } from './python-env';
@@ -22,6 +22,7 @@ import {
 } from './voice-models';
 import {
     LANGUAGE_DEFINITIONS,
+    ttsTrainingItems,
     type CorpusSetId,
     type TtsEngineId,
     type VoiceLanguage,
@@ -60,7 +61,8 @@ function toItem(entry: DatasetEntry): DatasetItem {
         recorded: entry.recorded,
         media: {
             path: entry.path,
-            url: mediaUrl(entry.path),
+            // 指定したファイルが移動・削除された場合は再生できない (学習の開始時に TRAINING_FILE_MISSING で知らせる)
+            url: fs.existsSync(entry.path) ? mediaUrl(entry.path) : '',
             durationSec: entry.durationSec,
             channels: entry.channels,
             sampleRate: entry.sampleRate,
@@ -68,8 +70,14 @@ function toItem(entry: DatasetEntry): DatasetItem {
     };
 }
 
-async function probeEntry(id: string, name: string, filePath: string, recorded: boolean): Promise<DatasetEntry> {
-    const info = await probeAudio(filePath);
+async function probeEntry(
+    id: string,
+    name: string,
+    filePath: string,
+    recorded: boolean,
+    jobId?: string
+): Promise<DatasetEntry> {
+    const info = await probeAudio(filePath, jobId);
     return {
         id,
         name,
@@ -108,6 +116,7 @@ async function storeRecording(id: string, name: string, target: string, wav: Uin
 // 一覧から外したものの後始末。録音は消し、指定されたファイルは利用者のファイルなので消さない
 function discardEntries(entries: Iterable<DatasetEntry>): void {
     for (const entry of entries) {
+        forgetMedia(entry.path);
         if (entry.recorded) void removeTemp(entry.path);
     }
 }
@@ -132,6 +141,7 @@ export async function addRvcFiles(jobId: string, paths: string[]): Promise<Datas
     try {
         const added: DatasetItem[] = [];
         for (let i = 0; i < paths.length; i++) {
+            if (isCancelled(jobId)) break;
             emitJobEvent({
                 jobId,
                 kind: 'progress',
@@ -143,7 +153,7 @@ export async function addRvcFiles(jobId: string, paths: string[]): Promise<Datas
             checkAudioFile(source);
             // 同じファイルは重ねて加えない
             if ([...rvcEntries.values()].some(entry => !entry.recorded && entry.path === source)) continue;
-            const entry = await probeEntry(crypto.randomUUID(), path.basename(source), source, false);
+            const entry = await probeEntry(crypto.randomUUID(), path.basename(source), source, false, jobId);
             rvcEntries.set(entry.id, entry);
             added.push(toItem(entry));
         }
@@ -267,7 +277,7 @@ export async function setTtsSentenceFile(
         requireSentence(language, set, sentenceId);
         const filePath = path.resolve(source);
         checkAudioFile(filePath);
-        const entry = await probeEntry(sentenceId, path.basename(filePath), filePath, false);
+        const entry = await probeEntry(sentenceId, path.basename(filePath), filePath, false, jobId);
         setSentenceEntry(language, set, entry);
         return toItem(entry);
     } finally {
@@ -402,10 +412,10 @@ async function trainRvc(jobId: string, name: string): Promise<VoiceModelInfo> {
     const modelName = internalModelName();
     const applio = libraryPaths().source('converter');
     const pretrained = `${CONVERTER_MODEL_DIR}/pretraineds/hifi-gan`;
-    // 完成したモデルは作成中の置き場に直接書かせ、完成してから声のモデルとして登録する
-    const { id, dir } = newVoiceDir('converter');
     // 駆動スクリプトへの指示と学習の途中のデータの置き場 (学習が終わったら消す)
     const temp = newJobTempDir('training');
+    // 完成したモデルは作成中の置き場に直接書かせ、完成してから声のモデルとして登録する
+    const { id, dir } = newVoiceDir('converter');
     try {
         await withGpu(jobId, 'training', () =>
             runDriver(
@@ -469,8 +479,7 @@ async function trainTts(jobId: string, options: TtsTrainingOptions): Promise<Voi
         'component:tts',
         'component:tts-train',
         TTS_ENGINE_ITEMS['jp-extra'],
-        ...(options.engine === 'multilingual' || options.language === 'en' ? [TTS_ENGINE_ITEMS.multilingual] : []),
-        options.engine === 'jp-extra' ? 'model:tts:train-jp-extra' : 'model:tts:train-multilingual',
+        ...ttsTrainingItems(options.engine, options.language),
     ];
     const missing = required.filter(item => !isItemInstalled(item));
     if (missing.length > 0) throw new Error(`MODEL_REQUIRED: ${missing.join(', ')}`);
@@ -494,10 +503,10 @@ async function trainTts(jobId: string, options: TtsTrainingOptions): Promise<Voi
     const epochs = Math.max(20, Math.min(200, Math.round(8000 / stepsPerEpoch)));
     const modelName = internalModelName();
     const repo = libraryPaths().source('tts');
-    // 完成したモデルは作成中の置き場に直接書かせ、完成してから声のモデルとして登録する
-    const { id, dir } = newVoiceDir('tts');
     // 駆動スクリプトへの指示と学習の途中のデータの置き場 (学習が終わったら消す)
     const temp = newJobTempDir('training');
+    // 完成したモデルは作成中の置き場に直接書かせ、完成してから声のモデルとして登録する
+    const { id, dir } = newVoiceDir('tts');
     try {
         await withGpu(jobId, 'training', () =>
             runDriver(

@@ -17,6 +17,8 @@ type PresetFile = {
 };
 
 function presetPath(kind: PresetKind): string {
+    // 種類は renderer から渡されるため、決まった名前に限る (ファイル名に使うため)
+    if (kind !== 'separation' && kind !== 'mix') throw new Error(`INVALID_PRESET_KIND: ${String(kind)}`);
     return path.join(getAppRootDir(), 'voice-presets', `${kind}.json`);
 }
 

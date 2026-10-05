@@ -24,7 +24,7 @@ export function registerStorageIpcHandlers() {
         if (target !== null) {
             // 処理中は、その処理が今の作業ディレクトリを使っているため変えない
             if (hasActiveJobs()) throw new Error('WORK_DIR_IN_USE');
-            checkWorkDirIdle();
+            await checkWorkDirIdle();
             // 待機中の補助プロセスは、今の作業ディレクトリに一時ファイルの置き場を持ち続けるため止める
             // (次に使うときに新しい場所で起動する)
             await stopAllWorkersAndWait();

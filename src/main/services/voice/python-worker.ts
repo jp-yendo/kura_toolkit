@@ -35,8 +35,31 @@ type WorkerRequestOptions = {
 // 標準エラーの末尾を保持する行数 (異常終了時の原因として返すため)
 const STDERR_TAIL_LINES = 60;
 
+// プロセスが終了済みか (起動できなかったプロセスは pid を持たず、exit も来ない)
+function hasExited(child: ChildProcess): boolean {
+    return child.pid === undefined || child.exitCode !== null || child.signalCode !== null;
+}
+
+// プロセスの終了を待つ。時間内に終了しなければ PYTHON_STOP_TIMEOUT で失敗させる
+function waitForExit(child: ChildProcess, timeoutMs: number): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+        if (hasExited(child)) {
+            resolve();
+            return;
+        }
+        const timer = setTimeout(() => reject(new Error('PYTHON_STOP_TIMEOUT')), timeoutMs);
+        child.once('exit', () => {
+            clearTimeout(timer);
+            resolve();
+        });
+    });
+}
+
 class PythonWorker {
     private child: ChildProcess | null = null;
+    // 終了させたが、まだ終了していないプロセス。ファイルを掴んだままの可能性があるため、終了するまで覚えておき、
+    // killAndWait で終了を待てるようにする
+    private stopping = new Set<ChildProcess>();
     private nextId = 1;
     private pending = new Map<number, PendingRequest>();
     private stderrTail: string[] = [];
@@ -176,23 +199,11 @@ class PythonWorker {
         return result;
     }
 
-    // プロセスを終了させ、終了するまで待つ。時間内に終了しなければ PYTHON_STOP_TIMEOUT で失敗させる
-    killAndWait(timeoutMs: number): Promise<void> {
-        const child = this.child;
-        if (!child) return Promise.resolve();
-        const exited = new Promise<void>((resolve, reject) => {
-            if (child.exitCode !== null || child.signalCode !== null) {
-                resolve();
-                return;
-            }
-            const timer = setTimeout(() => reject(new Error('PYTHON_STOP_TIMEOUT')), timeoutMs);
-            child.once('exit', () => {
-                clearTimeout(timer);
-                resolve();
-            });
-        });
+    // プロセスを終了させ、終了させたことのあるプロセスも含めてすべて終了するまで待つ。
+    // 時間内に終了しなければ PYTHON_STOP_TIMEOUT で失敗させる
+    async killAndWait(timeoutMs: number): Promise<void> {
         this.kill(false);
-        return exited;
+        await Promise.all([...this.stopping].map(child => waitForExit(child, timeoutMs)));
     }
 
     // プロセスを終了させる。cancelled = true の場合、処理中の要求はキャンセルとして失敗させる。
@@ -202,6 +213,10 @@ class PythonWorker {
         const child = this.child;
         if (!child) return;
         this.child = null;
+        if (!hasExited(child)) {
+            this.stopping.add(child);
+            child.once('exit', () => this.stopping.delete(child));
+        }
         this.rejectPending(cancelled ? new Error('KURA_CANCELLED') : new Error('PYTHON_WORKER_EXITED: stopped'));
         killTree(child);
     }

@@ -33,7 +33,11 @@ const VOWELS: Record<string, string> = {
 
 const CONSONANTS: Record<string, string> = {
     tʃ: 'CH',
+    t͡ʃ: 'CH',
+    t͜ʃ: 'CH',
     dʒ: 'JH',
+    d͡ʒ: 'JH',
+    d͜ʒ: 'JH',
     b: 'B',
     d: 'D',
     ð: 'DH',

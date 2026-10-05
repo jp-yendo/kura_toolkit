@@ -635,6 +635,7 @@ export default {
             'The number of pronounced words ({{value}}) does not match the number of wrapped words ({{expected}}).',
         subtitleTimestamp: 'A subtitle timing line is invalid (for example 00:00:01,000 --> 00:00:03,500).',
         subtitleOrder: 'A subtitle ends before it starts.',
+        subtitleSequence: 'A subtitle starts before the previous one. Order the subtitles by start time.',
         subtitleHeader: 'The WebVTT file does not start with a "WEBVTT" line.',
         subtitleEmpty: 'There are no subtitle cues.',
         formats: {
@@ -756,6 +757,8 @@ export default {
     },
     errors: {
         KURA_CANCELLED: 'Cancelled.',
+        SAMPLE_RATE_MISMATCH: 'The synthesized audio clips have different sample rates. ({{detail}})',
+        LIBRARY_BUSY: 'This cannot be done while something is being processed. Try again after it finishes.',
         PLATFORM_UNSUPPORTED: 'Voice features are not available on this system.',
         VC_RUNTIME_MISSING: 'The Microsoft Visual C++ Redistributable is required. Install it and try again.',
         PYTHON_MISSING: 'Python has not been downloaded.',
@@ -820,7 +823,7 @@ export default {
         TRAINING_FAILED: 'Training failed. ({{detail}})',
         TRAINING_STEP_FAILED: 'Training failed partway. ({{detail}})',
         TRAINING_NO_AUDIO: 'No usable audio was found for training (silence and very short audio cannot be used).',
-        TRAINING_EXTRACT_FAILED: 'The audio features could not be extracted.',
+        TRAINING_EXTRACT_FAILED: 'The audio features could not be extracted from these files. ({{detail}})',
         TRAINING_NO_MODEL: 'Training finished, but no model was created. ({{detail}})',
         TRAINING_NO_INDEX: 'Training finished, but the index could not be created. ({{detail}})',
         TRAINING_PRETRAINED_MISSING: 'The pretrained model for training is missing. Get it from Downloads.',

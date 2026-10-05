@@ -59,6 +59,7 @@ import { isCancelledError, missingItemsFromError, voiceErrorMessage } from './vo
 import { useJobRunner } from '../../hooks/useJobRunner';
 import { showNotice } from '../../stores/noticeStore';
 import { openVoiceLibrary, useVoiceLibraryStore } from '../../stores/voiceLibraryStore';
+import { discardPathsAfterHandoff } from '../../stores/voiceHandoffStore';
 import type { SeparationWorkStore } from '../../stores/separationWorkStore';
 import {
     ENSEMBLE_ALGORITHMS,
@@ -136,6 +137,8 @@ export default function SeparationWorkbench({ store, disabled }: Props) {
     const [play, setPlay] = React.useState<PlaySelection>({ kind: 'original' });
     const [overlay, setOverlay] = React.useState<Overlay | null>(null);
     const overlayRef = React.useRef<Overlay | null>(null);
+    // 重ねた音を作っている途中の組み合わせ (最後に頼んだもの)
+    const pendingMixRef = React.useRef<string | null>(null);
     const [pendingAdoption, setPendingAdoption] = React.useState<{ index: number; patch: Partial<SepStage> } | null>(
         null
     );
@@ -192,9 +195,13 @@ export default function SeparationWorkbench({ store, disabled }: Props) {
     const mixKey = playStems.map(stem => stem.media.path).join('|');
     const sourceChannels = source?.channels ?? 2;
     React.useEffect(() => {
-        if (playStems.length < 2 || overlayRef.current?.key === mixKey) return;
+        if (playStems.length < 2 || overlayRef.current?.key === mixKey) {
+            pendingMixRef.current = null;
+            return;
+        }
         let cancelled = false;
         const jobId = crypto.randomUUID();
+        pendingMixRef.current = mixKey;
         void window.kuraToolkit.voice.media
             .mix(
                 jobId,
@@ -203,9 +210,15 @@ export default function SeparationWorkbench({ store, disabled }: Props) {
                 sourceChannels
             )
             .then(media => {
-                // 作っている間に選択が変わった場合は使わないので消す
-                if (cancelled) void window.kuraToolkit.voice.media.discard([media.path]);
-                else replaceOverlay({ key: mixKey, media });
+                if (!cancelled) {
+                    pendingMixRef.current = null;
+                    replaceOverlay({ key: mixKey, media });
+                    return;
+                }
+                // 作っている間に選択が変わった場合は使わないので消す。同じ組み合わせは同じファイルになるため、
+                // 表示中の音や、作っている途中の組み合わせの音と同じ場合は残す
+                if (media.path !== overlayRef.current?.media.path && mixKey !== pendingMixRef.current)
+                    void window.kuraToolkit.voice.media.discard([media.path]);
             })
             .catch(error => showNotice('error', voiceErrorMessage(t, error)));
         return () => {
@@ -270,11 +283,12 @@ export default function SeparationWorkbench({ store, disabled }: Props) {
             category: t(`voice.separation.categories.${item.category}`),
         });
 
-    // 候補を破棄する (出力のファイルと、それを使った重ねた音を消す)
+    // 候補を破棄する (出力のファイルと、それを使った重ねた音を消す)。
+    // 変換の画面へ渡した出力は、変換の画面が使い終わってから消す
     const discardCandidates = (candidates: SeparationCandidate[]) => {
         const paths = candidates.flatMap(candidate => candidate.stems.map(stem => stem.media.path));
         if (paths.length === 0) return;
-        void window.kuraToolkit.voice.media.discard(paths);
+        discardPathsAfterHandoff(paths);
         if (overlayRef.current && paths.some(path => overlayRef.current?.key.split('|').includes(path)))
             replaceOverlay(null);
     };

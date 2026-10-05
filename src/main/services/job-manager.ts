@@ -53,6 +53,11 @@ export function hasActiveJobs(): boolean {
     return jobs.size > 0;
 }
 
+// 指定したジョブ以外の実行中のジョブの数 (jobId が null の場合は、実行中のジョブすべての数)
+export function countActiveJobsExcept(jobId: string | null): number {
+    return jobId !== null && jobs.has(jobId) ? jobs.size - 1 : jobs.size;
+}
+
 export function isCancelled(jobId: string): boolean {
     return jobs.get(jobId)?.cancelled ?? false;
 }

@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import shutil
 import sys
 from typing import Any, Dict, Tuple
 
@@ -73,8 +72,25 @@ def _instance(device: str) -> Any:
         safetensors with the settings in JSON, and the same checkpoint is built from them in memory.
         """
 
+        # Applio rewrites "trained" to "added" anywhere in the index path before using it, which breaks
+        # paths that contain the word (D:\pretrained\... and so on). The pipeline gets the real path instead.
+        index_path = ""
+
         def load_model(self, weight_root: str) -> None:
             self.cpt = _stored_checkpoint(weight_root)
+
+        def setup_vc_instance(self) -> None:
+            super().setup_vc_instance()
+            if self.vc is None:
+                return
+            pipeline = self.vc.pipeline
+
+            def run(*args: Any, **kwargs: Any) -> Any:
+                if "file_index" in kwargs:
+                    kwargs["file_index"] = self.index_path
+                return pipeline(*args, **kwargs)
+
+            self.vc.pipeline = run
 
     # Applio itself only picks CUDA or the CPU; setting the device also covers MPS and the CPU retry.
     Config().device = device
@@ -86,11 +102,6 @@ def _instance(device: str) -> Any:
 def rpc_convert(params: dict, context: Context) -> dict:
     output = params["output"]
     index = params["index"]
-    # Applio rewrites "trained" to "added" anywhere in the index path; avoid such paths.
-    if "trained" in index:
-        safe_index = os.path.join(params["tempDir"], "voice.index")
-        shutil.copyfile(index, safe_index)
-        index = safe_index
     kwargs = dict(
         audio_input_path=params["input"],
         audio_output_path=output,
@@ -119,7 +130,12 @@ def rpc_convert(params: dict, context: Context) -> dict:
         formant_shifting=False,
     )
     context.progress(0.05, "load")
-    runtime.run_with_cpu_fallback(lambda device: _instance(device).convert_audio(**kwargs), unload)
+    def convert(device: str) -> Any:
+        converter = _instance(device)
+        converter.index_path = index
+        return converter.convert_audio(**kwargs)
+
+    runtime.run_with_cpu_fallback(convert, unload)
     if not os.path.exists(output) or os.path.getsize(output) <= 44:
         raise KuraError("CONVERSION_FAILED")
     context.progress(1.0, "done")

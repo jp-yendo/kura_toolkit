@@ -1,5 +1,5 @@
 # Pinned dependencies of the separator component.
-# torch / torchaudio are chosen at install time and are not listed here.
+# torch / torchaudio / torchvision are chosen at install time and are not listed here.
 absl-py==2.5.0
 audio-separator==0.47.0
 audioread==3.1.0
@@ -11,7 +11,8 @@ cloudpickle==3.1.2
 colorama==0.4.6
 cython==3.3.0
 decorator==5.3.1
-diffq-fixed==0.2.4
+diffq==0.2.4; sys_platform == "darwin"
+diffq-fixed==0.2.4; sys_platform == "win32"
 einops==0.8.2
 filelock==4.0.10
 flatbuffers==25.12.19
@@ -55,7 +56,6 @@ soundfile==0.14.0
 soxr==1.1.0
 sympy==1.14.0
 threadpoolctl==3.7.0
-torchvision==0.26.0
 tqdm==4.70.1
 typing_extensions==4.16.0
 urllib3==2.8.0

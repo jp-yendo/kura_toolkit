@@ -135,6 +135,7 @@ export type TagErrorCode =
     // 字幕 (SRT / WebVTT) の書式の誤り (parseSubtitles が報告する)
     | 'subtitleTimestamp'
     | 'subtitleOrder'
+    | 'subtitleSequence'
     | 'subtitleHeader'
     | 'subtitleEmpty';
 
@@ -226,7 +227,7 @@ function parseBreakTime(value: string): number | null {
 // 話速: ラベル、「120%」(既定に対する割合)、「+20%」「-20%」(既定からの増減)
 function parseRate(value: string): number | null {
     const text = value.trim().toLowerCase();
-    if (text in RATE_LABELS) return RATE_LABELS[text];
+    if (Object.hasOwn(RATE_LABELS, text)) return RATE_LABELS[text];
     const match = /^([+-]?)(\d+(?:\.\d+)?)%$/.exec(text);
     if (!match) return null;
     const amount = Number(match[2]) / 100;
@@ -237,7 +238,7 @@ function parseRate(value: string): number | null {
 // 音高: ラベル、「+2st」「-3st」(半音)、「+10%」「-10%」(周波数の増減)。半音に換算して返す
 function parsePitch(value: string): number | null {
     const text = value.trim().toLowerCase();
-    if (text in PITCH_LABELS) return PITCH_LABELS[text];
+    if (Object.hasOwn(PITCH_LABELS, text)) return PITCH_LABELS[text];
     const semitone = /^([+-])(\d+(?:\.\d+)?)st$/.exec(text);
     if (semitone) {
         const amount = Number(semitone[2]) * (semitone[1] === '-' ? -1 : 1);
@@ -256,7 +257,7 @@ function parsePitch(value: string): number | null {
 // 音量: ラベル、「+6dB」「-3dB」
 function parseVolume(value: string): number | null {
     const text = value.trim().toLowerCase();
-    if (text in VOLUME_LABELS) return VOLUME_LABELS[text];
+    if (Object.hasOwn(VOLUME_LABELS, text)) return VOLUME_LABELS[text];
     const match = /^([+-])(\d+(?:\.\d+)?)db$/.exec(text);
     if (!match) return null;
     const amount = Number(match[2]) * (match[1] === '-' ? -1 : 1);
@@ -272,7 +273,8 @@ function buildLineIndex(text: string): number[] {
     return starts;
 }
 
-function locate(lineStarts: number[], offset: number): { line: number; column: number } {
+// 行と列 (列は文字単位。サロゲートペアの文字も 1 文字と数える)
+function locate(documentText: string, lineStarts: number[], offset: number): { line: number; column: number } {
     let low = 0;
     let high = lineStarts.length - 1;
     while (low < high) {
@@ -280,7 +282,7 @@ function locate(lineStarts: number[], offset: number): { line: number; column: n
         if (lineStarts[middle] <= offset) low = middle;
         else high = middle - 1;
     }
-    return { line: low + 1, column: offset - lineStarts[low] + 1 };
+    return { line: low + 1, column: Array.from(documentText.slice(lineStarts[low], offset)).length + 1 };
 }
 
 // 制御タグの候補かどうかを判定する。候補ならタグ名の位置と閉じタグかどうかを返す
@@ -313,7 +315,8 @@ type ParseOptions = {
 // 文章を解析して合成の単位に分け、誤りと一括で直せる注意を返す
 export function parseControlTags(text: string, options: ParseOptions): ControlTagParseResult {
     const baseOffset = options.baseOffset ?? 0;
-    const lineStarts = buildLineIndex(options.documentText ?? text);
+    const documentText = options.documentText ?? text;
+    const lineStarts = buildLineIndex(documentText);
     const errors: TagIssue[] = [];
     const fixes: TagFix[] = [];
     const runs: SpeechRun[] = [];
@@ -321,7 +324,13 @@ export function parseControlTags(text: string, options: ParseOptions): ControlTa
 
     const issue = (code: TagErrorCode, offset: number, length: number, extra: Partial<TagIssue> = {}) => {
         const absolute = offset + baseOffset;
-        errors.push({ code, offset: absolute, length: Math.max(1, length), ...locate(lineStarts, absolute), ...extra });
+        errors.push({
+            code,
+            offset: absolute,
+            length: Math.max(1, length),
+            ...locate(documentText, lineStarts, absolute),
+            ...extra,
+        });
     };
     const fix = (code: TagFixCode, offset: number, original: string, replacement: string) => {
         const absolute = offset + baseOffset;
@@ -331,7 +340,7 @@ export function parseControlTags(text: string, options: ParseOptions): ControlTa
             length: original.length,
             original,
             replacement,
-            ...locate(lineStarts, absolute),
+            ...locate(documentText, lineStarts, absolute),
         });
     };
 
@@ -485,7 +494,7 @@ export function parseControlTags(text: string, options: ParseOptions): ControlTa
             continue;
         }
 
-        const validated = validateAttributes(name, attributes);
+        const validated = validateAttributes(name, attributes, tagStart);
         const parent = textOnlyParent();
         if (parent) {
             issue('nestedTagNotAllowed', tagStart, tagEnd - tagStart, { tag: parent.name, value: name });
@@ -528,7 +537,11 @@ export function parseControlTags(text: string, options: ParseOptions): ControlTa
 
     // --- 内部関数 (解析の状態を共有するためクロージャで定義する) ---
 
-    function validateAttributes(tag: ControlTagName, attributes: ParsedAttribute[]): Record<string, string> | null {
+    function validateAttributes(
+        tag: ControlTagName,
+        attributes: ParsedAttribute[],
+        tagStart: number
+    ): Record<string, string> | null {
         const allowed = TAG_ATTRIBUTES[tag];
         const result: Record<string, string> = {};
         let valid = true;
@@ -564,7 +577,7 @@ export function parseControlTags(text: string, options: ParseOptions): ControlTa
         // 必須属性
         const required: Partial<Record<ControlTagName, string>> = { sub: 'alias', phoneme: 'ph' };
         const requiredName = required[tag];
-        const tagOffset = attributes.length > 0 ? attributes[0].nameOffset : 0;
+        const tagOffset = attributes.length > 0 ? attributes[0].nameOffset : tagStart;
         if (requiredName && !(requiredName in result) && !attributes.some(a => a.name.toLowerCase() === requiredName)) {
             issue('missingAttribute', tagOffset, 1, { tag, attribute: requiredName });
             valid = false;
@@ -597,7 +610,7 @@ export function parseControlTags(text: string, options: ParseOptions): ControlTa
             case 'break.time':
                 return parseBreakTime(value) === null ? 'time' : null;
             case 'break.strength':
-                return value.trim().toLowerCase() in BREAK_STRENGTHS ? null : 'strength';
+                return Object.hasOwn(BREAK_STRENGTHS, value.trim().toLowerCase()) ? null : 'strength';
             case 'prosody.rate':
                 return parseRate(value) === null ? 'rate' : null;
             case 'prosody.pitch':
@@ -752,8 +765,10 @@ export function findTagRanges(text: string): { start: number; end: number }[] {
         while (cursor < text.length) {
             const char = text[cursor];
             if (quote) {
-                if (char === quote || (quote === OPEN_CURLY && char === CLOSE_CURLY)) quote = null;
-            } else if (char === '"' || char === "'" || char === OPEN_CURLY) {
+                // 解析と同じ規則で閉じる (曲がった引用符は “ ” " のいずれでも閉じられる)
+                const curly = quote === OPEN_CURLY || quote === CLOSE_CURLY;
+                if (curly ? char === OPEN_CURLY || char === CLOSE_CURLY || char === '"' : char === quote) quote = null;
+            } else if (char === '"' || char === "'" || char === OPEN_CURLY || char === CLOSE_CURLY) {
                 quote = char;
             } else if (char === '>') {
                 break;

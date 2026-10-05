@@ -85,14 +85,14 @@ Audio Normalizer, Chapter Cut and the voice features (Audio Separation, Voice Co
 The voice features have these additional requirements:
 
 - Transposing the accompaniment (Voice Conversion) and fitting subtitle cues (Text to Speech) need an FFmpeg build that includes the rubberband filter, such as Gyan.FFmpeg from winget on Windows or the Homebrew `ffmpeg` on macOS. The app tells you when the configured FFmpeg lacks it
-- An Internet connection to download Python, the packages and the models (several GB in total; the CUDA build of PyTorch alone is about 2-2.7 GB)
+- An Internet connection to download Python, the packages and the models (several GB in total; the CUDA build of PyTorch alone is about 1.9-2.8 GB)
 - Windows: the [Microsoft Visual C++ Redistributable](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist) (x64)
 - macOS: the Xcode Command Line Tools (`xcode-select --install`) to install the Audio Separation package set
 
 ## 2. Supported OS
 
 - Windows 10/11
-- macOS 10.15+
+- macOS 12 (Monterey) or later
 - Linux (Debian-based / RHEL-based)
 
 Audio Separation, Voice Conversion and Text to Speech are available on Windows 10/11 (x64) and on macOS 14 or later with Apple Silicon. They use an NVIDIA GPU (CUDA) on Windows and the Apple Silicon GPU (MPS) on macOS when available, and the CPU otherwise. Training Text to Speech models requires Windows with an NVIDIA GPU; models trained there can be exported and imported on a Mac.
@@ -175,14 +175,14 @@ src/
 ├── main/                  # Electron main: IPC / services
 │   ├── index.ts           # Startup, window creation, service initialization
 │   ├── ipc/               # IPC handlers
-│   ├── services/          # Settings, job manager, ffmpeg, feature services
+│   ├── services/          # Settings (including the defaults), job manager, ffmpeg, feature services
 │   ├── workers/           # worker_threads entry points (directory-scan worker)
 │   └── utils/             # Utilities
 ├── python/                # Python scripts for the voice features (run in the downloaded virtual environments)
 ├── preload/               # Bridges APIs safely to the renderer (window.kuraToolkit)
 ├── renderer/              # React + MUI UI (pages/stores/components/i18n)
-├── shared/                # Type definitions and constants (defaults / storage paths)
-└── public/                # Icons etc.
+└── shared/                # Shared by main and renderer: type definitions, IPC channel constants, voice text parsing
+public/                    # Icons etc.
 third_party/               # Data taken from external sources, one folder per source (sentences for training Text to Speech models)
 ```
 
@@ -216,7 +216,7 @@ FFmpeg is not bundled with the app; it is invoked as an external process install
 
 ### Third-Party Components
 
-The voice features use the following components. Except for the training sentences, they are not bundled with the app: they are downloaded from their sources only when the user starts the download, and the versions are pinned by the app. The voice feature downloads also show the license and source of each item.
+The voice features use the following components. Except for the training sentences, they are not bundled with the app: they are downloaded from their sources only when the user starts the download, and the versions are pinned by the app, except for the UVR model configuration files and the NLTK data, which their sources publish only on a branch and which are therefore downloaded from branch URLs. The voice feature downloads also show the license and source of each item.
 
 | Component                                                            | Used for                                     | License                                                                                                    | Source                                                            |
 | -------------------------------------------------------------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |

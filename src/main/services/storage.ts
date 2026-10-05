@@ -26,7 +26,7 @@ export function defaultStorageDir(kind: StorageKind): string {
 const SETTING_KEYS = { library: 'libraryDir', model: 'modelDir', work: 'workDir' } as const;
 
 // 実際に使う場所 (設定が空なら既定の場所)
-export function getStorageDir(kind: StorageKind): string {
+function getStorageDir(kind: StorageKind): string {
     const configured = getSettings().storage[SETTING_KEYS[kind]].trim();
     return configured ? path.resolve(configured) : defaultStorageDir(kind);
 }
@@ -74,7 +74,10 @@ export function isSameOrNested(a: string, b: string): boolean {
     const right = path.resolve(b);
     const inside = (child: string, parent: string) => {
         const relative = path.relative(parent, child);
-        return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
+        // 「..cache」のような名前の子フォルダを外側と取り違えないよう、「..」の階層だけを外側とみなす
+        return (
+            relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
+        );
     };
     return inside(left, right) || inside(right, left);
 }

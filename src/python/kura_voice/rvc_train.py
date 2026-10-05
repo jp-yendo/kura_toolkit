@@ -40,6 +40,22 @@ def write_precision(applio: str, job_dir: str) -> None:
         json.dump({"precision": precision}, handle)
 
 
+def files_missing_features(experiment: str, files: list) -> list:
+    """The training files with a sliced clip that has no pitch (f0 / f0_voiced) or embedding (extracted) file.
+
+    Applio prints the error and skips a clip whose extraction fails, and its training list keeps only
+    the clips that have every file. Clips are matched the way that list matches them (the name up to
+    the first dot); a clip is named ``<speaker>_<file index>_<slice>`` after the file it was cut from.
+    """
+
+    def stems(folder: str) -> set:
+        return {name.split(".")[0] for name in os.listdir(os.path.join(experiment, folder))}
+
+    complete = stems("f0") & stems("f0_voiced") & stems("extracted")
+    indexes = sorted({int(name.split("_")[1]) for name in stems("sliced_audios") - complete})
+    return [os.path.basename(files[index]) for index in indexes]
+
+
 def train(job: dict, context: StandaloneContext, job_dir: str) -> None:
     applio = job["applioDir"]
     name = job["modelName"]
@@ -63,14 +79,15 @@ def train(job: dict, context: StandaloneContext, job_dir: str) -> None:
         "preprocess",
         [PREPROCESS, experiment, files_list, sample_rate, job["cpuCores"]],
     )
-    sliced = glob.glob(os.path.join(experiment, "sliced_audios", "*.wav"))
-    if not sliced:
+    if not glob.glob(os.path.join(glob.escape(experiment), "sliced_audios", "*.wav")):
         raise KuraError("TRAINING_NO_AUDIO")
 
     device = "cpu" if job["extractGpu"] == "-" else f"cuda:{job['extractGpu']}"
     run_step(context, "applio", applio, applio, "extract", [EXTRACT, experiment, device, job["cpuCores"], sample_rate])
-    if not glob.glob(os.path.join(experiment, "extracted", "*.npy")):
-        raise KuraError("TRAINING_EXTRACT_FAILED")
+    missing = files_missing_features(experiment, job["files"])
+    if missing:
+        shown = ", ".join(missing[:5]) + (f" (+{len(missing) - 5})" if len(missing) > 5 else "")
+        raise KuraError("TRAINING_EXTRACT_FAILED", shown)
 
     write_precision(applio, job_dir)
     train_error = run_step(
@@ -99,7 +116,7 @@ def train(job: dict, context: StandaloneContext, job_dir: str) -> None:
         epoch_line=EPOCH_LINE,
         total_epochs=epochs,
     )
-    weights = sorted(glob.glob(os.path.join(experiment, f"{name}_{epochs}e_*s.pth")))
+    weights = sorted(glob.glob(os.path.join(glob.escape(experiment), f"{glob.escape(name)}_{epochs}e_*s.pth")))
     if not weights:
         raise KuraError("TRAINING_NO_MODEL", train_error)
 

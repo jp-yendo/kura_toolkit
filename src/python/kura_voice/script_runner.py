@@ -90,6 +90,29 @@ def _patch_wespeaker() -> None:
     Model.from_pretrained = classmethod(from_pretrained)  # type: ignore[assignment]
 
 
+def _patch_pyopenjtalk() -> None:
+    """Keep the text preprocessing's pyopenjtalk worker and user dictionary inside this job.
+
+    preprocess_text.py and bert_gen.py start a pyopenjtalk worker on a fixed port (7861), and would
+    connect to any other process already listening there, so the worker gets a port the OS reports
+    as free. They then compile the user dictionary to ``dict_data/user.dic`` in the upstream source;
+    it is compiled into the cwd (the job folder in the work directory) instead, and the worker loads
+    it from there. The scripts look both functions up after these replacements (``from ... import``
+    and ``pyopenjtalk_worker.initialize_worker`` run when the script runs).
+    """
+    import functools
+    from pathlib import Path
+
+    from style_bert_vits2.nlp.japanese import pyopenjtalk_worker, user_dict
+
+    pyopenjtalk_worker.initialize_worker = functools.partial(  # type: ignore[assignment]
+        pyopenjtalk_worker.initialize_worker, port=_free_port()
+    )
+    user_dict.update_dict = functools.partial(  # type: ignore[assignment]
+        user_dict.update_dict, compiled_dict_path=Path(os.getcwd(), "user.dic")
+    )
+
+
 def _patch_applio() -> None:
     _patch_distributed_port()
     runtime.patch_faiss_unicode_paths()
@@ -107,6 +130,8 @@ def _patch_sbv2(script: str) -> None:
         _patch_single_process_ddp()
     if name == "style_gen.py":
         _patch_wespeaker()
+    if name in ("preprocess_text.py", "bert_gen.py"):
+        _patch_pyopenjtalk()
     # BERT and the pretrained weights are read from the app's model directory
     runtime.patch_sbv2_model_paths()
 

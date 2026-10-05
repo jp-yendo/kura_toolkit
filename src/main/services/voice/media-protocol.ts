@@ -50,6 +50,16 @@ export function mediaUrl(filePath: string): string {
     return `${MEDIA_SCHEME}://media/${token}/${encodeURIComponent(path.basename(resolved))}?v=${version}`;
 }
 
+// フォルダの中のファイルの公開をやめる (作業をまとめて破棄するとき)
+export function forgetMediaUnder(dir: string): void {
+    const prefix = path.resolve(dir) + path.sep;
+    for (const [filePath, token] of pathToToken) {
+        if (!filePath.startsWith(prefix)) continue;
+        pathToToken.delete(filePath);
+        tokenToPath.delete(token);
+    }
+}
+
 // 公開をやめる (作業の破棄でファイルを消すとき)
 export function forgetMedia(filePath: string): void {
     const resolved = path.resolve(filePath);

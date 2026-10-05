@@ -1,3 +1,4 @@
+import path from 'path';
 import type {
     CudaFlavor,
     LibraryItemGroup,
@@ -6,7 +7,7 @@ import type {
     VoicePlatformInfo,
     VoicePlatformKey,
 } from '../../../shared/voice/types';
-import { MODEL_GROUP_DIRS } from './paths';
+import { libraryPaths, MODEL_GROUP_DIRS } from './paths';
 
 // 音声機能が使う Python 本体・パッケージ一式・モデルの定義。
 // 使う版はアプリが決め、利用者による更新は許可しない。版を上げるときは version を変える
@@ -54,6 +55,15 @@ export const PYTHON_SPEC = {
     license: { name: 'PSF-2.0 and others', url: 'https://github.com/astral-sh/python-build-standalone' } as LicenseInfo,
     source: { name: 'python-build-standalone', url: 'https://github.com/astral-sh/python-build-standalone' },
 };
+
+// Python 本体の実行ファイル。macOS は版番号の付いた実体 (bin/python3.11 など) を使う
+// (書庫の bin/python3 はこの実体へのシンボリックリンクで、リンクは展開しないため)
+export function pythonExecutable(): string {
+    const base = libraryPaths().python;
+    if (process.platform === 'win32') return path.join(base, 'python.exe');
+    const [major, minor] = PYTHON_SPEC.version.split('.');
+    return path.join(base, 'bin', `python${major}.${minor}`);
+}
 
 // ---------------------------------------------------------------------------
 // パッケージ一式 (仮想環境ごと)
@@ -418,9 +428,19 @@ function presetSpec(preset: JvnvPreset): ModelSpec {
 
 export const JVNV_PRESET_NAMES = JVNV_PRESETS.map(preset => preset.name);
 
-export function presetIsJpExtra(name: string): boolean {
-    return JVNV_PRESETS.find(preset => preset.name === name)?.jpExtra ?? false;
-}
+// 変換に使える RVC モデルの版とボコーダー (補助プロセスの converter_service.py と同じもの)
+export const RVC_VERSIONS: readonly string[] = ['v1', 'v2'];
+export const RVC_VOCODERS: readonly string[] = ['HiFi-GAN', 'MRF HiFi-GAN', 'RefineGAN'];
+
+// 変換に使える埋め込みモデルの名前 (補助プロセスの runtime.py の APPLIO_EMBEDDERS と同じもの) -> ダウンロード項目
+export const RVC_EMBEDDER_ITEMS: Record<string, string> = {
+    contentvec: 'model:converter:contentvec',
+    spin: 'model:converter:embedder-spin',
+    'spin-v2': 'model:converter:embedder-spin-v2',
+    'japanese-hubert-base': 'model:converter:embedder-japanese-hubert-base',
+    'chinese-hubert-base': 'model:converter:embedder-chinese-hubert-base',
+    'korean-hubert-base': 'model:converter:embedder-korean-hubert-base',
+};
 
 // 読み上げエンジンに対応するダウンロード項目 (多言語版は日本語 BERT も使うため JP-Extra 版の項目を前提とする)
 export const TTS_ENGINE_ITEMS = {

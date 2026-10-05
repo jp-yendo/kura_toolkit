@@ -60,7 +60,7 @@ import { useJobRunner } from '../../hooks/useJobRunner';
 import { showNotice } from '../../stores/noticeStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useTtsStore } from '../../stores/ttsStore';
-import { useVoiceHandoffStore } from '../../stores/voiceHandoffStore';
+import { discardPathsAfterHandoff, useVoiceHandoffStore } from '../../stores/voiceHandoffStore';
 import { openVoiceLibrary, useVoiceLibraryStore } from '../../stores/voiceLibraryStore';
 import { applyTagFixes, findTagRanges, parseControlTags, type TagFix, type TagIssue } from '@shared/voice/control-tags';
 import { formatTimestamp, parseSubtitles } from '@shared/voice/subtitles';
@@ -138,7 +138,11 @@ export default function TtsPage() {
     const [speedup, setSpeedup] = React.useState<SpeedupConfirmation | null>(null);
     const [report, setReport] = React.useState<TtsCandidate | null>(null);
     const [exportOpen, setExportOpen] = React.useState(false);
-    const [confirmNew, setConfirmNew] = React.useState(false);
+    // 変更を破棄してよいかの確認 (新しい文章・ファイルを開く)。閉じる間も表示が変わらないよう、開閉とは別に持つ
+    const [discardConfirm, setDiscardConfirm] = React.useState<{ open: boolean; action: 'new' | 'open' }>({
+        open: false,
+        action: 'new',
+    });
     const [advanced, setAdvanced] = React.useState(false);
     const { job, run, cancel } = useJobRunner();
     const status = readiness.status;
@@ -162,13 +166,18 @@ export default function TtsPage() {
     // 画面を開いたときと、プリセットの声やエンジンをダウンロードしたときに読み直す
     React.useEffect(() => {
         let cancelled = false;
-        void window.kuraToolkit.voice.models.list('tts').then(list => {
-            if (!cancelled) setVoices(list);
-        });
+        window.kuraToolkit.voice.models
+            .list('tts')
+            .then(list => {
+                if (!cancelled) setVoices(list);
+            })
+            .catch(error => {
+                if (!cancelled) showNotice('error', voiceErrorMessage(t, error), 12000);
+            });
         return () => {
             cancelled = true;
         };
-    }, [libraryVersion]);
+    }, [libraryVersion, t]);
 
     // 入力中も随時チェックする (打つたびに解析すると重いので少し待ってから)
     React.useEffect(() => {
@@ -187,6 +196,8 @@ export default function TtsPage() {
     const ready = (readiness.readiness?.ready ?? false) && !!engine && !!voice;
 
     // --- ファイル ---
+    const closeDiscardConfirm = () => setDiscardConfirm(previous => ({ ...previous, open: false }));
+
     const openFile = async () => {
         const paths = await window.kuraToolkit.dialog.openFiles({
             filters: [
@@ -329,11 +340,16 @@ export default function TtsPage() {
             <Stack direction='row' spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
                 <Button
                     startIcon={<NoteAddIcon />}
-                    onClick={() => (modified ? setConfirmNew(true) : tts.loadDocument('', 'text', null))}
+                    onClick={() =>
+                        modified ? setDiscardConfirm({ open: true, action: 'new' }) : tts.loadDocument('', 'text', null)
+                    }
                 >
                     {t('voice.tts.newText')}
                 </Button>
-                <Button startIcon={<FolderOpenIcon />} onClick={() => void openFile()}>
+                <Button
+                    startIcon={<FolderOpenIcon />}
+                    onClick={() => (modified ? setDiscardConfirm({ open: true, action: 'open' }) : void openFile())}
+                >
                     {t('voice.tts.open')}
                 </Button>
                 <Button
@@ -684,10 +700,11 @@ export default function TtsPage() {
                                     if (!selected) return;
                                     useVoiceHandoffStore.getState().send({
                                         from: 'tts',
+                                        workKey: tts.workKey,
                                         name: tts.filePath?.split(/[\\/]/).pop() ?? t('voice.tts.suffix'),
                                         sourcePath: tts.filePath ?? 'tts',
                                         sourceMedia: selected.media,
-                                        vocals: selected.media.path,
+                                        vocals: [selected.media.path],
                                         accompaniment: [],
                                         channels: 1,
                                     });
@@ -748,9 +765,8 @@ export default function TtsPage() {
                                                     onClick={event => {
                                                         event.stopPropagation();
                                                         tts.removeCandidate(candidate.id);
-                                                        void window.kuraToolkit.voice.media.discard([
-                                                            candidate.media.path,
-                                                        ]);
+                                                        // 変換の画面へ渡した候補は、変換の画面が使い終わってから消す
+                                                        discardPathsAfterHandoff([candidate.media.path]);
                                                     }}
                                                 >
                                                     <DeleteOutlineIcon fontSize='small' />
@@ -983,19 +999,20 @@ export default function TtsPage() {
                 </DialogActions>
             </AppDialog>
 
-            <AppDialog open={confirmNew} onClose={() => setConfirmNew(false)} maxWidth='xs' fullWidth>
-                <DialogTitle>{t('voice.tts.newText')}</DialogTitle>
+            <AppDialog open={discardConfirm.open} onClose={closeDiscardConfirm} maxWidth='xs' fullWidth>
+                <DialogTitle>{t(discardConfirm.action === 'new' ? 'voice.tts.newText' : 'voice.tts.open')}</DialogTitle>
                 <DialogContent>
                     <Typography variant='body2'>{t('voice.tts.discardChanges')}</Typography>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setConfirmNew(false)}>{t('common.cancel')}</Button>
+                    <Button onClick={closeDiscardConfirm}>{t('common.cancel')}</Button>
                     <Button
                         variant='contained'
                         color='warning'
                         onClick={() => {
-                            tts.loadDocument('', 'text', null);
-                            setConfirmNew(false);
+                            closeDiscardConfirm();
+                            if (discardConfirm.action === 'new') tts.loadDocument('', 'text', null);
+                            else void openFile();
                         }}
                     >
                         {t('voice.common.discard')}

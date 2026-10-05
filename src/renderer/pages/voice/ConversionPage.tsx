@@ -108,13 +108,18 @@ export default function ConversionPage() {
 
     React.useEffect(() => {
         let cancelled = false;
-        void window.kuraToolkit.voice.models.list('converter').then(list => {
-            if (!cancelled) setVoices(list);
-        });
+        window.kuraToolkit.voice.models
+            .list('converter')
+            .then(list => {
+                if (!cancelled) setVoices(list);
+            })
+            .catch(error => {
+                if (!cancelled) showNotice('error', voiceErrorMessage(t, error), 12000);
+            });
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [t]);
 
     // 作業を破棄して新しい作業を始める。受け取った音声があれば、それを入力にして変換から始める
     const startNewWork = (handoff: VoiceHandoff | null) => {
@@ -143,8 +148,8 @@ export default function ConversionPage() {
         else startNewWork(handoff);
     }, []);
 
-    // --- 変換に使うボーカルと伴奏 ---
-    let vocals: string | null = null;
+    // --- 変換に使うボーカルと伴奏 (どちらも複数の音から成る場合は、使うときに 1 つに重ねる) ---
+    let vocals: string[] = [];
     let accompaniment: string[] = [];
     let sourceMedia: MediaRef | null = null;
     let sourcePath = '';
@@ -160,38 +165,50 @@ export default function ConversionPage() {
         sourcePath = sep.source.sourcePath;
         channels = sep.source.channels;
         if (conv.inputMode === 'direct') {
-            vocals = sep.source.media.path;
+            vocals = [sep.source.media.path];
         } else {
             const selected = vocalsAndAccompaniment(computeTracks(sep.source.media.path, sep.stages).tracks);
-            vocals = selected.vocals?.paths[0] ?? null;
+            vocals = selected.vocals?.paths ?? [];
             accompaniment = selected.accompaniment;
         }
     }
-    const inputKey = `${vocals ?? ''}|${accompaniment.join(',')}`;
+    const hasVocals = vocals.length > 0;
+    const vocalsKey = vocals.join(',');
+    const inputKey = `${vocalsKey}|${accompaniment.join(',')}`;
 
+    // 元のボーカルの再生用 (複数の音から成る場合は重ねた音を作る)
     React.useEffect(() => {
-        if (!vocals) {
+        if (vocals.length === 0) {
             setVocalsMedia(null);
             return;
         }
         let cancelled = false;
-        void window.kuraToolkit.voice.media.ref(vocals).then(media => {
-            if (!cancelled) setVocalsMedia(media);
-        });
+        const request =
+            vocals.length === 1
+                ? window.kuraToolkit.voice.media.ref(vocals[0])
+                : window.kuraToolkit.voice.media.mix(crypto.randomUUID(), workKey, vocals, channels);
+        request
+            .then(media => {
+                if (!cancelled) setVocalsMedia(media);
+            })
+            .catch(error => {
+                if (!cancelled) showNotice('error', voiceErrorMessage(t, error));
+            });
         return () => {
             cancelled = true;
         };
-    }, [vocals]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- ボーカルの組み合わせ (vocalsKey) が変わったときだけ読み直す
+    }, [vocalsKey]);
 
     const voice = voices.find(item => item.id === conv.voiceId) ?? null;
     const adopted = conv.candidates.find(item => item.id === conv.adoptedId) ?? null;
     const busy = job !== null;
 
-    // 伴奏が複数の音から成る場合は 1 つに重ねたものを使う
-    const accompanimentPath = async (jobId: string): Promise<string | null> => {
-        if (accompaniment.length === 0) return null;
-        if (accompaniment.length === 1) return accompaniment[0];
-        return (await window.kuraToolkit.voice.media.mix(jobId, workKey, accompaniment, channels)).path;
+    // 複数の音から成る場合は 1 つに重ねたものを使う
+    const singlePath = async (jobId: string, paths: string[]): Promise<string | null> => {
+        if (paths.length === 0) return null;
+        if (paths.length === 1) return paths[0];
+        return (await window.kuraToolkit.voice.media.mix(jobId, workKey, paths, channels)).path;
     };
 
     const handleError = (error: unknown) => {
@@ -237,21 +254,21 @@ export default function ConversionPage() {
     };
 
     const runConversion = async () => {
-        if (!vocals || !voice) return;
-        // オクターブ単位以外の移調では伴奏も移調するため、ffmpeg に rubberband フィルタが必要
-        if (accompaniment.length > 0 && conv.params.pitch % 12 !== 0) {
-            const available = await window.kuraToolkit.voice.conversion.hasRubberband();
-            if (!available) {
-                showNotice('error', t('voice.errors.RUBBERBAND_UNAVAILABLE'), 15000);
-                return;
-            }
-        }
+        if (!hasVocals || !voice) return;
         try {
+            // オクターブ単位以外の移調では伴奏も移調するため、ffmpeg に rubberband フィルタが必要
+            if (accompaniment.length > 0 && conv.params.pitch % 12 !== 0) {
+                const available = await window.kuraToolkit.voice.conversion.hasRubberband();
+                if (!available) {
+                    showNotice('error', t('voice.errors.RUBBERBAND_UNAVAILABLE'), 15000);
+                    return;
+                }
+            }
             const candidate = await run(t('voice.conversion.running'), async jobId =>
                 window.kuraToolkit.voice.conversion.run(jobId, {
                     workKey,
-                    vocals: vocals as string,
-                    accompaniment: await accompanimentPath(jobId),
+                    vocals: (await singlePath(jobId, vocals)) as string,
+                    accompaniment: await singlePath(jobId, accompaniment),
                     voiceId: voice.id,
                     params: conv.params,
                 })
@@ -263,7 +280,10 @@ export default function ConversionPage() {
         }
     };
 
-    const mixSignature = adopted ? JSON.stringify({ candidate: adopted.id, params: conv.mixParams }) : null;
+    // 入力 (伴奏) が変わった場合も作り直すよう、入力も含める
+    const mixSignature = adopted
+        ? JSON.stringify({ candidate: adopted.id, input: inputKey, params: conv.mixParams })
+        : null;
     const mixStale = conv.mix !== null && conv.mixSignature !== mixSignature;
 
     const renderMix = async (jobId: string): Promise<MediaRef> => {
@@ -272,7 +292,7 @@ export default function ConversionPage() {
         const media = await window.kuraToolkit.voice.conversion.renderMix(jobId, {
             workKey,
             vocals: adopted.vocals.path,
-            accompaniment: await accompanimentPath(jobId),
+            accompaniment: await singlePath(jobId, accompaniment),
             pitch: adopted.params.pitch,
             params: conv.mixParams,
         });
@@ -343,7 +363,8 @@ export default function ConversionPage() {
         t('voice.conversion.steps.convert'),
         t('voice.conversion.steps.mix'),
     ];
-    const stepEnabled = [true, !!vocals, !!adopted];
+    // 合成は、候補を作ったときから入力が変わっていない場合だけ開ける (変わった場合は変換の段階で確認する)
+    const stepEnabled = [true, hasVocals, !!adopted && conv.candidatesInput === inputKey];
 
     return (
         <PageContainer>
@@ -448,7 +469,7 @@ export default function ConversionPage() {
                     )}
                     <Panel sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
                         <Typography variant='body2' sx={{ flexGrow: 1, lineHeight: 1.6 }}>
-                            {vocals
+                            {hasVocals
                                 ? t('voice.conversion.inputSummary', {
                                       accompaniment:
                                           accompaniment.length > 0
@@ -457,7 +478,7 @@ export default function ConversionPage() {
                                   })
                                 : t('voice.conversion.inputMissing')}
                         </Typography>
-                        <Button variant='contained' disabled={!vocals || busy} onClick={goToConversion}>
+                        <Button variant='contained' disabled={!hasVocals || busy} onClick={goToConversion}>
                             {t('voice.common.next')}
                         </Button>
                     </Panel>
@@ -577,7 +598,7 @@ export default function ConversionPage() {
                             <Button
                                 variant='contained'
                                 startIcon={<RecordVoiceOverIcon />}
-                                disabled={busy || !voice || !vocals || !ready}
+                                disabled={busy || !voice || !hasVocals || !ready}
                                 onClick={() => void runConversion()}
                             >
                                 {t('voice.conversion.run')}

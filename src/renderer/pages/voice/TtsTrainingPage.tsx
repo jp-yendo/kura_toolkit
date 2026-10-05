@@ -50,6 +50,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import {
     LANGUAGE_DEFINITIONS,
     VOICE_LANGUAGES,
+    ttsTrainingItems,
     type CorpusSetId,
     type TtsEngineId,
     type VoiceLanguage,
@@ -80,12 +81,17 @@ export default function TtsTrainingPage() {
         sentenceId: '',
     });
     const [created, setCreated] = React.useState<VoiceModelInfo | null>(null);
+    // 録音中の保存先。録音を止めた時点の表示に関わらず、録音を始めた時点の言語・読み上げ文の組・文に保存する。
+    // 録音中は文の移動と言語・読み上げ文の組の切り替えを止める
+    const [recordingTarget, setRecordingTarget] = React.useState<{
+        language: VoiceLanguage;
+        corpusSet: CorpusSetId;
+        sentenceId: string;
+    } | null>(null);
+    const recordingActive = recordingTarget !== null;
     const { job, run, cancel } = useJobRunner();
 
-    const extra = [
-        ...(engine === 'multilingual' || language === 'en' ? ['model:tts:bert-en'] : []),
-        engine === 'jp-extra' ? 'model:tts:train-jp-extra' : 'model:tts:train-multilingual',
-    ];
+    const extra = ttsTrainingItems(engine, language);
     const readiness = useFeatureReadiness('ttsTraining', extra);
     const platform = readiness.readiness?.platform;
     const available = platform?.ttsTrainingAvailable ?? false;
@@ -181,6 +187,7 @@ export default function TtsTrainingPage() {
                             labelId='training-language'
                             label={t('voice.tts.language')}
                             value={language}
+                            disabled={recordingActive}
                             onChange={event => setLanguage(event.target.value as VoiceLanguage)}
                         >
                             {VOICE_LANGUAGES.map(item => (
@@ -196,6 +203,7 @@ export default function TtsTrainingPage() {
                             labelId='training-corpus'
                             label={t('voice.training.corpusSet')}
                             value={corpusSet}
+                            disabled={recordingActive}
                             onChange={event => setCorpusSet(event.target.value as CorpusSetId)}
                         >
                             <MenuItem value='quick'>{t('voice.training.corpus.quick')}</MenuItem>
@@ -270,15 +278,21 @@ export default function TtsTrainingPage() {
                                 <RecorderControl
                                     disabled={job !== null}
                                     label={sentence.recording ? t('voice.training.rerecord') : undefined}
+                                    onActiveChange={active =>
+                                        setRecordingTarget(
+                                            active ? { language, corpusSet, sentenceId: sentence.id } : null
+                                        )
+                                    }
                                     onRecorded={async audio => {
+                                        if (!recordingTarget) return;
                                         try {
                                             const item = await window.kuraToolkit.voice.training.ttsSaveRecording(
-                                                language,
-                                                corpusSet,
-                                                sentence.id,
+                                                recordingTarget.language,
+                                                recordingTarget.corpusSet,
+                                                recordingTarget.sentenceId,
                                                 audio.wav
                                             );
-                                            replaceSentence(sentence.id, item);
+                                            replaceSentence(recordingTarget.sentenceId, item);
                                         } catch (error) {
                                             showNotice('error', voiceErrorMessage(t, error));
                                         }
@@ -329,14 +343,14 @@ export default function TtsTrainingPage() {
                             <Stack direction='row' spacing={1} sx={{ justifyContent: 'space-between' }}>
                                 <Button
                                     startIcon={<NavigateBeforeIcon />}
-                                    disabled={index === 0}
+                                    disabled={index === 0 || recordingActive}
                                     onClick={() => setIndex(index - 1)}
                                 >
                                     {t('voice.training.previous')}
                                 </Button>
                                 <Button
                                     endIcon={<NavigateNextIcon />}
-                                    disabled={index >= sentences.length - 1}
+                                    disabled={index >= sentences.length - 1 || recordingActive}
                                     onClick={() => setIndex(index + 1)}
                                 >
                                     {t('voice.training.next')}
@@ -355,6 +369,7 @@ export default function TtsTrainingPage() {
                             <ListItemButton
                                 key={item.id}
                                 selected={itemIndex === index}
+                                disabled={recordingActive}
                                 onClick={() => setIndex(itemIndex)}
                             >
                                 <ListItemIcon sx={{ minWidth: 32 }}>

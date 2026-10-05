@@ -21,7 +21,7 @@ import { AUDIO_INPUT_EXTENSIONS, audioInputFilters } from '../../components/voic
 import { useJobRunner } from '../../hooks/useJobRunner';
 import { showNotice } from '../../stores/noticeStore';
 import { useSeparationWorkStore } from '../../stores/separationWorkStore';
-import { useVoiceHandoffStore } from '../../stores/voiceHandoffStore';
+import { discardWorkAfterHandoff, useVoiceHandoffStore } from '../../stores/voiceHandoffStore';
 
 export default function SeparationPage() {
     const { t } = useTranslation();
@@ -50,8 +50,9 @@ export default function SeparationPage() {
         }
     };
 
+    // 変換の画面へ渡した結果がある作業は、変換の画面が使い終わってから消す
     const discardWork = () => {
-        void window.kuraToolkit.voice.media.discardWork(workKey);
+        discardWorkAfterHandoff(workKey);
         reset();
         setConfirmReset(false);
     };
@@ -110,10 +111,11 @@ export default function SeparationPage() {
                                 if (!vocals) return;
                                 useVoiceHandoffStore.getState().send({
                                     from: 'separation',
+                                    workKey,
                                     name: sourceName,
                                     sourcePath: source.sourcePath,
                                     sourceMedia: source.media,
-                                    vocals: vocals.paths[0],
+                                    vocals: vocals.paths,
                                     accompaniment,
                                     channels: source.channels,
                                 });

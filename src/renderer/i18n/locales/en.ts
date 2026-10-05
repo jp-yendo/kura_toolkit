@@ -292,6 +292,7 @@ export default {
                 WORK_DIR_IN_USE:
                     'It cannot be changed while something is being processed or work results (such as candidates) remain. Change it after processing finishes or after discarding the work.',
                 SETTINGS_SAVE_FAILED: 'The settings could not be saved. ({{detail}})',
+                LIBRARY_BUSY: 'This cannot be done while something is being processed. Try again after it finishes.',
             },
         },
     },

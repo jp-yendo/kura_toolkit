@@ -61,15 +61,10 @@ export function modelPaths() {
     };
 }
 
-// Python 本体の実行ファイル
-export function pythonExecutable(): string {
-    const base = libraryPaths().python;
-    return process.platform === 'win32' ? path.join(base, 'python.exe') : path.join(base, 'bin', 'python3');
-}
-
-// 仮想環境の Python
-export function envPythonExecutable(component: VoiceComponentId): string {
-    const env = libraryPaths().env(component);
+// 仮想環境の Python。libraryRoot を渡した場合はそのライブラリディレクトリの中のもの
+// (保存場所の移動で、設定を書き換える前に移動先の仮想環境を確かめるため)
+export function envPythonExecutable(component: VoiceComponentId, libraryRoot?: string): string {
+    const env = libraryPaths(libraryRoot).env(component);
     return process.platform === 'win32' ? path.join(env, 'Scripts', 'python.exe') : path.join(env, 'bin', 'python');
 }
 

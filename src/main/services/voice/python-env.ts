@@ -25,11 +25,14 @@ const STRIPPED_VARIABLES = [
     'AUDIO_SEPARATOR_MODEL_DIR',
 ];
 
+// libraryRoot を渡した場合は、そのライブラリディレクトリの中の場所を使う
+// (保存場所の移動で、設定を書き換える前に移動先の仮想環境を確かめるため)
 export function buildPythonEnv(
     component: VoiceComponentId | null,
-    extra: Record<string, string> = {}
+    extra: Record<string, string> = {},
+    libraryRoot?: string
 ): NodeJS.ProcessEnv {
-    const lib = libraryPaths();
+    const lib = libraryPaths(libraryRoot);
     const env: NodeJS.ProcessEnv = { ...process.env };
     for (const name of Object.keys(env)) {
         if (STRIPPED_VARIABLES.includes(name.toUpperCase()) || name.toUpperCase().startsWith('PIP_')) delete env[name];

@@ -82,6 +82,12 @@ function checkLanguages(values: unknown): VoiceLanguage[] {
     return values.map(value => checkLanguage(value));
 }
 
+// renderer から渡された学習用の文章の種類を確かめる (録音の保存先のフォルダ名に使うため、決まった値に限る)
+function checkCorpusSet(value: unknown): CorpusSetId {
+    if (value !== 'quick' && value !== 'accurate') throw new Error(`INVALID_CORPUS_SET: ${String(value)}`);
+    return value;
+}
+
 export function registerVoiceIpcHandlers() {
     // --- ライブラリ (ダウンロード・削除) ---
     ipcMain.handle(IPC_CHANNELS.VOICE_LIBRARY_STATUS, () => getLibraryStatus());
@@ -100,7 +106,7 @@ export function registerVoiceIpcHandlers() {
     );
     ipcMain.handle(IPC_CHANNELS.VOICE_LIBRARY_REFRESH_SEPARATOR, async () => {
         await refreshSeparatorModelList();
-        void probeSeparatorSizes();
+        void probeSeparatorSizes().catch(error => console.warn('failed to look up separation model sizes', error));
         return getLibraryStatus();
     });
     ipcMain.handle(IPC_CHANNELS.VOICE_LIBRARY_PROBE_SIZES, async () => {
@@ -218,34 +224,33 @@ export function registerVoiceIpcHandlers() {
     ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_RVC_START, (_e, jobId: string, name: string) =>
         startRvcTraining(jobId, name)
     );
-    ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_TTS_DRAFT, (_e, language: unknown, set: CorpusSetId) =>
-        getTtsDraft(checkLanguage(language), set)
+    ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_TTS_DRAFT, (_e, language: unknown, set: unknown) =>
+        getTtsDraft(checkLanguage(language), checkCorpusSet(set))
     );
     ipcMain.handle(
         IPC_CHANNELS.VOICE_TRAINING_TTS_SAVE_RECORDING,
-        (_e, language: unknown, set: CorpusSetId, sentenceId: string, wav: Uint8Array) =>
-            saveTtsRecording(checkLanguage(language), set, sentenceId, wav)
+        (_e, language: unknown, set: unknown, sentenceId: string, wav: Uint8Array) =>
+            saveTtsRecording(checkLanguage(language), checkCorpusSet(set), sentenceId, wav)
     );
     ipcMain.handle(
         IPC_CHANNELS.VOICE_TRAINING_TTS_SET_FILE,
-        (_e, jobId: string, language: unknown, set: CorpusSetId, sentenceId: string, source: string) =>
-            setTtsSentenceFile(jobId, checkLanguage(language), set, sentenceId, source)
+        (_e, jobId: string, language: unknown, set: unknown, sentenceId: string, source: string) =>
+            setTtsSentenceFile(jobId, checkLanguage(language), checkCorpusSet(set), sentenceId, source)
     );
-    ipcMain.handle(
-        IPC_CHANNELS.VOICE_TRAINING_TTS_REMOVE,
-        (_e, language: unknown, set: CorpusSetId, sentenceId: string) =>
-            removeTtsRecording(checkLanguage(language), set, sentenceId)
+    ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_TTS_REMOVE, (_e, language: unknown, set: unknown, sentenceId: string) =>
+        removeTtsRecording(checkLanguage(language), checkCorpusSet(set), sentenceId)
     );
-    ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_TTS_CLEAR, (_e, language: unknown, set: CorpusSetId) =>
-        clearTtsDraft(checkLanguage(language), set)
+    ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_TTS_CLEAR, (_e, language: unknown, set: unknown) =>
+        clearTtsDraft(checkLanguage(language), checkCorpusSet(set))
     );
     ipcMain.handle(
         IPC_CHANNELS.VOICE_TRAINING_TTS_START,
-        (
-            _e,
-            jobId: string,
-            options: { language: unknown; corpusSet: CorpusSetId; engine: TtsEngineId; name: string }
-        ) => startTtsTraining(jobId, { ...options, language: checkLanguage(options.language) })
+        (_e, jobId: string, options: { language: unknown; corpusSet: unknown; engine: TtsEngineId; name: string }) =>
+            startTtsTraining(jobId, {
+                ...options,
+                language: checkLanguage(options.language),
+                corpusSet: checkCorpusSet(options.corpusSet),
+            })
     );
 
     // --- 書き出し ---

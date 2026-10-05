@@ -134,10 +134,10 @@ def _english_overrides(parts: List[dict]) -> Tuple[str, Dict[str, list]]:
             continue
         surface_words = part["surface"].split()
         for word, phones in zip(surface_words, part["words"]):
-            pieces = [piece for piece in tokenizer.tokenize(word) if piece not in ("▁",)]
+            pieces = [piece for piece in tokenizer.tokenize(word) if piece not in ("\u2581",)]
             if len(pieces) != 1:
                 raise KuraError("IPA_WORD_SPLIT", word)
-            overrides[pieces[0].lstrip("▁").upper()] = [list(phones)]
+            overrides[pieces[0].lstrip("\u2581").upper()] = [list(phones)]
         texts.append(part["surface"])
     return " ".join(text.strip() for text in texts if text.strip()), overrides
 
@@ -165,10 +165,12 @@ def _synthesize_piece(piece: dict, params: dict, model: Any) -> Any:
     )
     parts = piece["parts"]
     if language == "ja" and any("kataTone" in part for part in parts):
+        from style_bert_vits2.nlp import InvalidPhoneError
+
         text, phones, tones, reading = _japanese_given(parts, use_jp_extra)
         try:
             _rate, audio = model.infer(text=text, given_phone=phones, given_tone=tones, **kwargs)
-        except ValueError:
+        except InvalidPhoneError:
             # The surface text could not be aligned with the given reading; use the reading itself.
             _rate, audio = model.infer(text=reading, given_phone=phones, given_tone=tones, **kwargs)
     elif language == "en" and any("words" in part for part in parts):

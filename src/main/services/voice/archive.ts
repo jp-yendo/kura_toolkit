@@ -10,10 +10,18 @@ import yazl from 'yazl';
 // - zip: 声のモデルの書き出し・取り込みと、外部で入手したモデル (zip 配布が多い) の取り込みに使う
 
 // tar.gz を展開する。strip で先頭の階層を取り除く (Python 本体の書庫は python/、GitHub のソース一式は
-// リポジトリ名の階層を持つため)
+// リポジトリ名の階層を持つため)。
+// シンボリックリンクとハードリンクの項目は展開しない (保存場所にリンクを作らないため。macOS の Python 本体の
+// bin/python3 などはリンクで、実行には版番号の付いた実体のファイルを使う)
 export async function extractTarGz(archivePath: string, destDir: string, strip: number): Promise<void> {
     fs.mkdirSync(destDir, { recursive: true });
-    await tar.x({ file: archivePath, cwd: destDir, strip, preservePaths: false });
+    await tar.x({
+        file: archivePath,
+        cwd: destDir,
+        strip,
+        preservePaths: false,
+        filter: (_path, entry) => !('type' in entry) || (entry.type !== 'SymbolicLink' && entry.type !== 'Link'),
+    });
 }
 
 function openZip(zipPath: string): Promise<yauzl.ZipFile> {

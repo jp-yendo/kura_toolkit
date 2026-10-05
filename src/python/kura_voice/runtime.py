@@ -126,12 +126,17 @@ class TqdmBridge:
 
         self._callback = callback
         self.cls = ReportingTqdm
+        self._bar: Any = None
         self._last = -1.0
 
     def _report(self, bar: Any) -> None:
         total = getattr(bar, "total", None)
         if not total:
             return
+        # Each bar (a library can run several in turn) reports from its own start
+        if bar is not self._bar:
+            self._bar = bar
+            self._last = -1.0
         fraction = min(1.0, float(bar.n) / float(total))
         # Avoid flooding the protocol: report in steps of 1%.
         if fraction - self._last < 0.01 and fraction < 1.0:

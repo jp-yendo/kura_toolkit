@@ -165,6 +165,22 @@ export function updateSettings(patch: DeepPartial<AppSettings>): SettingsUpdateR
     }
 }
 
+// 設定を部分更新して保存し、保存できた場合だけメモリ上の設定を更新する。保存できなければ SETTINGS_SAVE_FAILED で失敗させる。
+// 保存場所の設定に使う (保存できないまま起動中だけ新しい場所を使うと、次の起動で元の場所を使い、
+// 起動中に新しい場所へ置いたものを見失うため)
+export function saveSettings(patch: DeepPartial<AppSettings>): AppSettings {
+    const next = deepMerge(getSettings(), patch);
+    try {
+        writeSettings(next);
+    } catch (error) {
+        const saveError = error instanceof Error ? error.message : String(error);
+        console.error(`failed to save settings to ${getSettingsFilePath()}: ${saveError}`);
+        throw new Error(`SETTINGS_SAVE_FAILED: ${saveError}`, { cause: error });
+    }
+    cachedSettings = next;
+    return next;
+}
+
 // 保存済みテーマを nativeTheme に反映する (起動時に呼ぶ)
 export function applySavedTheme(): void {
     nativeTheme.themeSource = getSettings().app.theme;

@@ -80,14 +80,30 @@ export function useRecorder() {
         void current.context.close();
     }, []);
 
-    React.useEffect(() => release, [release]);
+    // 画面を離れた後に許可の確認などの待ちが終わった場合に、マイクを開いたままにしないための印
+    const mounted = React.useRef(true);
+    React.useEffect(() => {
+        mounted.current = true;
+        return () => {
+            mounted.current = false;
+            release();
+        };
+    }, [release]);
 
-    const start = React.useCallback(async () => {
-        if (session.current) return;
+    // 録音を始める。始められたら true
+    const start = React.useCallback(async (): Promise<boolean> => {
+        if (session.current) return false;
         setError(null);
         setState('starting');
+        let stream: MediaStream | null = null;
+        let context: AudioContext | null = null;
+        // 録音を始める前に失敗したり画面を離れたりした場合に、開いたマイクと音声処理を閉じる
+        const discard = () => {
+            stream?.getTracks().forEach(track => track.stop());
+            void context?.close();
+        };
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({
+            stream = await navigator.mediaDevices.getUserMedia({
                 audio: {
                     echoCancellation: false,
                     noiseSuppression: false,
@@ -95,12 +111,20 @@ export function useRecorder() {
                     channelCount: 1,
                 },
             });
-            const context = new AudioContext();
+            if (!mounted.current) {
+                discard();
+                return false;
+            }
+            context = new AudioContext();
             const moduleUrl = URL.createObjectURL(new Blob([WORKLET_SOURCE], { type: 'application/javascript' }));
             try {
                 await context.audioWorklet.addModule(moduleUrl);
             } finally {
                 URL.revokeObjectURL(moduleUrl);
+            }
+            if (!mounted.current) {
+                discard();
+                return false;
             }
             const sourceNode = context.createMediaStreamSource(stream);
             const node = new AudioWorkletNode(context, 'kura-recorder');
@@ -129,12 +153,16 @@ export function useRecorder() {
             session.current = { context, stream, node, chunks, timer };
             setElapsed(0);
             setState('recording');
+            return true;
         } catch (caught) {
-            release();
-            setState('idle');
-            setError(caught instanceof Error ? caught.message : String(caught));
+            discard();
+            if (mounted.current) {
+                setState('idle');
+                setError(caught instanceof Error ? caught.message : String(caught));
+            }
+            return false;
         }
-    }, [release]);
+    }, []);
 
     // 録音を終えて WAV を返す。録音していなければ null
     const stop = React.useCallback((): RecordedAudio | null => {

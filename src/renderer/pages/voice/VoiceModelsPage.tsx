@@ -39,7 +39,7 @@ import { hasSameVoiceName, sanitizeFileName, voiceLabel } from '../../components
 import { voiceErrorMessage } from '../../components/voice/voiceErrors';
 import { useJobRunner } from '../../hooks/useJobRunner';
 import { showNotice } from '../../stores/noticeStore';
-import { openVoiceLibrary, useVoiceLibraryStore } from '../../stores/voiceLibraryStore';
+import { notifyVoiceLibraryChanged, openVoiceLibrary, useVoiceLibraryStore } from '../../stores/voiceLibraryStore';
 import { VOICE_LANGUAGES, type VoiceLanguage } from '@shared/voice/languages';
 import type { VoiceModelCategory, VoiceModelFeature, VoiceModelInfo } from '@shared/voice/types';
 
@@ -76,9 +76,14 @@ export default function VoiceModelsPage({ feature }: Props) {
     const closeRemove = () => setRemove(previous => ({ ...previous, open: false }));
     const { job, run, cancel } = useJobRunner();
 
+    // 一覧を読み直す。読めない場合 (一覧のファイルの破損など) は理由を知らせる
     const load = React.useCallback(async () => {
-        setVoices(await window.kuraToolkit.voice.models.list(feature));
-    }, [feature]);
+        try {
+            setVoices(await window.kuraToolkit.voice.models.list(feature));
+        } catch (error) {
+            showNotice('error', voiceErrorMessage(t, error), 12000);
+        }
+    }, [feature, t]);
     // プリセットの声のダウンロード・削除で一覧が変わるため、取得状況が変わったら読み直す
     React.useEffect(() => {
         void load();
@@ -393,7 +398,10 @@ export default function VoiceModelsPage({ feature }: Props) {
                             closeRemove();
                             try {
                                 await window.kuraToolkit.voice.models.remove(feature, target.id);
-                                await load();
+                                // プリセットの声の削除はダウンロードの取得状況も変えるため、取得状況の変化として知らせる
+                                // (一覧は取得状況の変化を受けて読み直される)
+                                if (target.category === 'preset') notifyVoiceLibraryChanged();
+                                else await load();
                             } catch (error) {
                                 showNotice('error', voiceErrorMessage(t, error));
                             }

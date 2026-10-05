@@ -6,8 +6,17 @@ import { extractZip, readZipText, writeZip } from './archive';
 import { isItemInstalled, removeItems } from './library';
 import { writeJsonFile } from './json-file';
 import { modelPaths } from './paths';
+import { readPresetOverrides, writePresetOverrides, type PresetOverride } from './preset-overrides';
 import { getWorker, stopWorker } from './python-worker';
-import { JVNV_PRESET_NAMES, presetItemId, TTS_ENGINE_ITEMS, TTS_PRESET_DIR } from './spec';
+import {
+    JVNV_PRESET_NAMES,
+    presetItemId,
+    RVC_EMBEDDER_ITEMS,
+    RVC_VERSIONS,
+    RVC_VOCODERS,
+    TTS_ENGINE_ITEMS,
+    TTS_PRESET_DIR,
+} from './spec';
 import { removeTemp } from '../work-dir';
 import { renameWithRetry } from '../../utils/rename-retry';
 import { languagesForEngine, type TtsEngineId, type VoiceLanguage } from '../../../shared/voice/languages';
@@ -33,7 +42,6 @@ const VOICE_FILE_EXTENSION = 'kuravoice';
 const VOICE_FILE_FORMAT = 'kura-voice';
 const VOICE_FILE_MANIFEST = 'kura-voice.json';
 const META_FILE = 'meta.json';
-const PRESET_OVERRIDES_FILE = 'preset-overrides.json';
 // 声のモデルの置き場にある、声のモデルではないフォルダの名前の接頭辞 (一覧に出さない)。
 // 取り込みの展開先と、作成中の声のモデル
 const IMPORT_STAGING_PREFIX = '.import-';
@@ -58,8 +66,6 @@ export function hubSearchUrl(feature: VoiceModelFeature): string {
     params.set('search', config.search);
     return `${config.url}?${params.toString()}`;
 }
-
-type PresetOverride = { name?: string; languages?: VoiceLanguage[] };
 
 function voicesDir(feature: VoiceModelFeature): string {
     return modelPaths().voices(feature);
@@ -111,27 +117,31 @@ function readJson<T>(file: string): T {
     return JSON.parse(fs.readFileSync(file, 'utf-8')) as T;
 }
 
-// 保存してあるデータのファイル (JSON) を読む。読めない・解析できない場合は壊れたものとして扱う。
-// ifMissing を渡した場合は、ファイルが無いときだけその値を返す
-function readDataFile<T extends object>(file: string, ifMissing?: T): T {
+// 保存してあるデータのファイル (JSON) を読む。読めない・解析できない場合は壊れたものとして扱う
+function readDataFile<T extends object>(file: string): T {
     let data: unknown;
     try {
         data = readJson<unknown>(file);
     } catch (error) {
-        if (ifMissing !== undefined && (error as NodeJS.ErrnoException).code === 'ENOENT') return ifMissing;
         throw new Error(`DATA_FILE_CORRUPT: ${file}`, { cause: error });
     }
     if (typeof data !== 'object' || data === null) throw new Error(`DATA_FILE_CORRUPT: ${file}`);
     return data as T;
 }
 
-// プリセットの名前と言語の変更。どのプリセットも変更していない間はファイルが無い
-function readPresetOverrides(): Record<string, PresetOverride> {
-    return readDataFile<Record<string, PresetOverride>>(path.join(voicesDir('tts'), PRESET_OVERRIDES_FILE), {});
-}
-
-function writePresetOverrides(data: Record<string, PresetOverride>): void {
-    writeJsonFile(path.join(voicesDir('tts'), PRESET_OVERRIDES_FILE), data);
+// 取り込むファイルの JSON (書き出しファイルの情報・モデルの設定) を解析する。解析できない場合と
+// オブジェクトでない場合は、取り込めないファイルとして IMPORT_INVALID_FILE (ファイル名を添える) で失敗させる
+function parseImportJson<T extends object>(text: string, name: string): T {
+    let data: unknown;
+    try {
+        data = JSON.parse(text);
+    } catch (error) {
+        throw new Error(`IMPORT_INVALID_FILE: ${name}`, { cause: error });
+    }
+    if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+        throw new Error(`IMPORT_INVALID_FILE: ${name}`);
+    }
+    return data as T;
 }
 
 // --- 設定ファイルから分かるモデルの情報 ---
@@ -184,6 +194,14 @@ export function readRvcModelJson(file: string, hasIndex: boolean): RvcModelMeta 
         throw new Error(`INVALID_RVC_MODEL: ${file}`);
     }
     return { version, sampleRate: sr, f0: Boolean(f0), vocoder, embedder, speakers, hasIndex };
+}
+
+// 変換に使える版・ボコーダー・埋め込みモデルのモデルか (補助プロセスがモデルを調べるときと同じ確認)。
+// 設定 (model.json) をそのまま使う取り込み (本アプリの書き出しファイル) で、変換するときまで失敗が分からないことを防ぐ
+function checkRvcSupported(meta: RvcModelMeta): void {
+    if (!RVC_VERSIONS.includes(meta.version)) throw new Error(`RVC_VERSION_UNSUPPORTED: ${meta.version}`);
+    if (!RVC_VOCODERS.includes(meta.vocoder)) throw new Error(`RVC_VOCODER_UNSUPPORTED: ${meta.vocoder}`);
+    if (!(meta.embedder in RVC_EMBEDDER_ITEMS)) throw new Error(`EMBEDDER_UNSUPPORTED: ${meta.embedder}`);
 }
 
 // safetensors の見出し (先頭 8 バイトの長さ + JSON) を確かめる。プログラムを含められない形式だが、
@@ -298,6 +316,7 @@ export function renameVoice(feature: VoiceModelFeature, id: string, name: string
     const preset = presetName(id);
     if (feature === 'tts' && preset) {
         // 名前は変えられるが、プリセットという区分は保持する
+        getVoice(feature, id);
         const overrides = readPresetOverrides();
         overrides[preset] = { ...overrides[preset], name: trimmed };
         writePresetOverrides(overrides);
@@ -329,11 +348,10 @@ export function setVoiceLanguages(id: string, languages: VoiceLanguage[]): Voice
 export async function removeVoice(feature: VoiceModelFeature, id: string): Promise<void> {
     const preset = presetName(id);
     if (feature === 'tts' && preset) {
-        // プリセットはダウンロード物なので、ライブラリから削除する (再ダウンロードできる)
-        await removeItems([presetItemId(preset)]);
-        const overrides = readPresetOverrides();
-        delete overrides[preset];
-        writePresetOverrides(overrides);
+        // プリセットはダウンロード物なので、ライブラリから削除する (再ダウンロードできる)。
+        // 名前と言語の変更の記録は、削除に成功したときにライブラリの削除が消す
+        const result = await removeItems([presetItemId(preset)]);
+        if (result.failed.length > 0) throw new Error(result.failed[0].error);
         return;
     }
     // 利用者が学習・取り込みしたモデルは作り直せないため、ごみ箱に移す (戻せるようにする)。
@@ -441,7 +459,7 @@ async function collectCandidates(paths: string[], staging: string): Promise<Impo
 async function inspectKuraFile(feature: VoiceModelFeature, file: string, staging: string): Promise<PendingImport> {
     const text = await readZipText(file, VOICE_FILE_MANIFEST);
     if (!text) throw new Error('IMPORT_INVALID_FILE');
-    const manifest = JSON.parse(text) as VoiceManifest;
+    const manifest = parseImportJson<VoiceManifest>(text, VOICE_FILE_MANIFEST);
     if (manifest.format !== VOICE_FILE_FORMAT) throw new Error('IMPORT_INVALID_FILE');
     if (manifest.feature !== feature) throw new Error('IMPORT_WRONG_FEATURE');
     const allowed = new Set(MODEL_FILES[feature]);
@@ -458,8 +476,11 @@ async function inspectKuraFile(feature: VoiceModelFeature, file: string, staging
     let unsafeDetail: string | undefined;
     if (feature === 'converter') {
         rvc = readRvcModelJson(files['model.json'], !!files['model.index']);
+        checkRvcSupported(rvc);
     } else {
-        tts = ttsMetaFromConfig(readJson<SbvConfig>(files['config.json']));
+        tts = ttsMetaFromConfig(
+            parseImportJson<SbvConfig>(fs.readFileSync(files['config.json'], 'utf-8'), 'config.json')
+        );
         if (manifest.tts?.languages !== undefined && tts.engine === 'multilingual') {
             tts.languages = manifestLanguages(manifest.tts.languages, tts.engine);
         }
@@ -528,7 +549,7 @@ async function inspectTtsChoice(weights: string): Promise<ChoiceInspection> {
         Boolean
     );
     if (missing.length > 0) throw new Error(`IMPORT_FILES_MISSING: ${missing.join(', ')}`);
-    const parsedConfig = readJson<SbvConfig>(config);
+    const parsedConfig = parseImportJson<SbvConfig>(fs.readFileSync(config, 'utf-8'), 'config.json');
     const tts = ttsMetaFromConfig(parsedConfig);
     requireEngine(tts.engine);
     verifySafetensors(weights);

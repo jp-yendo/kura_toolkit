@@ -50,13 +50,18 @@ export default function PresetBar<T extends VoicePresetParams>({ kind, filter, c
 
     React.useEffect(() => {
         let cancelled = false;
-        void window.kuraToolkit.voice.presets.list(kind).then(list => {
-            if (!cancelled) setPresets(list);
-        });
+        window.kuraToolkit.voice.presets
+            .list(kind)
+            .then(list => {
+                if (!cancelled) setPresets(list);
+            })
+            .catch(error => {
+                if (!cancelled) showNotice('error', voiceErrorMessage(t, error), 12000);
+            });
         return () => {
             cancelled = true;
         };
-    }, [kind]);
+    }, [kind, t]);
 
     const visible = filter ? presets.filter(filter) : presets;
     const selected = visible.find(preset => preset.id === selectedId) ?? null;

@@ -625,6 +625,7 @@ export default {
         ipaWordCount: '発音の語数 ({{value}}) が、囲んだ文字の語数 ({{expected}}) と一致しません。',
         subtitleTimestamp: '字幕の時刻の行が正しくありません (例: 00:00:01,000 --> 00:00:03,500)。',
         subtitleOrder: '字幕の終了時刻が開始時刻より前になっています。',
+        subtitleSequence: '字幕の開始時刻が、前の字幕より前になっています。開始時刻の順に並べてください。',
         subtitleHeader: 'WebVTT の先頭に「WEBVTT」の行がありません。',
         subtitleEmpty: '字幕の区間がありません。',
         formats: {
@@ -744,6 +745,8 @@ export default {
     },
     errors: {
         KURA_CANCELLED: 'キャンセルされました。',
+        SAMPLE_RATE_MISMATCH: '合成した音声のサンプリング周波数がそろっていません。({{detail}})',
+        LIBRARY_BUSY: '処理中のものがあるため、今は実行できません。処理が終わってから、もう一度お試しください。',
         PLATFORM_UNSUPPORTED: 'この環境では音声機能を利用できません。',
         VC_RUNTIME_MISSING:
             'Microsoft Visual C++ 再頒布可能パッケージが必要です。インストールしてから再試行してください。',
@@ -809,7 +812,7 @@ export default {
         TRAINING_FAILED: '学習に失敗しました。({{detail}})',
         TRAINING_STEP_FAILED: '学習の途中で失敗しました。({{detail}})',
         TRAINING_NO_AUDIO: '学習に使える音声がありませんでした (無音や短すぎる音声は使えません)。',
-        TRAINING_EXTRACT_FAILED: '音声の特徴を抽出できませんでした。',
+        TRAINING_EXTRACT_FAILED: '次のファイルから音声の特徴を抽出できませんでした。({{detail}})',
         TRAINING_NO_MODEL: '学習は終わりましたが、モデルが作成されませんでした。({{detail}})',
         TRAINING_NO_INDEX: '学習は終わりましたが、インデックスを作成できませんでした。({{detail}})',
         TRAINING_PRETRAINED_MISSING: '学習用の事前学習モデルがありません。「ダウンロード管理」から取得してください。',

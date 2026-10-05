@@ -61,10 +61,11 @@ export function parseSubtitles(text: string, format: SubtitleFormat): SubtitlePa
         // 先頭の BOM と空行を除いた最初の行が WEBVTT で始まること
         while (index < lines.length && lines[index].trim() === '') index += 1;
         if (index >= lines.length || !lines[index].replace(/^\uFEFF/, '').startsWith('WEBVTT')) {
-            issue('subtitleHeader', index, 1);
+            issue('subtitleHeader', Math.min(index, lines.length - 1), 1);
             return { cues, errors };
         }
-        index += 1;
+        // ヘッダーの行 (Kind: / Language: など) は最初の空行まで続く
+        while (index < lines.length && lines[index].trim() !== '') index += 1;
     }
 
     while (index < lines.length) {
@@ -96,6 +97,11 @@ export function parseSubtitles(text: string, format: SubtitleFormat): SubtitlePa
         const end = toSeconds(timing[5], timing[6], timing[7], timing[8]);
         if (end <= start) {
             issue('subtitleOrder', timingIndex, lines[timingIndex].length);
+        }
+        // 区間は開始時刻の順に並んでいること (重なりの扱いを並び順で決めるため)
+        const previous = cues[cues.length - 1];
+        if (previous && start < previous.start) {
+            issue('subtitleSequence', timingIndex, lines[timingIndex].length);
         }
         // 本文は時刻行の次から空行の手前まで
         const bodyStart = timingIndex + 1;

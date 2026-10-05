@@ -39,7 +39,7 @@ def main() -> int:
         json.dump(info, handle, indent=4)
 
     files = []
-    for path in glob.glob(os.path.join(sliced, "*.wav")):
+    for path in glob.glob(os.path.join(glob.escape(sliced), "*.wav")):
         name = os.path.basename(path)
         files.append(
             [

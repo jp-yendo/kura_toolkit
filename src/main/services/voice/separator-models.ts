@@ -57,6 +57,9 @@ let cachedList: ModelListCache | null = null;
 let sourceCache: Record<string, FileSource | undefined> | null = null;
 // 取得元の候補のどこにも無かったファイル。アプリを起動している間だけ覚え、次に起動したときに調べ直す
 const notFound = new Set<string>();
+// 保存した一覧と取得元を読み直させた回数。裏で調べている間にパッケージ一式の削除やライブラリの移動があった場合に、
+// 調べた結果を保存しない (消した場所にフォルダを作り直したり、古い場所の結果を書き込んだりしないため)
+let generation = 0;
 
 // 一覧の作り方 (分離の種類の判定など) を変えたら上げる。版が違う一覧は作り直す
 const LIST_FORMAT = 3;
@@ -82,6 +85,7 @@ export function forgetSeparatorModelList(): void {
     cachedList = null;
     sourceCache = null;
     notFound.clear();
+    generation += 1;
 }
 
 // パッケージ一式の Python から一覧を取得して保存する
@@ -134,7 +138,7 @@ async function locateFile(urls: string[], signal?: AbortSignal): Promise<FileSou
 }
 
 // モデルの取得元を調べた結果 (ダウンロード画面の表示用)
-export type SeparatorModelSource = {
+type SeparatorModelSource = {
     // 取得元の候補のどこにも無いファイルがある (このモデルは取得できない)
     notFound: boolean;
     // ファイルの大きさの合計。取得元がまだ分からないファイルがあれば null
@@ -181,12 +185,14 @@ export async function resolveSeparatorModelFiles(entry: SeparatorModelEntry, sig
     return files;
 }
 
-let probing: Promise<void> | null = null;
+// 調べている途中の処理と、それを始めたときの世代 (読み直させた後は、前の世代の処理を使い回さない)
+let probing: { promise: Promise<void>; generation: number } | null = null;
 
 // 取得元がまだ分からないファイルを配布元に問い合わせて調べる (同時に 8 件まで)。
-// 候補のどこにも無いファイルは取得できないものとして覚え、問い合わせに失敗したファイルは記録せずに次の機会に調べ直す
+// 候補のどこにも無いファイルは取得できないものとして覚え、問い合わせに失敗したファイルは記録せずに次の機会に調べ直す。
+// 調べている間に一覧と取得元を読み直させた場合は、調べた結果を記録も保存もしない
 export function probeSeparatorSizes(): Promise<void> {
-    if (probing) return probing;
+    if (probing && probing.generation === generation) return probing.promise;
     const list = readSeparatorModelList();
     if (!list) return Promise.resolve();
     const cache = readSourceCache();
@@ -197,14 +203,17 @@ export function probeSeparatorSizes(): Promise<void> {
         }
     }
     if (pending.size === 0) return Promise.resolve();
+    const startedGeneration = generation;
+    const current = () => generation === startedGeneration;
     const queue = [...pending.entries()];
     let failed = 0;
     let lastError: unknown = null;
     const worker = async () => {
-        for (let next = queue.shift(); next; next = queue.shift()) {
+        for (let next = queue.shift(); next && current(); next = queue.shift()) {
             const [name, urls] = next;
             try {
                 const located = await locateFile(urls);
+                if (!current()) return;
                 if (located === null) notFound.add(name);
                 else cache[name] = located;
             } catch (error) {
@@ -213,13 +222,15 @@ export function probeSeparatorSizes(): Promise<void> {
             }
         }
     };
-    probing = Promise.all(Array.from({ length: 8 }, worker))
+    const promise = Promise.all(Array.from({ length: 8 }, worker))
         .then(() => {
+            if (!current()) return;
             saveSourceCache(cache);
             if (failed > 0) console.warn(`could not locate ${failed} separation model files`, lastError);
         })
         .finally(() => {
-            probing = null;
+            if (probing?.promise === promise) probing = null;
         });
-    return probing;
+    probing = { promise, generation: startedGeneration };
+    return promise;
 }

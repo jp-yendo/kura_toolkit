@@ -5,14 +5,14 @@ import { emitJobEvent, finishJob, startJob } from '../job-manager';
 import { resolveFfmpegPath } from '../ffmpeg/ffmpeg';
 import { centerCancel, convertChannels, decodeToWav, mixFiles } from './audio-tools';
 import { isItemInstalled } from './library';
-import { forgetMedia } from './media-protocol';
+import { forgetMedia, forgetMediaUnder } from './media-protocol';
 import { mediaRef } from './media';
 import { modelPaths } from './paths';
 import { getWorker } from './python-worker';
 import { readSeparatorModelList, refreshSeparatorModelList, separatorModelInstalled } from './separator-models';
 import { separatorItemId } from './spec';
 import { withGpu } from './gpu-lock';
-import { isInsideWorkRoot, newId, produceFile, removeSession, removeTemp, sessionDir } from '../work-dir';
+import { isInsideWorkRoot, newId, produceFile, removeSession, removeTemp, sessionDir, sessionPath } from '../work-dir';
 import type {
     EnsemblePreset,
     MediaRef,
@@ -134,6 +134,7 @@ function usedParams(request: SeparationRunRequest): Partial<SeparationParams> {
 export async function runSeparation(jobId: string, request: SeparationRunRequest): Promise<SeparationCandidate> {
     startJob(jobId);
     try {
+        if (!isInsideWorkRoot(request.input)) throw new Error('INVALID_PATH');
         const id = newId();
         const dir = sessionDir(request.workKey, 'candidates', id);
         try {
@@ -253,5 +254,6 @@ export function discardPaths(paths: string[]): void {
 }
 
 export function discardWork(workKey: string): void {
+    forgetMediaUnder(sessionPath(workKey));
     void removeSession(workKey);
 }

@@ -3,12 +3,13 @@ import path from 'path';
 import { extractTarGz, extractZip } from './archive';
 import { downloadFile, isAbortError } from './downloader';
 import { updateManifest } from './manifest';
-import { bundledResourceDir, envPythonExecutable, libraryPaths, modelPaths, pythonExecutable } from './paths';
+import { bundledResourceDir, envPythonExecutable, libraryPaths, modelPaths } from './paths';
 import { buildPythonEnv } from './python-env';
 import { runProcess, WINDOWS_DLL_NOT_FOUND } from './process-runner';
 import {
     componentVariant,
     PYTHON_SPEC,
+    pythonExecutable,
     TORCH_INDEX,
     type ComponentSpec,
     type DownloadAsset,
@@ -20,7 +21,7 @@ import type { VoiceComponentId, VoicePlatformInfo } from '../../../shared/voice/
 // Python 本体・パッケージ一式・モデルの取得と展開。
 // 進捗は「受け取ったバイト数 / 全体のバイト数 (分かる場合)」と、処理中の内容 (ファイル名など) で通知する。
 
-export type InstallProgress = {
+type InstallProgress = {
     received: number;
     total: number | null;
     detail?: string;
@@ -60,6 +61,30 @@ async function fetchAsset(
     return fs.statSync(dest).size;
 }
 
+// 展開する zip の展開先。zip は自分の名前のフォルダ (NLTK のデータなど) を 1 つ持ち、zip と同じ場所に置く
+function zipExtractedDir(dest: string): string {
+    return dest.slice(0, -path.extname(dest).length);
+}
+
+// zip を同じ場所へ展開し、展開できたら zip を消す。展開は別の名前のフォルダ (.staging) に行ってから
+// 正式な名前にする (展開の途中で止まったものを展開済みと取り違えず、次の取得で展開し直すため)。
+// 失敗・キャンセルの場合も展開途中のものを消す
+async function extractSpecZip(dest: string): Promise<void> {
+    const target = zipExtractedDir(dest);
+    const staging = `${target}.staging`;
+    try {
+        await fs.promises.rm(staging, { recursive: true, force: true });
+        await extractZip(dest, staging);
+        const inner = path.join(staging, path.basename(target));
+        if (!fs.existsSync(inner)) throw new Error(`ZIP_INVALID_ENTRY: ${path.basename(target)} not found in ${dest}`);
+        await fs.promises.rm(target, { recursive: true, force: true });
+        await fs.promises.rename(inner, target);
+    } finally {
+        await fs.promises.rm(staging, { recursive: true, force: true });
+    }
+    await fs.promises.rm(dest, { force: true });
+}
+
 // モデルディレクトリに置くファイルを 1 つ取得する
 async function fetchSpecFile(
     file: SpecFile,
@@ -69,16 +94,16 @@ async function fetchSpecFile(
 ): Promise<number> {
     const dest = modelPaths().file(file.dest);
     const size = await fetchAsset(file, dest, context, base, total);
-    if (file.extractZip) {
-        await extractZip(dest, path.dirname(dest));
-    }
+    if (file.extractZip) await extractSpecZip(dest);
     return size;
 }
 
-// ファイルが取得済みか (大きさが分かるものは大きさも確かめる)
+// ファイルが取得済みか (大きさが分かるものは大きさも確かめる)。展開する zip は、展開を終えたフォルダがあるか
 export function isSpecFilePresent(file: SpecFile): boolean {
+    const dest = modelPaths().file(file.dest);
     try {
-        const stat = fs.statSync(modelPaths().file(file.dest));
+        if (file.extractZip) return fs.statSync(zipExtractedDir(dest)).isDirectory();
+        const stat = fs.statSync(dest);
         return stat.isFile() && (file.size === undefined || stat.size === file.size);
     } catch {
         return false;
@@ -160,7 +185,7 @@ function resolveRequirements(
 ): { lines: string[]; indexUrls: string[] } {
     const flavor = platform.platform === 'win32-x64' ? platform.gpu.cudaFlavor : null;
     const lines = readRequirementLines(spec.requirements).map(line => {
-        const match = /^(torch|torchaudio)==([0-9.]+)(\s*;\s*sys_platform\s*==\s*"(\w+)")?$/.exec(line);
+        const match = /^(torch|torchaudio|torchvision)==([0-9.]+)(\s*;\s*sys_platform\s*==\s*"(\w+)")?$/.exec(line);
         if (!match || !flavor) return line;
         if (match[4] && match[4] !== 'win32') return line;
         return `${match[1]}==${match[2]}+${flavor}`;
@@ -186,8 +211,10 @@ async function ensureVenv(env: VoiceComponentId): Promise<void> {
         try {
             await checkPython(python);
             return;
-        } catch {
-            // 壊れている場合は作り直す
+        } catch (error) {
+            // Python が起動して失敗した (仮想環境が壊れている) 場合だけ作り直す。起動できない場合
+            // (作業ディレクトリが無い・実行環境が足りないなど) は作り直しても直らないため、そのまま失敗させる
+            if (!(error instanceof Error && error.message.startsWith('PYTHON_BROKEN'))) throw error;
         }
     }
     await fs.promises.rm(lib.env(env), { recursive: true, force: true });

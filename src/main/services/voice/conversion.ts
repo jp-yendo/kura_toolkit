@@ -7,6 +7,7 @@ import { decodeToWav, measureLoudness, mixFiles, pitchShift, probeAudio } from '
 import { isItemInstalled } from './library';
 import { mediaRef } from './media';
 import { getWorker } from './python-worker';
+import { RVC_EMBEDDER_ITEMS } from './spec';
 import { withGpu } from './gpu-lock';
 import { rvcModelFiles } from './voice-models';
 import { isInsideWorkRoot, newId, produceFile, removeTemp, sessionDir, withJobTemp } from '../work-dir';
@@ -19,16 +20,6 @@ import type {
 
 // 音声変換 (RVC)。変換対象のボーカルは左右を平均したモノラルで変換し、変換結果は左右に同じ音を置いた
 // 中央定位のステレオとして伴奏と合成する (元の音源がモノラルならモノラルのまま)。
-
-// 埋め込みモデル名 -> ダウンロード項目
-const EMBEDDER_ITEMS: Record<string, string> = {
-    contentvec: 'model:converter:contentvec',
-    spin: 'model:converter:embedder-spin',
-    'spin-v2': 'model:converter:embedder-spin-v2',
-    'japanese-hubert-base': 'model:converter:embedder-japanese-hubert-base',
-    'chinese-hubert-base': 'model:converter:embedder-chinese-hubert-base',
-    'korean-hubert-base': 'model:converter:embedder-korean-hubert-base',
-};
 
 const F0_ITEMS: Record<string, string | null> = {
     rmvpe: 'model:converter:rmvpe',
@@ -74,9 +65,10 @@ export async function runConversion(jobId: string, request: ConversionRunRequest
     startJob(jobId);
     try {
         if (!isInsideWorkRoot(request.vocals)) throw new Error('INVALID_PATH');
+        if (request.accompaniment && !isInsideWorkRoot(request.accompaniment)) throw new Error('INVALID_PATH');
         const model = rvcModelFiles(request.voiceId);
         const embedder = model.rvc.embedder;
-        const embedderItem = EMBEDDER_ITEMS[embedder];
+        const embedderItem = RVC_EMBEDDER_ITEMS[embedder];
         if (!embedderItem) throw new Error(`EMBEDDER_UNSUPPORTED: ${embedder}`);
         if (!isItemInstalled(embedderItem)) throw new Error(`MODEL_REQUIRED: ${embedderItem}`);
         const f0Item = F0_ITEMS[request.params.f0Method];
@@ -127,7 +119,6 @@ async function convertInto(
                     output: converted,
                     model: weights,
                     index: index ?? '',
-                    tempDir: temp,
                     pitch: request.params.pitch,
                     f0Method: request.params.f0Method,
                     indexRate: request.params.indexRate,
@@ -201,6 +192,7 @@ export async function renderMix(jobId: string, request: MixRenderRequest): Promi
     startJob(jobId);
     try {
         if (!isInsideWorkRoot(request.vocals)) throw new Error('INVALID_PATH');
+        if (request.accompaniment && !isInsideWorkRoot(request.accompaniment)) throw new Error('INVALID_PATH');
         // 同じ組み合わせの試聴用の音が既にあれば、移調も合成もせずにそれを使う
         const accompaniment = request.accompaniment
             ? (accompanimentShift(request.workKey, request.accompaniment, request.pitch) ?? request.accompaniment)

@@ -20,7 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - The license changed from MIT to the GNU Affero General Public License v3.0 (AGPL-3.0).
 - Only one copy of the app runs at a time. Starting it again brings the open window to the front.
-- Chapter Cut: intermediate files are kept in the work directory set in App Settings.
+- Chapter Cut: intermediate files are created in the work directory set in App Settings and are
+  deleted when the cut or split ends.
 
 ### Fixed
 

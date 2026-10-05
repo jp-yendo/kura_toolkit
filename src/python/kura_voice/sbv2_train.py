@@ -165,7 +165,7 @@ def train(job: dict, context: StandaloneContext, job_dir: str) -> None:
         "--val-per-lang",
         "0",
         "--yomi_error",
-        "skip",
+        "raise",
         "--correct_path",
     ]
     if job["useJpExtra"]:
@@ -185,7 +185,7 @@ def train(job: dict, context: StandaloneContext, job_dir: str) -> None:
 
     context.event(kind="stage", stage="finalize")
     weights = sorted(
-        glob.glob(os.path.join(assets, f"{name}_e{epochs}_s*.safetensors")),
+        glob.glob(os.path.join(glob.escape(assets), f"{glob.escape(name)}_e{epochs}_s*.safetensors")),
         key=os.path.getmtime,
     )
     if not weights:

@@ -2,6 +2,7 @@ import React from 'react';
 import { Alert, Button, DialogActions, DialogContent, DialogTitle, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import AppDialog from '../common/AppDialog';
+import { parseVoiceError } from '../voice/voiceErrors';
 import { showNotice } from '../../stores/noticeStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import type { SettingsLoadError } from '@shared/types';
@@ -25,7 +26,8 @@ export default function SettingsLoadErrorDialog({ error }: Props) {
             const kept = await resetBroken();
             showNotice('info', t('settingsLoadError.kept', { path: kept }), 12000);
         } catch (caught) {
-            setFailure(caught instanceof Error ? caught.message : String(caught));
+            // main から届く「Error invoking remote method ...」の前置きを除いた本文を出す
+            setFailure(parseVoiceError(caught).raw);
             setBusy(false);
         }
     };

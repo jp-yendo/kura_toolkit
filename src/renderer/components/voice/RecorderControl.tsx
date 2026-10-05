@@ -8,29 +8,38 @@ import { showNotice } from '../../stores/noticeStore';
 
 type Props = {
     onRecorded(audio: RecordedAudio): void;
+    // 録音の開始操作から終了までの間 true を知らせる (録音中に変えてはいけない操作を止めるため)
+    onActiveChange?(active: boolean): void;
     disabled?: boolean;
     label?: string;
 };
 
 // マイク録音のボタンと入力レベル。録音を止めると 16bit の WAV を渡す
-export default function RecorderControl({ onRecorded, disabled, label }: Props) {
+export default function RecorderControl({ onRecorded, onActiveChange, disabled, label }: Props) {
     const { t } = useTranslation();
     const recorder = useRecorder();
     const recording = recorder.state === 'recording';
 
     const start = async () => {
-        // macOS ではマイクの利用を OS に許可してもらう必要がある
-        const allowed = await window.kuraToolkit.voice.requestMicrophone();
-        if (!allowed) {
-            showNotice('error', t('voice.recorder.denied'), 10000);
-            return;
+        onActiveChange?.(true);
+        let started = false;
+        try {
+            // macOS ではマイクの利用を OS に許可してもらう必要がある
+            const allowed = await window.kuraToolkit.voice.requestMicrophone();
+            if (!allowed) {
+                showNotice('error', t('voice.recorder.denied'), 10000);
+                return;
+            }
+            started = await recorder.start();
+        } finally {
+            if (!started) onActiveChange?.(false);
         }
-        await recorder.start();
     };
 
     const stop = () => {
         const audio = recorder.stop();
         if (audio) onRecorded(audio);
+        onActiveChange?.(false);
     };
 
     return (

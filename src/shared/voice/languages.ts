@@ -14,7 +14,7 @@ export const TTS_ENGINE_ITEMS: Record<TtsEngineId, string> = {
 };
 
 // 読み上げのモデルの学習で初期値に使う事前学習済みモデルのダウンロード項目 (エンジンごと)
-export const TTS_PRETRAINED_ITEMS: Record<TtsEngineId, string> = {
+const TTS_PRETRAINED_ITEMS: Record<TtsEngineId, string> = {
     'jp-extra': 'model:tts:train-jp-extra',
     multilingual: 'model:tts:train-multilingual',
 };

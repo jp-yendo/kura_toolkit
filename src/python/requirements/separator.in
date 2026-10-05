@@ -3,3 +3,6 @@ audio-separator[cpu]==0.47.0
 torch==2.11.0; sys_platform == "win32"
 # Apple Silicon では audio-separator が PyTorch 2.13 以上を要求する
 torch==2.14.1; sys_platform == "darwin"
+# torchvision (onnx2torch-py313 が使う) は torch と対になる版を OS ごとに指定する
+torchvision==0.26.0; sys_platform == "win32"
+torchvision==0.29.1; sys_platform == "darwin"

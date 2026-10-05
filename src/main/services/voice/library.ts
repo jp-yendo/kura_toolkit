@@ -1,8 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import { app } from 'electron';
-import { emitJobEvent, finishJob, isCancelled, onJobCancel, startJob } from '../job-manager';
-import { getSettings, updateSettings } from '../settings';
+import { countActiveJobsExcept, emitJobEvent, finishJob, isCancelled, onJobCancel, startJob } from '../job-manager';
+import { getSettings, saveSettings, updateSettings } from '../settings';
 import {
     fetchFiles,
     installComponent,
@@ -12,11 +12,12 @@ import {
     type InstallContext,
 } from './installer';
 import { readManifest, updateManifest, type LibraryManifest } from './manifest';
-import { envPythonExecutable, libraryPaths, modelPaths, pythonExecutable } from './paths';
+import { envPythonExecutable, libraryPaths, modelPaths } from './paths';
+import { clearPresetOverride } from './preset-overrides';
 import { defaultStorageDir, getLibraryDir, getModelDir, getWorkDir, isSameOrNested, isSamePath } from '../storage';
 import { getPlatformInfo } from './platform';
 import { buildPythonEnv } from './python-env';
-import { runProcess } from './process-runner';
+import { runProcess, WINDOWS_DLL_NOT_FOUND } from './process-runner';
 import { stopAllWorkersAndWait } from './python-worker';
 import { isFileBusyError, renameWithRetry } from '../../utils/rename-retry';
 import {
@@ -33,8 +34,11 @@ import {
     COMPONENT_SPECS,
     componentVariant,
     estimateComponentBytes,
+    JVNV_PRESET_NAMES,
     MODEL_SPECS,
+    presetItemId,
     PYTHON_SPEC,
+    pythonExecutable,
     separatorFilename,
     separatorItemId,
     type ComponentItemId,
@@ -324,12 +328,20 @@ function withLibraryLock<T>(task: () => Promise<T>): Promise<T> {
     return run;
 }
 
+// ライブラリの中身を変える処理は、ほかの処理 (学習・分離・変換など) の実行中は行わない。
+// それらの処理は仮想環境やモデルのファイルを使っており、入れ替え・削除・移動すると処理が失敗したり、
+// 使用中のファイルを消せずに中途半端な状態が残ったりするため。ownJobId はその処理自身のジョブ
+function checkLibraryIdle(ownJobId: string | null): void {
+    if (countActiveJobsExcept(ownJobId) > 0) throw new Error('LIBRARY_BUSY');
+}
+
 export async function downloadItems(jobId: string, ids: string[]): Promise<LibraryDownloadResult> {
     startJob(jobId);
     const controller = new AbortController();
     const unregister = onJobCancel(jobId, () => controller.abort());
     const results: LibraryItemResult[] = [];
     try {
+        checkLibraryIdle(jobId);
         // 先に始まった処理が終わるまで待つ (待っている間も中断できる)
         if (ids[0]) {
             emitJobEvent({
@@ -448,7 +460,7 @@ async function installItem(item: LibraryItem, platform: VoicePlatformInfo, conte
             // 分離モデルの一覧は導入したパッケージから取得する (取得できなければこの項目を失敗とする)
             forgetSeparatorModelList();
             await refreshSeparatorModelList();
-            void probeSeparatorSizes();
+            void probeSeparatorSizes().catch(error => console.warn('failed to look up separation model sizes', error));
         }
         return;
     }
@@ -547,17 +559,26 @@ async function removeModel(itemId: string): Promise<void> {
         await fs.promises.rm(full, { recursive: true, force: true });
         removePartial(full);
         if (file.endsWith('.zip')) {
-            // 展開したデータも消す
-            await fs.promises.rm(full.slice(0, -'.zip'.length), { recursive: true, force: true });
+            // 展開したデータと、展開の途中で止まったもの (.staging) も消す
+            const extracted = full.slice(0, -'.zip'.length);
+            await fs.promises.rm(extracted, { recursive: true, force: true });
+            await fs.promises.rm(`${extracted}.staging`, { recursive: true, force: true });
         }
         removeEmptyDirs(path.dirname(full), models.root);
     }
     updateManifest(next => {
         delete next.models[itemId];
     });
+    // 読み上げのプリセットは、名前と言語の変更の記録も消す (取得し直したときは元の名前と言語で使う)
+    const preset = JVNV_PRESET_NAMES.find(name => presetItemId(name) === itemId);
+    if (preset !== undefined) clearPresetOverride(preset);
 }
 
-export function removeItems(ids: string[], options: { removePython?: boolean } = {}): Promise<LibraryRemoveResult> {
+export async function removeItems(
+    ids: string[],
+    options: { removePython?: boolean } = {}
+): Promise<LibraryRemoveResult> {
+    checkLibraryIdle(null);
     return withLibraryLock(async () => removeItemsNow(ids, options));
 }
 
@@ -679,19 +700,16 @@ function relocateVenv(component: VoiceComponentId, oldRoot: string, newRoot: str
     );
 }
 
-async function verifyVenv(component: VoiceComponentId): Promise<boolean> {
-    try {
-        const result = await runProcess(
-            envPythonExecutable(component),
-            ['-c', 'import sys, torch; print(sys.prefix)'],
-            {
-                env: buildPythonEnv(component),
-            }
-        );
-        return result.code === 0;
-    } catch {
-        return false;
-    }
+// 移動先 (libraryRoot) の仮想環境が動くかを確かめる。Python が起動して失敗した場合だけ動かない (false) とし、
+// 起動できない場合 (作業ディレクトリが無い・実行環境が足りないなど) は仮想環境の問題ではないため、そのまま失敗させる
+async function verifyVenv(component: VoiceComponentId, libraryRoot: string): Promise<boolean> {
+    const result = await runProcess(
+        envPythonExecutable(component, libraryRoot),
+        ['-c', 'import sys, torch; print(sys.prefix)'],
+        { env: buildPythonEnv(component, {}, libraryRoot) }
+    );
+    if (result.code === WINDOWS_DLL_NOT_FOUND) throw new Error('VC_RUNTIME_MISSING');
+    return result.code === 0;
 }
 
 type MovableStorage = 'library' | 'model';
@@ -705,6 +723,7 @@ export async function moveStorage(
 ): Promise<StorageMoveResult> {
     startJob(jobId);
     try {
+        checkLibraryIdle(jobId);
         const newRoot = moveTarget(kind, targetDir);
         // 既定の場所へ移した場合は設定を空にする (既定の場所に従わせる)
         const setting = isSamePath(newRoot, defaultStorageDir(kind)) ? '' : newRoot;
@@ -842,37 +861,22 @@ async function relocateTree(
 }
 
 // 移動先を保存場所として設定に書き込む。書き込めなかった場合は、移動は終わっているが次の起動で元の場所を
-// 使ってしまうため失敗として知らせる
+// 使ってしまうため SETTINGS_SAVE_FAILED で失敗として知らせる (起動中の設定も元の場所のまま変えない)
 function saveStorageSetting(kind: MovableStorage, setting: string): void {
-    const result = updateSettings({ storage: kind === 'library' ? { libraryDir: setting } : { modelDir: setting } });
-    if (result.saveError) throw new Error(`SETTINGS_SAVE_FAILED: ${result.saveError}`);
+    saveSettings({ storage: kind === 'library' ? { libraryDir: setting } : { modelDir: setting } });
 }
 
-async function moveLibraryNow(jobId: string, newRoot: string, setting: string): Promise<StorageMoveResult> {
-    await stopAllWorkersAndWait();
-    const oldRoot = getLibraryDir();
-    if (isSamePath(oldRoot, newRoot)) return { cancelled: false, rebuildRequired: [], remainingPath: null };
-    checkMoveTarget('library', oldRoot, newRoot);
+const CANCELLED_MOVE: StorageMoveResult = { cancelled: true, rebuildRequired: [], remainingPath: null };
 
-    let remainingPath: string | null = null;
-    if (fs.existsSync(oldRoot)) {
-        const relocated = await relocateTree(jobId, oldRoot, newRoot);
-        if (relocated.cancelled) return { cancelled: true, rebuildRequired: [], remainingPath: null };
-        remainingPath = relocated.remainingPath;
-    } else {
-        fs.mkdirSync(newRoot, { recursive: true });
-    }
-
-    saveStorageSetting('library', setting);
-    forgetSeparatorModelList();
-
-    // 仮想環境の記録を書き換えて動作を確かめ、失敗した場合だけ作り直しの対象にする
+// 移動先の仮想環境の記録 (pyvenv.cfg) を新しい場所へ書き換えて動作を確かめ、動かないものを作り直しの対象として
+// 移動先の取得状況の記録に残す。作り直しの対象を返す
+async function relocateVenvs(oldRoot: string, newRoot: string): Promise<string[]> {
     const manifest = readManifest({ library: newRoot });
     const rebuildRequired: string[] = [];
     for (const spec of COMPONENT_SPECS) {
         if (!manifest.components[spec.id] || spec.id === 'tts-train') continue;
         relocateVenv(spec.env, oldRoot, newRoot);
-        if (!(await verifyVenv(spec.env))) {
+        if (!(await verifyVenv(spec.env, newRoot))) {
             rebuildRequired.push(componentItemId(spec.id));
             if (spec.id === 'tts' && manifest.components['tts-train'])
                 rebuildRequired.push(componentItemId('tts-train'));
@@ -889,12 +893,49 @@ async function moveLibraryNow(jobId: string, newRoot: string, setting: string): 
             { library: newRoot }
         );
     }
+    return rebuildRequired;
+}
+
+async function moveLibraryNow(jobId: string, newRoot: string, setting: string): Promise<StorageMoveResult> {
+    // 先に始まった処理を待つ間と、補助プロセスの終了を待つ間に中断された場合は、何も移さずに終える
+    if (isCancelled(jobId)) return CANCELLED_MOVE;
+    await stopAllWorkersAndWait();
+    if (isCancelled(jobId)) return CANCELLED_MOVE;
+    const oldRoot = getLibraryDir();
+    if (isSamePath(oldRoot, newRoot)) return { cancelled: false, rebuildRequired: [], remainingPath: null };
+    checkMoveTarget('library', oldRoot, newRoot);
+
+    let remainingPath: string | null = null;
+    if (fs.existsSync(oldRoot)) {
+        const relocated = await relocateTree(jobId, oldRoot, newRoot);
+        if (relocated.cancelled) return CANCELLED_MOVE;
+        remainingPath = relocated.remainingPath;
+    } else {
+        fs.mkdirSync(newRoot, { recursive: true });
+    }
+
+    // 仮想環境の記録の書き換えと動作の確認は、設定を書き換える前に行う (設定を保存できなかったときに、
+    // 仮想環境が元の場所を指したまま残らないようにするため)。確認そのものができなかった場合も、中身は移し終えて
+    // いるため設定は書き換えてから失敗を知らせる
+    let rebuildRequired: string[] = [];
+    let relocateError: unknown = null;
+    try {
+        rebuildRequired = await relocateVenvs(oldRoot, newRoot);
+    } catch (error) {
+        relocateError = error;
+    }
+    saveStorageSetting('library', setting);
+    forgetSeparatorModelList();
+    if (relocateError !== null) throw relocateError;
     return { cancelled: false, rebuildRequired, remainingPath };
 }
 
 // モデルディレクトリの移動 (補助プロセスはモデルの場所を起動時に受け取るため、止めてから移す)
 async function moveModelDirNow(jobId: string, newRoot: string, setting: string): Promise<StorageMoveResult> {
+    // 先に始まった処理を待つ間と、補助プロセスの終了を待つ間に中断された場合は、何も移さずに終える
+    if (isCancelled(jobId)) return CANCELLED_MOVE;
     await stopAllWorkersAndWait();
+    if (isCancelled(jobId)) return CANCELLED_MOVE;
     const oldRoot = getModelDir();
     if (isSamePath(oldRoot, newRoot)) return { cancelled: false, rebuildRequired: [], remainingPath: null };
     checkMoveTarget('model', oldRoot, newRoot);
@@ -902,7 +943,7 @@ async function moveModelDirNow(jobId: string, newRoot: string, setting: string):
     let remainingPath: string | null = null;
     if (fs.existsSync(oldRoot)) {
         const relocated = await relocateTree(jobId, oldRoot, newRoot);
-        if (relocated.cancelled) return { cancelled: true, rebuildRequired: [], remainingPath: null };
+        if (relocated.cancelled) return CANCELLED_MOVE;
         remainingPath = relocated.remainingPath;
     } else {
         fs.mkdirSync(newRoot, { recursive: true });

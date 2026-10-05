@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { updateSettings } from './settings';
+import { saveSettings } from './settings';
 import { defaultStorageDir, getLibraryDir, getModelDir, getWorkDir, isSameOrNested, isSamePath } from './storage';
 
 // 作業ディレクトリ (アプリ全体の一時ファイルの置き場) の管理。
@@ -31,11 +31,14 @@ function isDefaultWorkDir(dir: string): boolean {
     return isSamePath(dir, defaultStorageDir('work'));
 }
 
+// 選んだフォルダが空か。フォルダが無い場合は WORK_DIR_MISSING で失敗させる
+// (選んだものは既にあるフォルダのため、無いのは選んだ後に取り外し・名前の変更があった場合)
 function isEmptyDir(dir: string): boolean {
     try {
         return fs.readdirSync(dir).length === 0;
-    } catch {
-        return true;
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new Error(`WORK_DIR_MISSING: ${dir}`);
+        throw error;
     }
 }
 
@@ -62,7 +65,9 @@ function hasWorkFiles(names: string[]): boolean {
 
 // 作業ディレクトリを変えられる状態か (処理中のものや作業の結果が無いか) を確かめる。
 // 外部のプロセスの一時ファイル (tmp) は、待機中のプロセスを止めれば消えるため、ここでは見ない
-export function checkWorkDirIdle(): void {
+export async function checkWorkDirIdle(): Promise<void> {
+    // 破棄した結果を消している途中なら、消し終わるのを待ってから確かめる
+    await Promise.all(pendingRemovals);
     if (hasWorkFiles(['session', 'jobs', 'recordings'])) throw new Error('WORK_DIR_IN_USE');
 }
 
@@ -75,8 +80,7 @@ export async function changeWorkDir(target: string): Promise<void> {
     const current = getWorkDir();
     await Promise.all(pendingRemovals);
     if (hasWorkFiles(WORK_SUBDIRS)) throw new Error('WORK_DIR_IN_USE');
-    const result = updateSettings({ storage: { workDir: isDefaultWorkDir(target) ? '' : target } });
-    if (result.saveError) throw new Error(`SETTINGS_SAVE_FAILED: ${result.saveError}`);
+    saveSettings({ storage: { workDir: isDefaultWorkDir(target) ? '' : target } });
     if (isDefaultWorkDir(current)) await removeEmptyDir(current);
 }
 
@@ -109,9 +113,14 @@ export function sessionDir(workKey: string, ...parts: string[]): string {
     return workSubdir('session', checkWorkKey(workKey), ...parts);
 }
 
+// 作業ごとの結果の置き場 (作らずに場所だけを返す)
+export function sessionPath(workKey: string): string {
+    return path.join(getWorkDir(), 'session', checkWorkKey(workKey));
+}
+
 // 作業ごとの結果を、作業ごと消す (作業を破棄したとき)
 export function removeSession(workKey: string): Promise<void> {
-    return removeTemp(path.join(getWorkDir(), 'session', checkWorkKey(workKey)));
+    return removeTemp(sessionPath(workKey));
 }
 
 // 外部のプロセス 1 つ分の一時ファイルの置き場 (TEMP / TMP / TMPDIR の向け先)。プロセスが終了したら消す
@@ -139,7 +148,8 @@ async function removeAndPrune(target: string): Promise<void> {
 
 function isInside(child: string, parent: string): boolean {
     const relative = path.relative(parent, child);
-    return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
+    // 「..cache」のような名前の子フォルダを外側と取り違えないよう、「..」の階層だけを外側とみなす
+    return relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
 }
 
 async function removeEmptyDir(dir: string): Promise<boolean> {
