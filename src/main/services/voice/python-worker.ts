@@ -3,7 +3,7 @@ import path from 'path';
 import { killTree, spawnGroup } from '../../utils/process-tree';
 import { pythonLog } from './log';
 import { isCancelled, onJobCancel } from '../job-manager';
-import { processTempDir, removeTemp } from '../work-dir';
+import { newTempDir, discardLater } from '../work-dir';
 import { bundledResourceDir, envPythonExecutable, libraryPaths } from './paths';
 import { buildPythonEnv } from './python-env';
 import type { VoiceComponentId } from '../../../shared/voice/types';
@@ -80,14 +80,21 @@ class PythonWorker {
         const python = envPythonExecutable(this.component);
         const script = path.join(bundledResourceDir('python'), 'kura_voice', 'worker.py');
         // このプロセスの一時ファイルの置き場。プロセスが終了したら消す
-        const temp = processTempDir();
-        const child = spawnGroup(python, ['-u', script, '--component', this.component], {
-            cwd: this.cwd(),
-            env: { ...buildPythonEnv(this.component), TEMP: temp, TMP: temp, TMPDIR: temp },
-            stdio: ['pipe', 'pipe', 'pipe'],
-        });
-        child.once('exit', () => void removeTemp(temp));
-        child.once('error', () => void removeTemp(temp));
+        const temp = newTempDir();
+        let child: ChildProcess;
+        try {
+            child = spawnGroup(python, ['-u', script, '--component', this.component], {
+                cwd: this.cwd(),
+                env: { ...buildPythonEnv(this.component), TEMP: temp, TMP: temp, TMPDIR: temp },
+                stdio: ['pipe', 'pipe', 'pipe'],
+            });
+        } catch (error) {
+            // プロセスを起動できなかった場合は、終了の知らせが来ないため、ここで置き場を消す
+            discardLater(temp);
+            throw error;
+        }
+        child.once('exit', () => discardLater(temp));
+        child.once('error', () => discardLater(temp));
         this.child = child;
         this.stderrTail = [];
         // 終了しかけのプロセスへの書き込みは EPIPE になる。終了は exit で扱うため、ここでは無視する

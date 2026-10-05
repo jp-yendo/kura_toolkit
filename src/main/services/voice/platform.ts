@@ -6,11 +6,12 @@ import { getLibraryDir, getModelDir, getWorkDir, hasNonAscii } from '../storage'
 import type { CudaFlavor, GpuInfo, VoicePlatformInfo, VoicePlatformKey } from '../../../shared/voice/types';
 
 // 音声機能を動かす環境の判定 (OS・CPU・GPU・Visual C++ 再頒布可能パッケージ)。
-// 対応は Windows (x64) と Apple Silicon の macOS。PyTorch が Intel 版 macOS 向けの配布をやめているため、
-// Intel 版 macOS では動かせない。
+// 対応は Windows (x64)・Apple Silicon の macOS・Linux (x64)。PyTorch が Intel 版 macOS 向けの配布をやめているため、
+// Intel 版 macOS では動かせない。Arm 版の Windows と Linux は、使うライブラリの一部に配布物が無いため対象外。
 
 function platformKey(): VoicePlatformKey {
     if (process.platform === 'win32' && process.arch === 'x64') return 'win32-x64';
+    if (process.platform === 'linux' && process.arch === 'x64') return 'linux-x64';
     if (process.platform === 'darwin') {
         // x64 版のアプリを Rosetta で動かしている場合も、Python は arm64 版をそのまま起動できる
         const appleSilicon = process.arch === 'arm64' || os.cpus().some(cpu => cpu.model.includes('Apple'));
@@ -75,7 +76,7 @@ async function detectGpu(refresh = false): Promise<GpuInfo> {
     const key = platformKey();
     if (key === 'darwin-arm64') {
         gpuCache = { kind: 'mps', name: 'Apple Silicon' };
-    } else if (key === 'win32-x64') {
+    } else if (key === 'win32-x64' || key === 'linux-x64') {
         gpuCache = await detectNvidiaGpu();
     } else {
         gpuCache = { kind: 'none' };
@@ -101,7 +102,7 @@ export async function getPlatformInfo(refreshGpu = false): Promise<VoicePlatform
     const gpu = await detectGpu(refreshGpu);
     let unsupportedReason: VoicePlatformInfo['unsupportedReason'];
     if (key === 'unsupported') {
-        unsupportedReason = process.platform === 'win32' || process.platform === 'darwin' ? 'arch' : 'os';
+        unsupportedReason = ['win32', 'darwin', 'linux'].includes(process.platform) ? 'arch' : 'os';
     } else if (key === 'darwin-arm64' && (macosMajorVersion() ?? 0) < MIN_MACOS_MAJOR) {
         unsupportedReason = 'macosVersion';
     }
@@ -113,7 +114,8 @@ export async function getPlatformInfo(refreshGpu = false): Promise<VoicePlatform
         unsupportedReason,
         gpu,
         vcRuntimeMissing: isVcRuntimeMissing(),
-        ttsTrainingAvailable: key === 'win32-x64' && gpu.kind === 'cuda' && !!gpu.cudaFlavor,
+        // 読み上げのモデルの学習は、上流が NVIDIA GPU を前提としているため、NVIDIA GPU を使える Windows と Linux でのみ行う
+        ttsTrainingAvailable: (key === 'win32-x64' || key === 'linux-x64') && gpu.kind === 'cuda' && !!gpu.cudaFlavor,
         libraryDir,
         modelDir,
         storageNonAscii:

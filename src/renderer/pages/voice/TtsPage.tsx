@@ -60,11 +60,17 @@ import { useJobRunner } from '../../hooks/useJobRunner';
 import { showNotice } from '../../stores/noticeStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useTtsStore } from '../../stores/ttsStore';
-import { discardPathsAfterHandoff, useVoiceHandoffStore } from '../../stores/voiceHandoffStore';
+import { sendToConversion } from '../../stores/voiceHandoffStore';
 import { openVoiceLibrary, useVoiceLibraryStore } from '../../stores/voiceLibraryStore';
 import { applyTagFixes, findTagRanges, parseControlTags, type TagFix, type TagIssue } from '@shared/voice/control-tags';
 import { formatTimestamp, parseSubtitles } from '@shared/voice/subtitles';
-import { LANGUAGE_DEFINITIONS, VOICE_LANGUAGES, type TtsEngineId, type VoiceLanguage } from '@shared/voice/languages';
+import {
+    LANGUAGE_DEFINITIONS,
+    TTS_LANGUAGE_MODEL_ITEMS,
+    VOICE_LANGUAGES,
+    type TtsEngineId,
+    type VoiceLanguage,
+} from '@shared/voice/languages';
 import type {
     LibraryStatus,
     SpeedupConfirmation,
@@ -82,11 +88,6 @@ const SAVE_FILTER_KEYS: Record<TtsInputKind, string> = {
     srt: 'voice.fileFilters.srt',
     vtt: 'voice.fileFilters.vtt',
 };
-const ENGINE_ITEMS: Record<TtsEngineId, string> = {
-    'jp-extra': 'model:tts:bert-ja',
-    multilingual: 'model:tts:bert-en',
-};
-
 type Analysis = { errors: TagIssue[]; fixes: TagFix[] };
 
 // 編集中の文章を解析して、誤りと一括で直せる注意を返す (字幕は区間ごとに解析する)
@@ -118,8 +119,9 @@ function tagIssueMessage(t: TFunction, issue: TagIssue): string {
     return t(`voice.tagErrors.${issue.code}`, params);
 }
 
-function engineInstalled(status: LibraryStatus | null, engine: TtsEngineId): boolean {
-    return status?.items.find(item => item.id === ENGINE_ITEMS[engine])?.status === 'installed';
+// 読み上げる言語の言語モデル (BERT) を取得済みか。どちらの形式の声も、読み上げる言語のものだけを使う
+function languageInstalled(status: LibraryStatus | null, language: VoiceLanguage): boolean {
+    return status?.items.find(item => item.id === TTS_LANGUAGE_MODEL_ITEMS[language])?.status === 'installed';
 }
 
 export default function TtsPage() {
@@ -149,13 +151,12 @@ export default function TtsPage() {
     const libraryVersion = useVoiceLibraryStore(state => state.version);
 
     const language: VoiceLanguage = tts.language ?? (settings?.app.language === 'en' ? 'en' : 'ja');
-    const engines = LANGUAGE_DEFINITIONS[language].engines.filter(engine => engineInstalled(status, engine));
+    const languageReady = languageInstalled(status, language);
+    const engines = languageReady ? LANGUAGE_DEFINITIONS[language].engines : [];
     const engine: TtsEngineId | null = tts.engine && engines.includes(tts.engine) ? tts.engine : (engines[0] ?? null);
     // 機能全体の不足 (ReadinessAlert) を案内している間は出さない (同じ案内が重なるため)。
-    // 日本語のエンジンはそろっているが英語のエンジンが無い、といった場合に出す
-    const languageEngineMissing = status !== null && (readiness.readiness?.ready ?? false) && engines.length === 0;
-    // この言語で使えるが、まだ取得していないエンジン
-    const missingEngines = LANGUAGE_DEFINITIONS[language].engines.filter(item => !engineInstalled(status, item));
+    // 日本語の言語モデルはそろっているが英語の言語モデルが無い、といった場合に出す
+    const languageModelMissing = status !== null && (readiness.readiness?.ready ?? false) && !languageReady;
     const candidatesVoices = voices.filter(
         voice => voice.tts?.engine === engine && voice.tts.languages.includes(language)
     );
@@ -163,7 +164,7 @@ export default function TtsPage() {
     const styles = voice?.tts?.styles ?? ['Neutral'];
     const speakers = voice?.tts?.speakers ?? [];
 
-    // 画面を開いたときと、プリセットの声やエンジンをダウンロードしたときに読み直す
+    // 画面を開いたときと、すぐに使えるモデルや言語モデルをダウンロードしたときに読み直す
     React.useEffect(() => {
         let cancelled = false;
         window.kuraToolkit.voice.models
@@ -314,7 +315,7 @@ export default function TtsPage() {
         <PageContainer>
             <VoiceFeatureHeader feature='tts' />
             <ReadinessAlert state={readiness} />
-            {languageEngineMissing && (
+            {languageModelMissing && (
                 <Alert
                     severity='info'
                     action={
@@ -324,7 +325,7 @@ export default function TtsPage() {
                             startIcon={<DownloadIcon />}
                             onClick={() =>
                                 openVoiceLibrary({
-                                    select: [ENGINE_ITEMS[LANGUAGE_DEFINITIONS[language].engines[0]]],
+                                    select: [TTS_LANGUAGE_MODEL_ITEMS[language]],
                                     focus: 'tts',
                                 })
                             }
@@ -333,7 +334,7 @@ export default function TtsPage() {
                         </Button>
                     }
                 >
-                    {t('voice.tts.engineMissing', { language: t(`voice.languages.${language}`) })}
+                    {t('voice.tts.languageModelMissing', { language: t(`voice.languages.${language}`) })}
                 </Alert>
             )}
 
@@ -467,19 +468,19 @@ export default function TtsPage() {
                                 ))}
                             </Select>
                         </FormControl>
-                        {status && missingEngines.length > 0 && (
+                        {status && !languageReady && (
                             <Button
                                 size='small'
                                 startIcon={<DownloadIcon />}
                                 onClick={() =>
                                     openVoiceLibrary({
-                                        select: missingEngines.map(item => ENGINE_ITEMS[item]),
+                                        select: [TTS_LANGUAGE_MODEL_ITEMS[language]],
                                         focus: 'tts',
                                     })
                                 }
                                 sx={{ alignSelf: 'flex-start' }}
                             >
-                                {t('voice.tts.getEngines')}
+                                {t('voice.tts.getLanguageModels')}
                             </Button>
                         )}
                         <FormControl size='small' disabled={candidatesVoices.length === 0}>
@@ -696,19 +697,22 @@ export default function TtsPage() {
                                 size='small'
                                 startIcon={<RecordVoiceOverIcon />}
                                 disabled={!selected}
-                                onClick={() => {
+                                onClick={async () => {
                                     if (!selected) return;
-                                    useVoiceHandoffStore.getState().send({
-                                        from: 'tts',
-                                        workKey: tts.workKey,
-                                        name: tts.filePath?.split(/[\\/]/).pop() ?? t('voice.tts.suffix'),
-                                        sourcePath: tts.filePath ?? 'tts',
-                                        sourceMedia: selected.media,
-                                        vocals: [selected.media.path],
-                                        accompaniment: [],
-                                        channels: 1,
-                                    });
-                                    navigate('/audio/conversion');
+                                    try {
+                                        await sendToConversion(tts.workKey, {
+                                            from: 'tts',
+                                            name: tts.filePath?.split(/[\\/]/).pop() ?? t('voice.tts.suffix'),
+                                            sourcePath: tts.filePath ?? 'tts',
+                                            sourceMedia: selected.media,
+                                            vocals: [selected.media.path],
+                                            accompaniment: [],
+                                            channels: 1,
+                                        });
+                                        navigate('/audio/conversion');
+                                    } catch (error) {
+                                        showNotice('error', voiceErrorMessage(t, error), 10000);
+                                    }
                                 }}
                             >
                                 {t('voice.tts.sendToConversion')}
@@ -766,7 +770,9 @@ export default function TtsPage() {
                                                         event.stopPropagation();
                                                         tts.removeCandidate(candidate.id);
                                                         // 変換の画面へ渡した候補は、変換の画面が使い終わってから消す
-                                                        discardPathsAfterHandoff([candidate.media.path]);
+                                                        void window.kuraToolkit.voice.media.discard(tts.workKey, [
+                                                            candidate.media.path,
+                                                        ]);
                                                     }}
                                                 >
                                                     <DeleteOutlineIcon fontSize='small' />
@@ -1022,6 +1028,7 @@ export default function TtsPage() {
 
             {selected && (
                 <ExportDialog
+                    workKey={tts.workKey}
                     open={exportOpen}
                     onClose={() => setExportOpen(false)}
                     entries={exportEntries}

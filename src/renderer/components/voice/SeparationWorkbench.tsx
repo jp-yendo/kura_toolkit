@@ -12,7 +12,6 @@ import {
     FormControlLabel,
     IconButton,
     InputLabel,
-    ListSubheader,
     MenuItem,
     Radio,
     Select,
@@ -35,16 +34,19 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import CallSplitIcon from '@mui/icons-material/CallSplit';
 import DownloadIcon from '@mui/icons-material/Download';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
-import i18n from '../../i18n/config';
 import AppDialog from '../common/AppDialog';
 import Panel from '../common/Panel';
 import SectionLabel from '../common/SectionLabel';
 import ProgressDialog from '../common/ProgressDialog';
 import PresetBar from './PresetBar';
 import SeparationParamsForm from './SeparationParamsForm';
+import SeparationMethodPicker, {
+    EMPTY_METHOD_SELECTION,
+    resolveMethod,
+    type MethodSelection,
+} from './SeparationMethodPicker';
 import SyncPlayer, { type PlayerSource } from './SyncPlayer';
 import {
     assignRoles,
@@ -59,32 +61,24 @@ import { isCancelledError, missingItemsFromError, voiceErrorMessage } from './vo
 import { useJobRunner } from '../../hooks/useJobRunner';
 import { showNotice } from '../../stores/noticeStore';
 import { openVoiceLibrary, useVoiceLibraryStore } from '../../stores/voiceLibraryStore';
-import { discardPathsAfterHandoff } from '../../stores/voiceHandoffStore';
 import type { SeparationWorkStore } from '../../stores/separationWorkStore';
 import {
-    ENSEMBLE_ALGORITHMS,
-    type EnsembleAlgorithm,
     type MediaRef,
     type SeparationArch,
     type SeparationCandidate,
     type SeparationCategory,
-    type SeparationMethod,
     type SeparationModelList,
     type SeparationParams,
     type SeparationPresetParams,
 } from '@shared/voice/types';
 
 const CATEGORIES: SeparationCategory[] = ['vocals', 'multi', 'karaoke', 'cleanup', 'other'];
-const CENTER_CANCEL = 'center-cancel';
-const CUSTOM_ENSEMBLE = 'custom-ensemble';
 const ARCH_KEYS: Record<SeparationArch, keyof SeparationParams> = {
     MDX: 'mdx',
     VR: 'vr',
     Demucs: 'demucs',
     MDXC: 'mdxc',
 };
-// 組み合わせるモデルの選択欄に名前を並べる上限 (超えたら数で示す)
-const ENSEMBLE_NAMES_SHOWN = 2;
 
 type PlaySelection = { kind: 'original' } | { kind: 'candidate'; candidateId: string; stems: string[] };
 
@@ -99,12 +93,6 @@ type Props = {
 function stemLabel(t: TFunction, category: SeparationCategory, stemName: string, role: string): string {
     const key = roleLabelKey(category, role);
     return key ? `${t(key)} (${stemName})` : stemName;
-}
-
-// 出力の名前 (分離の品質の表示に使う)。訳がある名前は訳を、それ以外はそのまま表示する
-function outputName(t: TFunction, name: string): string {
-    const key = `voice.stems.${name.toLowerCase()}`;
-    return i18n.exists(key) ? t(key) : name;
 }
 
 export function trackLabel(t: (key: string) => string, track: Track): string {
@@ -131,9 +119,7 @@ export default function SeparationWorkbench({ store, disabled }: Props) {
     } = store();
     const [models, setModels] = React.useState<SeparationModelList | null>(null);
     const [modelError, setModelError] = React.useState<string | null>(null);
-    const [methodKey, setMethodKey] = React.useState('');
-    const [ensembleModels, setEnsembleModels] = React.useState<string[]>([]);
-    const [algorithm, setAlgorithm] = React.useState<EnsembleAlgorithm>('avg_wave');
+    const [selection, setSelection] = React.useState<MethodSelection>(EMPTY_METHOD_SELECTION);
     const [play, setPlay] = React.useState<PlaySelection>({ kind: 'original' });
     const [overlay, setOverlay] = React.useState<Overlay | null>(null);
     const overlayRef = React.useRef<Overlay | null>(null);
@@ -146,17 +132,16 @@ export default function SeparationWorkbench({ store, disabled }: Props) {
     const [removeStageConfirm, setRemoveStageConfirm] = React.useState({ open: false, name: '' });
     const { job, run, cancel } = useJobRunner();
 
-    const loadModels = React.useCallback(
-        async (refresh = false) => {
-            try {
-                setModels(await window.kuraToolkit.voice.separation.listModels(refresh));
-                setModelError(null);
-            } catch (error) {
-                setModelError(voiceErrorMessage(t, error));
-            }
-        },
-        [t]
-    );
+    const loadModels = React.useCallback(async () => {
+        try {
+            setModels(await window.kuraToolkit.voice.separation.listModels());
+            setModelError(null);
+        } catch (error) {
+            // 前の一覧のまま、使えなくなったモデルを示さないよう空にする
+            setModels(null);
+            setModelError(voiceErrorMessage(t, error));
+        }
+    }, [t]);
 
     // ダウンロードでモデルの取得状況が変わったら読み直す
     React.useEffect(() => {
@@ -182,7 +167,7 @@ export default function SeparationWorkbench({ store, disabled }: Props) {
         overlayRef.current = next;
         setOverlay(next);
         if (previous && previous.media.path !== next?.media.path)
-            void window.kuraToolkit.voice.media.discard([previous.media.path]);
+            void window.kuraToolkit.voice.media.discard(workKey, [previous.media.path]);
     };
 
     // --- 再生対象 (複数の出力を選んだ場合は重ねた音を作る) ---
@@ -218,7 +203,7 @@ export default function SeparationWorkbench({ store, disabled }: Props) {
                 // 作っている間に選択が変わった場合は使わないので消す。同じ組み合わせは同じファイルになるため、
                 // 表示中の音や、作っている途中の組み合わせの音と同じ場合は残す
                 if (media.path !== overlayRef.current?.media.path && mixKey !== pendingMixRef.current)
-                    void window.kuraToolkit.voice.media.discard([media.path]);
+                    void window.kuraToolkit.voice.media.discard(workKey, [media.path]);
             })
             .catch(error => showNotice('error', voiceErrorMessage(t, error)));
         return () => {
@@ -229,48 +214,7 @@ export default function SeparationWorkbench({ store, disabled }: Props) {
 
     if (!source || !stage) return null;
     const category = stage.category;
-    const categoryModels = (models?.models ?? []).filter(model => model.category === category);
-    const categoryPresets = (models?.presets ?? []).filter(preset => preset.category === category);
-    const installedModels = categoryModels.filter(model => model.installed);
-
-    // 選択中の方式
-    let method: SeparationMethod | null = null;
-    let methodArchs: SeparationArch[] = [];
-    let missingItems: string[] = [];
-    if (methodKey === CENTER_CANCEL) {
-        method = { kind: 'centerCancel' };
-    } else if (methodKey === CUSTOM_ENSEMBLE) {
-        if (ensembleModels.length >= 2) method = { kind: 'ensemble', filenames: ensembleModels, algorithm };
-        methodArchs = [
-            ...new Set(
-                categoryModels.filter(model => ensembleModels.includes(model.filename)).map(model => model.arch)
-            ),
-        ];
-    } else if (methodKey.startsWith('preset:')) {
-        const preset = categoryPresets.find(item => `preset:${item.id}` === methodKey);
-        if (preset) {
-            method = { kind: 'ensemblePreset', presetId: preset.id };
-            const members = (models?.models ?? []).filter(model => preset.models.includes(model.filename));
-            methodArchs = [...new Set(members.map(model => model.arch))];
-            missingItems = members.filter(model => !model.installed).map(model => model.itemId);
-        }
-    } else if (methodKey.startsWith('model:')) {
-        const model = categoryModels.find(item => `model:${item.filename}` === methodKey);
-        if (model) {
-            method = { kind: 'model', filename: model.filename };
-            methodArchs = [model.arch];
-            if (!model.installed) missingItems = [model.itemId];
-        }
-    }
-    const selectedModel = methodKey.startsWith('model:')
-        ? categoryModels.find(item => `model:${item.filename}` === methodKey)
-        : undefined;
-    const quality = selectedModel
-        ? Object.entries(selectedModel.sdr)
-              .filter(([, value]) => value !== null)
-              .map(([stem, value]) => `${outputName(t, stem)} ${Number(value).toFixed(1)}`)
-              .join(' / ')
-        : '';
+    const { method, archs: methodArchs } = resolveMethod(selection, category, models);
     const busy = disabled || job !== null;
     const canEditStage = stage.candidates.length === 0;
     const lastIndex = stages.length - 1;
@@ -288,32 +232,37 @@ export default function SeparationWorkbench({ store, disabled }: Props) {
     const discardCandidates = (candidates: SeparationCandidate[]) => {
         const paths = candidates.flatMap(candidate => candidate.stems.map(stem => stem.media.path));
         if (paths.length === 0) return;
-        discardPathsAfterHandoff(paths);
+        void window.kuraToolkit.voice.media.discard(workKey, paths);
         if (overlayRef.current && paths.some(path => overlayRef.current?.key.split('|').includes(path)))
             replaceOverlay(null);
     };
 
     const runSeparation = async () => {
         if (!method || !inputTrack) return;
-        if (missingItems.length > 0) {
-            openVoiceLibrary({ select: missingItems, focus: 'separator' });
-            return;
-        }
         const input = inputTrack.paths.length === 1 ? inputTrack.paths[0] : null;
         try {
             const candidate = await run(t('voice.separation.running'), async jobId => {
-                // 複数の音を重ねたトラック (伴奏に戻したコーラスなど) は、先に 1 つにしてから分離する
-                const inputPath =
-                    input ??
-                    (await window.kuraToolkit.voice.media.mix(jobId, workKey, inputTrack.paths, source.channels)).path;
-                return window.kuraToolkit.voice.separation.run(jobId, {
-                    workKey,
-                    input: inputPath,
-                    channels: source.channels,
-                    method: method as SeparationMethod,
-                    params,
-                    category,
-                });
+                // 複数の音を重ねたトラック (伴奏に戻したコーラスなど) は、先に 1 つにしてから分離する。
+                // 重ねた音は分離が終われば要らないため消す (同じ組み合わせを重ねた再生に使っている場合は残す)
+                const mixed =
+                    input === null
+                        ? (await window.kuraToolkit.voice.media.mix(jobId, workKey, inputTrack.paths, source.channels))
+                              .path
+                        : null;
+                try {
+                    return await window.kuraToolkit.voice.separation.run(jobId, {
+                        workKey,
+                        input: input ?? (mixed as string),
+                        channels: source.channels,
+                        method,
+                        params,
+                        category,
+                    });
+                } finally {
+                    if (mixed && mixed !== overlayRef.current?.media.path) {
+                        void window.kuraToolkit.voice.media.discard(workKey, [mixed]);
+                    }
+                }
             });
             addCandidate(activeStage, candidate);
             setPlay({ kind: 'candidate', candidateId: candidate.id, stems: [candidate.stems[0]?.name ?? ''] });
@@ -324,7 +273,7 @@ export default function SeparationWorkbench({ store, disabled }: Props) {
             }
             const missing = missingItemsFromError(error);
             showNotice('error', voiceErrorMessage(t, error), 10000);
-            if (missing.length > 0) openVoiceLibrary({ select: missing, focus: 'separator' });
+            if (missing.length > 0) openVoiceLibrary({ select: missing, focus: 'separation' });
         }
     };
 
@@ -442,9 +391,6 @@ export default function SeparationWorkbench({ store, disabled }: Props) {
             )
             .join(' / ');
 
-    const modelName = (filename: string) =>
-        installedModels.find(model => model.filename === filename)?.name ?? filename;
-
     return (
         <Stack spacing={2}>
             <Stack direction='row' spacing={1} sx={{ alignItems: 'center' }}>
@@ -493,7 +439,7 @@ export default function SeparationWorkbench({ store, disabled }: Props) {
                 <Alert
                     severity='warning'
                     action={
-                        <Button color='inherit' size='small' onClick={() => void loadModels(true)}>
+                        <Button color='inherit' size='small' onClick={() => void loadModels()}>
                             {t('voice.common.retry')}
                         </Button>
                     }
@@ -542,8 +488,7 @@ export default function SeparationWorkbench({ store, disabled }: Props) {
                                 value={category}
                                 onChange={event => {
                                     updateStage(activeStage, { category: event.target.value as SeparationCategory });
-                                    setMethodKey('');
-                                    setEnsembleModels([]);
+                                    setSelection(EMPTY_METHOD_SELECTION);
                                 }}
                             >
                                 {CATEGORIES.map(item => (
@@ -558,130 +503,21 @@ export default function SeparationWorkbench({ store, disabled }: Props) {
                                 {t('voice.separation.stageLocked')}
                             </Typography>
                         )}
-                        <FormControl size='small' disabled={busy}>
-                            <InputLabel id='separation-method'>{t('voice.separation.method')}</InputLabel>
-                            <Select
-                                labelId='separation-method'
-                                label={t('voice.separation.method')}
-                                value={methodKey}
-                                onChange={event => setMethodKey(String(event.target.value))}
-                                MenuProps={{ slotProps: { paper: { sx: { maxHeight: 460 } } } }}
-                            >
-                                {category === 'vocals' && (
-                                    <ListSubheader>{t('voice.separation.classicMethods')}</ListSubheader>
-                                )}
-                                {category === 'vocals' && (
-                                    <MenuItem value={CENTER_CANCEL}>{t('voice.separation.centerCancel')}</MenuItem>
-                                )}
-                                {categoryPresets.length > 0 && (
-                                    <ListSubheader>{t('voice.separation.ensemblePresets')}</ListSubheader>
-                                )}
-                                {categoryPresets.map(preset => (
-                                    <MenuItem key={preset.id} value={`preset:${preset.id}`}>
-                                        {preset.name}
-                                        {!preset.installed && (
-                                            <Typography
-                                                component='span'
-                                                variant='caption'
-                                                color='text.secondary'
-                                                sx={{ ml: 1 }}
-                                            >
-                                                {t('voice.separation.notDownloaded')}
-                                            </Typography>
-                                        )}
-                                    </MenuItem>
-                                ))}
-                                {installedModels.length >= 2 && (
-                                    <MenuItem value={CUSTOM_ENSEMBLE}>{t('voice.separation.customEnsemble')}</MenuItem>
-                                )}
-                                <ListSubheader>{t('voice.separation.models')}</ListSubheader>
-                                {categoryModels.map(model => (
-                                    <MenuItem key={model.filename} value={`model:${model.filename}`}>
-                                        <Box sx={{ minWidth: 0 }}>
-                                            <Typography variant='body2' noWrap>
-                                                {model.name}
-                                            </Typography>
-                                            <Typography variant='caption' color='text.secondary'>
-                                                {model.arch}
-                                                {model.installed ? '' : ` / ${t('voice.separation.notDownloaded')}`}
-                                            </Typography>
-                                        </Box>
-                                    </MenuItem>
-                                ))}
-                            </Select>
-                        </FormControl>
+                        <SeparationMethodPicker
+                            category={category}
+                            models={models}
+                            value={selection}
+                            onChange={setSelection}
+                            disabled={busy}
+                        />
                         <Button
                             size='small'
                             startIcon={<DownloadIcon />}
-                            onClick={() => openVoiceLibrary({ focus: 'separator' })}
+                            onClick={() => openVoiceLibrary({ focus: 'separation' })}
                             sx={{ alignSelf: 'flex-start' }}
                         >
                             {t('voice.separation.getModels')}
                         </Button>
-                        {quality && (
-                            <Tooltip title={t('voice.separation.qualityHint')} describeChild>
-                                <Stack
-                                    direction='row'
-                                    spacing={0.5}
-                                    sx={{ alignItems: 'center', alignSelf: 'flex-start', color: 'text.secondary' }}
-                                >
-                                    <Typography variant='caption' sx={{ lineHeight: 1.5 }}>
-                                        {t('voice.separation.quality', { values: quality })}
-                                    </Typography>
-                                    <InfoOutlinedIcon sx={{ fontSize: 14 }} />
-                                </Stack>
-                            </Tooltip>
-                        )}
-                        {methodKey.startsWith('preset:') && (
-                            <Typography variant='caption' color='text.secondary' sx={{ lineHeight: 1.5 }}>
-                                {categoryPresets.find(item => `preset:${item.id}` === methodKey)?.description}
-                            </Typography>
-                        )}
-                        {methodKey === CUSTOM_ENSEMBLE && (
-                            <Stack spacing={1}>
-                                <FormControl size='small'>
-                                    <InputLabel id='ensemble-models'>{t('voice.separation.ensembleModels')}</InputLabel>
-                                    <Select
-                                        labelId='ensemble-models'
-                                        label={t('voice.separation.ensembleModels')}
-                                        multiple
-                                        value={ensembleModels}
-                                        onChange={event => setEnsembleModels(event.target.value as string[])}
-                                        renderValue={value => {
-                                            const filenames = value as string[];
-                                            return filenames.length > ENSEMBLE_NAMES_SHOWN
-                                                ? t('voice.separation.modelCount', { count: filenames.length })
-                                                : filenames.map(modelName).join(t('voice.common.listSeparator'));
-                                        }}
-                                    >
-                                        {installedModels.map(model => (
-                                            <MenuItem key={model.filename} value={model.filename}>
-                                                <Checkbox
-                                                    size='small'
-                                                    checked={ensembleModels.includes(model.filename)}
-                                                />
-                                                {model.name}
-                                            </MenuItem>
-                                        ))}
-                                    </Select>
-                                </FormControl>
-                                <FormControl size='small'>
-                                    <InputLabel id='ensemble-algorithm'>{t('voice.separation.algorithm')}</InputLabel>
-                                    <Select
-                                        labelId='ensemble-algorithm'
-                                        label={t('voice.separation.algorithm')}
-                                        value={algorithm}
-                                        onChange={event => setAlgorithm(event.target.value as EnsembleAlgorithm)}
-                                    >
-                                        {ENSEMBLE_ALGORITHMS.map(item => (
-                                            <MenuItem key={item} value={item}>
-                                                {t(`voice.separation.algorithms.${item}`)}
-                                            </MenuItem>
-                                        ))}
-                                    </Select>
-                                </FormControl>
-                            </Stack>
-                        )}
                         {methodArchs.map(arch => (
                             <Stack key={arch} spacing={1}>
                                 <SectionLabel>{t('voice.separation.paramsFor', { arch })}</SectionLabel>
@@ -713,11 +549,11 @@ export default function SeparationWorkbench({ store, disabled }: Props) {
                         ))}
                         <Button
                             variant='contained'
-                            startIcon={missingItems.length > 0 ? undefined : <CallSplitIcon />}
+                            startIcon={<CallSplitIcon />}
                             disabled={busy || !method || !inputTrack}
                             onClick={() => void runSeparation()}
                         >
-                            {missingItems.length > 0 ? t('voice.separation.downloadModel') : t('voice.separation.run')}
+                            {t('voice.separation.run')}
                         </Button>
                     </Stack>
                 </Panel>

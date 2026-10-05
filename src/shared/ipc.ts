@@ -27,16 +27,17 @@ import type {
     SettingsUpdateResult,
     StorageInfo,
     StorageKind,
+    StorageMoveDecisions,
+    StorageMovePlan,
     StorageMoveResult,
     UpdateState,
     VectorizeParams,
 } from './types';
-import type { CorpusSetId, TtsEngineId, VoiceLanguage } from './voice/languages';
+import type { TtsEngineId, VoiceLanguage } from './voice/languages';
 import type {
     AudioExportSettings,
     ConversionCandidate,
     ConversionRunRequest,
-    DatasetItem,
     ExportItem,
     ExportResult,
     FeatureReadiness,
@@ -58,7 +59,9 @@ import type {
     TtsInputKind,
     TtsRunRequest,
     TtsRunResult,
-    TtsTrainingDraft,
+    TrainingAudio,
+    TrainingSetDetail,
+    TrainingSetSummary,
     VoiceFeatureId,
     VoiceModelFeature,
     VoiceModelInfo,
@@ -75,7 +78,8 @@ export type VoiceApi = {
         checkFeature(feature: VoiceFeatureId, extra?: string[]): Promise<FeatureReadiness>;
         download(jobId: string, ids: string[]): Promise<LibraryDownloadResult>;
         remove(ids: string[], options?: { removePython?: boolean }): Promise<LibraryRemoveResult>;
-        refreshSeparatorModels(): Promise<LibraryStatus>;
+        // 分離モデルの一覧が無ければ作る (パッケージ一式の導入後)
+        ensureSeparatorModelList(): Promise<LibraryStatus>;
         probeSeparatorSizes(): Promise<LibraryStatus>;
         getPendingUpdates(): Promise<{ items: LibraryItem[]; promptNeeded: boolean }>;
         markUpdatePrompted(): Promise<void>;
@@ -87,13 +91,16 @@ export type VoiceApi = {
     media: {
         prepareInput(jobId: string, workKey: string, sourcePath: string): Promise<PreparedInput>;
         mix(jobId: string, workKey: string, paths: string[], channels: number): Promise<MediaRef>;
-        discard(paths: string[]): Promise<void>;
+        // その作業の置き場の中のものに限る
+        discard(workKey: string, paths: string[]): Promise<void>;
+        // 別の機能の作業へ渡す音声を、渡す先の作業の置き場へ移す (移した後の音声を、渡したパスの順に返す)
+        transfer(fromWorkKey: string, toWorkKey: string, paths: string[]): Promise<MediaRef[]>;
         discardWork(workKey: string): Promise<void>;
         // 作業ディレクトリ内の音声を再生できるようにする
-        ref(path: string): Promise<MediaRef>;
+        ref(workKey: string, path: string): Promise<MediaRef>;
     };
     separation: {
-        listModels(refresh?: boolean): Promise<SeparationModelList>;
+        listModels(): Promise<SeparationModelList>;
         run(jobId: string, request: SeparationRunRequest): Promise<SeparationCandidate>;
     };
     conversion: {
@@ -132,36 +139,36 @@ export type VoiceApi = {
         rename(kind: PresetKind, id: string, name: string): Promise<PresetRecord<VoicePresetParams>[]>;
         remove(kind: PresetKind, id: string): Promise<PresetRecord<VoicePresetParams>[]>;
     };
+    trainingSets: {
+        list(feature: VoiceModelFeature): Promise<TrainingSetSummary[]>;
+        get(feature: VoiceModelFeature, id: string): Promise<TrainingSetDetail>;
+        // 読み上げの学習セットは言語を指定し、音声変換の学習セットは指定しない
+        create(feature: VoiceModelFeature, name: string, language?: VoiceLanguage): Promise<TrainingSetSummary>;
+        rename(feature: VoiceModelFeature, id: string, name: string): Promise<TrainingSetSummary>;
+        // ごみ箱に移す
+        remove(feature: VoiceModelFeature, id: string): Promise<void>;
+        addRecording(
+            feature: VoiceModelFeature,
+            id: string,
+            wav: Uint8Array,
+            target: { name: string; sentenceId?: string }
+        ): Promise<TrainingAudio>;
+        // 読み上げの学習セットでは、文を指定してファイルを 1 つ渡す
+        addFiles(
+            jobId: string,
+            feature: VoiceModelFeature,
+            id: string,
+            paths: string[],
+            sentenceId?: string
+        ): Promise<TrainingAudio[]>;
+        removeAudio(feature: VoiceModelFeature, id: string, audioId: string): Promise<void>;
+    };
     training: {
-        rvcDataset(): Promise<DatasetItem[]>;
-        rvcAddFiles(jobId: string, paths: string[]): Promise<DatasetItem[]>;
-        rvcAddRecording(wav: Uint8Array, name: string): Promise<DatasetItem>;
-        rvcRemove(id: string): Promise<void>;
-        rvcClear(): Promise<void>;
-        rvcStart(jobId: string, name: string): Promise<VoiceModelInfo>;
-        ttsDraft(language: VoiceLanguage, set: CorpusSetId): Promise<TtsTrainingDraft>;
-        ttsSaveRecording(
-            language: VoiceLanguage,
-            set: CorpusSetId,
-            sentenceId: string,
-            wav: Uint8Array
-        ): Promise<DatasetItem>;
-        ttsSetFile(
-            jobId: string,
-            language: VoiceLanguage,
-            set: CorpusSetId,
-            sentenceId: string,
-            path: string
-        ): Promise<DatasetItem>;
-        ttsRemove(language: VoiceLanguage, set: CorpusSetId, sentenceId: string): Promise<void>;
-        ttsClear(language: VoiceLanguage, set: CorpusSetId): Promise<void>;
-        ttsStart(
-            jobId: string,
-            options: { language: VoiceLanguage; corpusSet: CorpusSetId; engine: TtsEngineId; name: string }
-        ): Promise<VoiceModelInfo>;
+        rvcStart(jobId: string, setId: string, name: string): Promise<VoiceModelInfo>;
+        ttsStart(jobId: string, options: { setId: string; engine: TtsEngineId; name: string }): Promise<VoiceModelInfo>;
     };
     export: {
-        run(jobId: string, items: ExportItem[], settings: AudioExportSettings): Promise<ExportResult>;
+        run(jobId: string, workKey: string, items: ExportItem[], settings: AudioExportSettings): Promise<ExportResult>;
         existing(paths: string[]): Promise<string[]>;
     };
 };
@@ -193,13 +200,20 @@ export type IpcApi = {
     // 保存場所 (ライブラリ・モデル・作業ディレクトリ)
     storage: {
         getInfo(): Promise<StorageInfo>;
-        // ライブラリ・モデルディレクトリの中身を選んだフォルダへ移動し、そのフォルダを新しい場所にする
-        // (進捗は job:event)。targetDir が null の場合は既定の場所へ戻す
-        move(jobId: string, kind: Exclude<StorageKind, 'work'>, targetDir: string | null): Promise<StorageMoveResult>;
+        // ライブラリ・モデルディレクトリの中身を選んだフォルダへ移動し (中身がある場合はまとまりごとにマージする)、
+        // そのフォルダを新しい場所にする (進捗は job:event)。targetDir が null の場合は既定の場所へ戻す
+        move(
+            jobId: string,
+            kind: Exclude<StorageKind, 'work'>,
+            targetDir: string | null,
+            decisions: StorageMoveDecisions
+        ): Promise<StorageMoveResult>;
         // 作業ディレクトリの場所を変える (空文字で既定に戻す)
         setWorkDir(dir: string): Promise<StorageInfo>;
-        // 移動を始める前に、移動先を選べるか (空のフォルダか、ほかの保存場所と重ならないか) を確かめる
-        checkMove(kind: Exclude<StorageKind, 'work'>, targetDir: string | null): Promise<void>;
+        // 要らなくなった一時ファイルを消す (機能の画面に入ったとき。完了は待たない)
+        cleanupWork(): Promise<void>;
+        // 移動を始める前に、移動先を選べるかを確かめ、両方にあるまとまり (上書きするかを選ぶもの) を求める
+        planMove(kind: Exclude<StorageKind, 'work'>, targetDir: string | null): Promise<StorageMovePlan>;
     };
     // ffmpeg/ffprobe の自動検出
     ffmpeg: {

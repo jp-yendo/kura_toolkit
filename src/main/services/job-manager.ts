@@ -2,6 +2,7 @@ import type { ChildProcess } from 'child_process';
 import { BrowserWindow } from 'electron';
 import { IPC_CHANNELS } from '../../shared/constants';
 import type { JobEvent } from '../../shared/types';
+import { runCleanup } from './work-dir';
 
 // 長時間処理 (ジョブ) の状態管理。
 // jobId は renderer 側で生成され、開始 invoke の引数として渡される。
@@ -25,6 +26,8 @@ export function setJobWindow(window: BrowserWindow | null): void {
 // ジョブを開始登録する
 export function startJob(jobId: string): void {
     jobs.set(jobId, { children: new Set(), cancelHandlers: new Set(), cancelled: false });
+    // 処理を始めるときに、要らなくなった一時ファイルを消す (完了は待たない)
+    void runCleanup();
 }
 
 // キャンセル時に呼ぶ処理を登録する。戻り値は登録解除関数。

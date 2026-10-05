@@ -89,7 +89,7 @@ def _categorize(friendly: str, filename: str, stems: List[str]) -> str:
     real_stems = [stem for stem in lower if stem != "unknown"]
     if (
         len(real_stems) >= 3
-        or re.search(r"demucs|drumsep|[46]stem", text)
+        or re.search(r"demucs|drumsep|[46]stem|roformer[ _-]sw\b", text)
         or any(re.search(r"drum|bass|guitar|piano", stem) for stem in real_stems)
         # "other" / "no other": the instruments other than vocals, drums and bass
         or ("other" in real_stems and "no other" in real_stems)
@@ -125,7 +125,7 @@ def _plan_for(arch: str, info: dict) -> List[Tuple[str, List[str]]]:
 
 
 def rpc_list_models(params: dict, context: Context) -> dict:
-    """Every supported model with its files (for the download screen) and the ensemble presets."""
+    """Every supported model with its files (for the download screen) and the verified ensembles."""
     model_dir = params["modelDir"]
     supported = _supported(model_dir)
     models = []
@@ -152,22 +152,22 @@ def rpc_list_models(params: dict, context: Context) -> dict:
                     "files": [{"name": name, "urls": urls} for name, urls in _plan_for(arch, info)],
                 }
             )
-    presets = []
+    ensembles = []
     with resources.files("audio_separator").joinpath("ensemble_presets.json").open("r", encoding="utf-8") as handle:
-        preset_data = json.load(handle)
-    for preset_id, preset in (preset_data.get("presets") or {}).items():
-        category = "karaoke" if "karaoke" in preset_id else "vocals"
-        presets.append(
+        ensemble_data = json.load(handle)
+    # the library calls these "presets"; the app calls them verified ensembles
+    for ensemble_id, ensemble in (ensemble_data.get("presets") or {}).items():
+        category = "karaoke" if "karaoke" in ensemble_id else "vocals"
+        ensembles.append(
             {
-                "id": preset_id,
-                "name": preset.get("name", preset_id),
-                "description": preset.get("description", ""),
-                "models": list(preset.get("models") or []),
-                "algorithm": preset.get("algorithm") or "avg_wave",
+                "id": ensemble_id,
+                "name": ensemble.get("name", ensemble_id),
+                "models": list(ensemble.get("models") or []),
+                "algorithm": ensemble.get("algorithm") or "avg_wave",
                 "category": category,
             }
         )
-    return {"models": models, "presets": presets}
+    return {"models": models, "ensembles": ensembles}
 
 
 def _arch_params(params: dict) -> dict:
@@ -230,8 +230,8 @@ def _run(params: dict, context: Context, device: str) -> List[dict]:
         sample_rate=SAMPLE_RATE,
         **_arch_params(params["params"]),
     )
-    if method["kind"] == "ensemblePreset":
-        kwargs["ensemble_preset"] = method["presetId"]
+    if method["kind"] == "verifiedEnsemble":
+        kwargs["ensemble_preset"] = method["ensembleId"]
     elif method["kind"] == "ensemble":
         kwargs["ensemble_algorithm"] = method["algorithm"]
 

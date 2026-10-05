@@ -12,14 +12,14 @@ import {
     type InstallContext,
 } from './installer';
 import { readManifest, updateManifest, type LibraryManifest } from './manifest';
+import { requiredItems } from '../../../shared/voice/requirements';
 import { envPythonExecutable, libraryPaths, modelPaths } from './paths';
-import { clearPresetOverride } from './preset-overrides';
+import { clearReadyModelOverride } from './ready-model-overrides';
 import { defaultStorageDir, getLibraryDir, getModelDir, getWorkDir, isSameOrNested, isSamePath } from '../storage';
 import { getPlatformInfo } from './platform';
 import { buildPythonEnv } from './python-env';
 import { runProcess, WINDOWS_DLL_NOT_FOUND } from './process-runner';
 import { stopAllWorkersAndWait } from './python-worker';
-import { isFileBusyError, renameWithRetry } from '../../utils/rename-retry';
 import {
     forgetSeparatorModelList,
     probeSeparatorSizes,
@@ -32,11 +32,12 @@ import {
 } from './separator-models';
 import {
     COMPONENT_SPECS,
+    componentSpec,
     componentVariant,
     estimateComponentBytes,
-    JVNV_PRESET_NAMES,
+    JVNV_MODEL_NAMES,
     MODEL_SPECS,
-    presetItemId,
+    readyItemId,
     PYTHON_SPEC,
     pythonExecutable,
     separatorFilename,
@@ -59,7 +60,9 @@ import type {
     VoiceFeatureId,
     VoicePlatformInfo,
 } from '../../../shared/voice/types';
-import type { StorageMoveResult } from '../../../shared/types';
+import type { StorageMoveDecisions, StorageMovePlan, StorageMoveResult } from '../../../shared/types';
+import { checkMergeTarget, mergeStorage, planStorageMove, removeStorageRoot } from './storage-merge';
+import { hasBusyTrainingSets } from './training-sets';
 
 // 音声機能が使う Python 本体・パッケージ一式・モデルの状態の判定、ダウンロード、削除と、
 // それらを収める保存場所 (ライブラリ・モデルディレクトリ) の移動。
@@ -185,6 +188,7 @@ function buildItems(platform: VoicePlatformInfo, manifest: LibraryManifest): Lib
             credit: spec.credit,
             available,
             unavailableReasonKey: available ? undefined : 'voice.library.ttsTrainingUnavailable',
+            readsLanguages: spec.readsLanguages,
         });
     }
     const listed = new Set<string>();
@@ -211,7 +215,12 @@ function buildItems(platform: VoicePlatformInfo, manifest: LibraryManifest): Lib
                 // 取得元の候補のどこにもファイルが無いモデルは取得できない
                 available: supported && !source.notFound,
                 unavailableReasonKey: source.notFound ? 'voice.library.separatorModelNotFound' : undefined,
-                separator: { category: model.category, arch: model.arch, stems: model.stems },
+                separator: {
+                    category: model.category,
+                    arch: model.arch,
+                    stems: model.stems,
+                    sdr: model.sdr,
+                },
             });
         }
     }
@@ -241,33 +250,30 @@ function buildItems(platform: VoicePlatformInfo, manifest: LibraryManifest): Lib
 export async function getLibraryStatus(): Promise<LibraryStatus> {
     const platform = await getPlatformInfo();
     const manifest = readManifest();
+    const list = readSeparatorModelList();
     return {
         platform,
         items: buildItems(platform, manifest),
-        separatorModelsListed: readSeparatorModelList() !== null,
+        separatorModelsListed: list !== null,
+        separatorEnsembles: (list?.ensembles ?? []).map(ensemble => ({
+            id: ensemble.id,
+            name: ensemble.name,
+            category: ensemble.category,
+            models: ensemble.models.map(separatorItemId),
+        })),
     };
 }
-
-// 機能ごとに最低限必要な項目
-const FEATURE_REQUIREMENTS: Record<VoiceFeatureId, string[]> = {
-    separation: ['python', componentItemId('separator')],
-    conversion: ['python', componentItemId('converter'), 'model:converter:rmvpe', 'model:converter:contentvec'],
-    conversionTraining: [
-        'python',
-        componentItemId('converter'),
-        'model:converter:rmvpe',
-        'model:converter:contentvec',
-        'model:converter:pretrained-40k',
-    ],
-    tts: ['python', componentItemId('tts'), 'model:tts:bert-ja'],
-    ttsTraining: ['python', componentItemId('tts'), componentItemId('tts-train'), 'model:tts:bert-ja'],
-};
 
 export async function checkFeature(feature: VoiceFeatureId, extra: string[] = []): Promise<FeatureReadiness> {
     const status = await getLibraryStatus();
     const byId = new Map(status.items.map(item => [item.id, item]));
-    const missing = [...FEATURE_REQUIREMENTS[feature], ...extra].filter(id => byId.get(id)?.status !== 'installed');
+    const missing = [...requiredItems(feature), ...extra].filter(id => byId.get(id)?.status !== 'installed');
     return { ready: status.platform.supported && missing.length === 0, missing, platform: status.platform };
+}
+
+// パッケージ一式が取得済みで、版がこのアプリの定義と合っているか (更新が必要なものは含めない)
+export async function isComponentCurrent(id: ComponentItemId): Promise<boolean> {
+    return componentStatus(componentSpec(id), readManifest(), await getPlatformInfo()) === 'installed';
 }
 
 export function isItemInstalled(id: string): boolean {
@@ -318,7 +324,7 @@ function planDownload(ids: string[], items: LibraryItem[]): LibraryItem[] {
 }
 
 // ライブラリの中身を変える処理 (ダウンロード・削除・移動) は 1 つずつ順に行う。
-// 画面ごとに別のジョブとして同時に始められるため (プリセットの声の取得とダウンロードの画面など)、
+// 画面ごとに別のジョブとして同時に始められるため (すぐに使えるモデルの取得とダウンロードの画面など)、
 // 同じ仮想環境への同時の導入や、導入中の pip のキャッシュの削除が起きないようにする
 let libraryQueue: Promise<unknown> = Promise.resolve();
 
@@ -569,9 +575,9 @@ async function removeModel(itemId: string): Promise<void> {
     updateManifest(next => {
         delete next.models[itemId];
     });
-    // 読み上げのプリセットは、名前と言語の変更の記録も消す (取得し直したときは元の名前と言語で使う)
-    const preset = JVNV_PRESET_NAMES.find(name => presetItemId(name) === itemId);
-    if (preset !== undefined) clearPresetOverride(preset);
+    // 読み上げのすぐに使えるモデルは、名前と言語の変更の記録も消す (取得し直したときは元の名前と言語で使う)
+    const readyModel = JVNV_MODEL_NAMES.find(name => readyItemId(name) === itemId);
+    if (readyModel !== undefined) clearReadyModelOverride(readyModel);
 }
 
 export async function removeItems(
@@ -625,73 +631,19 @@ async function removeItemsNow(ids: string[], options: { removePython?: boolean }
 
 // --- 保存場所 (ライブラリ・モデルディレクトリ) の移動 ---
 
-// ディレクトリの中を辿り、ファイルとディレクトリを root からの相対パスで渡す (ディレクトリは中より先に渡す)。
-// シンボリックリンクはリンクとしては扱わず、リンク先 (ファイルの中身・ディレクトリの中) として辿る。
-// 自分を含む親のディレクトリを指すリンクは際限なく辿ることになるため、STORAGE_LINK_LOOP で失敗させる
-async function walkTree(
-    root: string,
-    onFile: (relative: string, full: string) => Promise<void>,
-    onDirectory: (relative: string) => Promise<void> = async () => undefined
-): Promise<void> {
-    const walk = async (relative: string, ancestors: string[]): Promise<void> => {
-        for (const entry of await fs.promises.readdir(path.join(root, relative), { withFileTypes: true })) {
-            const childRelative = path.join(relative, entry.name);
-            const full = path.join(root, childRelative);
-            let real: string;
-            if (entry.isSymbolicLink()) {
-                if (!(await fs.promises.stat(full)).isDirectory()) {
-                    await onFile(childRelative, full);
-                    continue;
-                }
-                real = await fs.promises.realpath(full);
-                if (ancestors.includes(real)) throw new Error(`STORAGE_LINK_LOOP: ${full}`);
-            } else if (entry.isDirectory()) {
-                real = path.join(ancestors[ancestors.length - 1], entry.name);
-            } else {
-                await onFile(childRelative, full);
-                continue;
-            }
-            await onDirectory(childRelative);
-            await walk(childRelative, [...ancestors, real]);
-        }
-    };
-    await walk('', [await fs.promises.realpath(root)]);
-}
-
-// 中身の大きさの合計 (コピーの進捗の表示用。リンク先もコピーと同じように数える)
-async function directorySize(root: string): Promise<number> {
-    let total = 0;
-    await walkTree(root, async (_relative, full) => {
-        total += (await fs.promises.stat(full)).size;
-    });
-    return total;
-}
-
-// 別のドライブへの移動で、中身を移動先のフォルダ (既にあるもの) へコピーする。
-// リンクは作らず、シンボリックリンクはリンク先の中身 (ファイルの中身、またはディレクトリの中) を写す
-async function copyTree(source: string, dest: string, onBytes: (bytes: number) => void, jobId: string): Promise<void> {
-    await walkTree(
-        source,
-        async (relative, full) => {
-            if (isCancelled(jobId)) throw new Error('KURA_CANCELLED');
-            const target = path.join(dest, relative);
-            await fs.promises.copyFile(full, target);
-            onBytes((await fs.promises.stat(target)).size);
-        },
-        async relative => {
-            if (isCancelled(jobId)) throw new Error('KURA_CANCELLED');
-            await fs.promises.mkdir(path.join(dest, relative));
-        }
-    );
-}
-
-// 仮想環境は元の Python 本体の場所を pyvenv.cfg に記録しているため、移動後に新しい場所へ書き換える。
+// 仮想環境は Python 本体の場所を pyvenv.cfg に記録しているため、移動後に新しい場所へ書き換える。
+// 記録の home (Python 本体の実行ファイルのあるフォルダ) から、仮想環境を作ったときのライブラリディレクトリを求めて
+// 置き換える (別の場所や別の端末から写したライブラリも、この端末の場所を指すようにするため)。
 // Windows はドライブ名の大文字小文字が違う表記で記録されることがあるため、大文字小文字を区別せずに置き換える
-function relocateVenv(component: VoiceComponentId, oldRoot: string, newRoot: string): void {
+function relocateVenv(component: VoiceComponentId, newRoot: string): void {
     const cfg = path.join(libraryPaths(newRoot).env(component), 'pyvenv.cfg');
     if (!fs.existsSync(cfg)) return;
-    const pattern = new RegExp(oldRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
     const text = fs.readFileSync(cfg, 'utf-8');
+    const home = /^home\s*=\s*(.+)$/m.exec(text)?.[1].trim();
+    const homeRelative = process.platform === 'win32' ? 'python' : path.join('python', 'bin');
+    if (!home || !home.toLowerCase().endsWith(`${path.sep}${homeRelative}`.toLowerCase())) return;
+    const fromRoot = home.slice(0, home.length - homeRelative.length - 1);
+    const pattern = new RegExp(fromRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
     // 置き換え後の文字列は関数で渡す (場所に $ が含まれていても置換パターンとして解釈させないため)
     fs.writeFileSync(
         cfg,
@@ -703,6 +655,8 @@ function relocateVenv(component: VoiceComponentId, oldRoot: string, newRoot: str
 // 移動先 (libraryRoot) の仮想環境が動くかを確かめる。Python が起動して失敗した場合だけ動かない (false) とし、
 // 起動できない場合 (作業ディレクトリが無い・実行環境が足りないなど) は仮想環境の問題ではないため、そのまま失敗させる
 async function verifyVenv(component: VoiceComponentId, libraryRoot: string): Promise<boolean> {
+    // 仮想環境の Python が無い (写したときに欠けたなど) 場合は、仮想環境が動かないものとする
+    if (!fs.existsSync(envPythonExecutable(component, libraryRoot))) return false;
     const result = await runProcess(
         envPythonExecutable(component, libraryRoot),
         ['-c', 'import sys, torch; print(sys.prefix)'],
@@ -714,22 +668,24 @@ async function verifyVenv(component: VoiceComponentId, libraryRoot: string): Pro
 
 type MovableStorage = 'library' | 'model';
 
-// 保存場所を移動する。中身を選んだフォルダへ移し、そのフォルダを新しい保存場所にする。
-// targetDir が null の場合は既定の場所 (~/.kura_toolkit の下) へ戻す
+// 保存場所を移動する。中身を選んだフォルダへ移し (中身がある場合はまとまりごとにマージする)、
+// そのフォルダを新しい保存場所にする。targetDir が null の場合は既定の場所 (~/.kura_toolkit の下) へ戻す。
+// decisions は、両方にあるまとまりごとの選択 (上書きするか。planStorageMoveTo で求めたもの)
 export async function moveStorage(
     jobId: string,
     kind: MovableStorage,
-    targetDir: string | null
+    targetDir: string | null,
+    decisions: StorageMoveDecisions
 ): Promise<StorageMoveResult> {
     startJob(jobId);
     try {
         checkLibraryIdle(jobId);
+        // 学習セットへの音声の追加 (録音の保存はジョブではない) の途中で移すと、追加したものが古い場所に残るため断る
+        if (hasBusyTrainingSets()) throw new Error('LIBRARY_BUSY');
         const newRoot = moveTarget(kind, targetDir);
         // 既定の場所へ移した場合は設定を空にする (既定の場所に従わせる)
         const setting = isSamePath(newRoot, defaultStorageDir(kind)) ? '' : newRoot;
-        return await withLibraryLock(() =>
-            kind === 'library' ? moveLibraryNow(jobId, newRoot, setting) : moveModelDirNow(jobId, newRoot, setting)
-        );
+        return await withLibraryLock(() => moveNow(jobId, kind, newRoot, setting, decisions));
     } finally {
         finishJob(jobId);
     }
@@ -740,124 +696,25 @@ function moveTarget(kind: MovableStorage, targetDir: string | null): string {
     return targetDir === null ? defaultStorageDir(kind) : path.resolve(targetDir);
 }
 
-// 移動を始める前に、移動先を選べるかを確かめる (確認画面を出す前に知らせるため)
-export function checkStorageMove(kind: MovableStorage, targetDir: string | null): void {
+// 移動を始める前に、移動先を選べるかを確かめ、両方にあるまとまり (上書きするかを選ぶもの) を求める
+// (確認画面を出す前に知らせるため)
+export async function planStorageMoveTo(kind: MovableStorage, targetDir: string | null): Promise<StorageMovePlan> {
     const oldRoot = kind === 'library' ? getLibraryDir() : getModelDir();
     const newRoot = moveTarget(kind, targetDir);
-    if (!isSamePath(oldRoot, newRoot)) checkMoveTarget(kind, oldRoot, newRoot);
+    if (isSamePath(oldRoot, newRoot)) return { conflicts: [], transferCount: 0, transferBytes: 0 };
+    checkMoveTarget(kind, oldRoot, newRoot);
+    return planStorageMove(kind, oldRoot, newRoot);
 }
 
 // 移動先の確認。今の場所の中・外側、ほかの保存場所や作業ディレクトリと重なる場所は選べない。
-// 移動先は空のフォルダ (または無いフォルダ) に限る (他のファイルと混ぜないため)
+// 中身のある移動先は、同じ種類の保存場所に限る (他のファイルと混ぜないため)
 function checkMoveTarget(kind: MovableStorage, oldRoot: string, newRoot: string): void {
-    if (isSameOrNested(oldRoot, newRoot)) throw new Error('STORAGE_MOVE_NESTED');
+    if (isSameOrNested(oldRoot, newRoot) || isSameOrNested(newRoot, oldRoot)) throw new Error('STORAGE_MOVE_NESTED');
     const other = kind === 'library' ? getModelDir() : getLibraryDir();
     if (isSameOrNested(other, newRoot) || isSameOrNested(getWorkDir(), newRoot)) {
         throw new Error('STORAGE_OVERLAP');
     }
-    if (fs.existsSync(newRoot) && fs.readdirSync(newRoot).length > 0) {
-        throw new Error(`STORAGE_TARGET_NOT_EMPTY: ${newRoot}`);
-    }
-}
-
-// 同じドライブ (ボリューム) か。移動先が無い場合は、移動先を作る親のフォルダで調べる
-function sameVolume(source: string, target: string): boolean {
-    const probe = fs.existsSync(target) ? target : path.dirname(target);
-    return fs.statSync(source).dev === fs.statSync(probe).dev;
-}
-
-// 名前を変えて移す。ほかのプログラムがファイルを開いていて移せなければ、使用中として止める
-async function renameStorage(from: string, to: string): Promise<void> {
-    try {
-        await renameWithRetry(from, to);
-    } catch (error) {
-        if (isFileBusyError(error)) throw new Error(`STORAGE_IN_USE: ${from}`);
-        throw error;
-    }
-}
-
-// 同じドライブで、移動先のフォルダ (空) の中へ元の場所の項目を 1 つずつ名前を変えて移し、空になった元の場所を消す。
-// 途中で失敗したら、移した項目を元の場所へ戻してから失敗を返す。元の場所を消せなかった場合は false を返す
-async function moveEntriesInto(oldRoot: string, newRoot: string): Promise<boolean> {
-    const moved: string[] = [];
-    try {
-        for (const name of await fs.promises.readdir(oldRoot)) {
-            await renameStorage(path.join(oldRoot, name), path.join(newRoot, name));
-            moved.push(name);
-        }
-    } catch (error) {
-        for (const name of moved.reverse()) {
-            await renameStorage(path.join(newRoot, name), path.join(oldRoot, name));
-        }
-        throw error;
-    }
-    // 中身はすべて移動先にあり、以後は移動先を使う。空になった元の場所を消せなかった場合も移動は成功として扱う
-    try {
-        await fs.promises.rmdir(oldRoot);
-        return true;
-    } catch (error) {
-        console.warn(`failed to remove the previous location ${oldRoot}`, error);
-        return false;
-    }
-}
-
-// 中身を移動先へ移す。利用者が選んだフォルダ (移動先) は消したり置き換えたりしない。
-// - 同じドライブ: 移動先のフォルダがあればその中へ項目ごとに名前を変えて移し、無ければ元の場所の名前を変えて移動先にする
-// - 別のドライブ: 移動先へコピーしてから元を消す (移動先のフォルダは無い場合だけ作る)。コピー中は進捗を出し、
-//   中断・失敗したらコピーしたものだけを消して (移動先のフォルダはこの移動で作った場合だけ消す) 元の場所を使い続ける
-// 結果は、中断されたか (cancelled) と、移動は終わったが消せなかった元の場所 (remainingPath)
-async function relocateTree(
-    jobId: string,
-    oldRoot: string,
-    newRoot: string
-): Promise<{ cancelled: boolean; remainingPath: string | null }> {
-    const targetExists = fs.existsSync(newRoot);
-    if (sameVolume(oldRoot, newRoot)) {
-        if (!targetExists) {
-            await renameStorage(oldRoot, newRoot);
-            return { cancelled: false, remainingPath: null };
-        }
-        const removed = await moveEntriesInto(oldRoot, newRoot);
-        return { cancelled: false, remainingPath: removed ? null : oldRoot };
-    }
-    // 移動先は空のため、移動先の中の、元の場所の項目と同じ名前のものがコピーしたもの
-    const names = await fs.promises.readdir(oldRoot);
-    const total = await directorySize(oldRoot);
-    if (!targetExists) await fs.promises.mkdir(newRoot);
-    let copied = 0;
-    let lastSent = 0;
-    try {
-        await copyTree(
-            oldRoot,
-            newRoot,
-            bytes => {
-                copied += bytes;
-                const now = Date.now();
-                if (now - lastSent < PROGRESS_INTERVAL_MS) return;
-                lastSent = now;
-                emitJobEvent({ jobId, kind: 'progress', percent: total > 0 ? (copied / total) * 100 : undefined });
-            },
-            jobId
-        );
-    } catch (error) {
-        if (targetExists) {
-            for (const name of names) await fs.promises.rm(path.join(newRoot, name), { recursive: true, force: true });
-        } else {
-            await fs.promises.rm(newRoot, { recursive: true, force: true });
-        }
-        if (error instanceof Error && error.message === 'KURA_CANCELLED') {
-            return { cancelled: true, remainingPath: null };
-        }
-        throw error;
-    }
-    // コピーは完了しており、以後は移動先を使う。元の場所を消せなかった場合も移動は成功として扱う
-    try {
-        await fs.promises.rm(oldRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
-        return { cancelled: false, remainingPath: null };
-    } catch (error) {
-        console.warn(`failed to remove the previous location ${oldRoot}`, error);
-        return { cancelled: false, remainingPath: oldRoot };
-    }
+    checkMergeTarget(kind, newRoot);
 }
 
 // 移動先を保存場所として設定に書き込む。書き込めなかった場合は、移動は終わっているが次の起動で元の場所を
@@ -870,13 +727,23 @@ const CANCELLED_MOVE: StorageMoveResult = { cancelled: true, rebuildRequired: []
 
 // 移動先の仮想環境の記録 (pyvenv.cfg) を新しい場所へ書き換えて動作を確かめ、動かないものを作り直しの対象として
 // 移動先の取得状況の記録に残す。作り直しの対象を返す
-async function relocateVenvs(oldRoot: string, newRoot: string): Promise<string[]> {
+async function relocateVenvs(newRoot: string): Promise<string[]> {
     const manifest = readManifest({ library: newRoot });
     const rebuildRequired: string[] = [];
-    for (const spec of COMPONENT_SPECS) {
-        if (!manifest.components[spec.id] || spec.id === 'tts-train') continue;
-        relocateVenv(spec.env, oldRoot, newRoot);
-        if (!(await verifyVenv(spec.env, newRoot))) {
+    const specs = COMPONENT_SPECS.filter(spec => manifest.components[spec.id] && spec.id !== 'tts-train');
+    // 記録の書き換えは、確認で失敗しても残りの仮想環境が元の場所を指したまま残らないよう、先にすべて行う
+    for (const spec of specs) relocateVenv(spec.env, newRoot);
+    // 確認そのものができなかった場合 (VC_RUNTIME_MISSING など) も、残りの仮想環境を確かめてから知らせる
+    let verifyError: unknown = null;
+    for (const spec of specs) {
+        let works: boolean;
+        try {
+            works = await verifyVenv(spec.env, newRoot);
+        } catch (error) {
+            verifyError ??= error;
+            continue;
+        }
+        if (!works) {
             rebuildRequired.push(componentItemId(spec.id));
             if (spec.id === 'tts' && manifest.components['tts-train'])
                 rebuildRequired.push(componentItemId('tts-train'));
@@ -893,23 +760,29 @@ async function relocateVenvs(oldRoot: string, newRoot: string): Promise<string[]
             { library: newRoot }
         );
     }
+    if (verifyError !== null) throw verifyError;
     return rebuildRequired;
 }
 
-async function moveLibraryNow(jobId: string, newRoot: string, setting: string): Promise<StorageMoveResult> {
+// 補助プロセスは保存場所を起動時に受け取るため、止めてから移す
+async function moveNow(
+    jobId: string,
+    kind: MovableStorage,
+    newRoot: string,
+    setting: string,
+    decisions: StorageMoveDecisions
+): Promise<StorageMoveResult> {
     // 先に始まった処理を待つ間と、補助プロセスの終了を待つ間に中断された場合は、何も移さずに終える
     if (isCancelled(jobId)) return CANCELLED_MOVE;
     await stopAllWorkersAndWait();
     if (isCancelled(jobId)) return CANCELLED_MOVE;
-    const oldRoot = getLibraryDir();
+    const oldRoot = kind === 'library' ? getLibraryDir() : getModelDir();
     if (isSamePath(oldRoot, newRoot)) return { cancelled: false, rebuildRequired: [], remainingPath: null };
-    checkMoveTarget('library', oldRoot, newRoot);
+    checkMoveTarget(kind, oldRoot, newRoot);
 
-    let remainingPath: string | null = null;
     if (fs.existsSync(oldRoot)) {
-        const relocated = await relocateTree(jobId, oldRoot, newRoot);
-        if (relocated.cancelled) return CANCELLED_MOVE;
-        remainingPath = relocated.remainingPath;
+        const merged = await mergeStorage(jobId, kind, oldRoot, newRoot, decisions);
+        if (merged.cancelled) return CANCELLED_MOVE;
     } else {
         fs.mkdirSync(newRoot, { recursive: true });
     }
@@ -919,35 +792,17 @@ async function moveLibraryNow(jobId: string, newRoot: string, setting: string): 
     // いるため設定は書き換えてから失敗を知らせる
     let rebuildRequired: string[] = [];
     let relocateError: unknown = null;
-    try {
-        rebuildRequired = await relocateVenvs(oldRoot, newRoot);
-    } catch (error) {
-        relocateError = error;
+    if (kind === 'library') {
+        try {
+            rebuildRequired = await relocateVenvs(newRoot);
+        } catch (error) {
+            relocateError = error;
+        }
     }
-    saveStorageSetting('library', setting);
-    forgetSeparatorModelList();
+    saveStorageSetting(kind, setting);
+    if (kind === 'library') forgetSeparatorModelList();
+    // 移動元は、上書きしなかったまとまりも含めて最後に消す
+    const removed = fs.existsSync(oldRoot) ? await removeStorageRoot(oldRoot) : true;
     if (relocateError !== null) throw relocateError;
-    return { cancelled: false, rebuildRequired, remainingPath };
-}
-
-// モデルディレクトリの移動 (補助プロセスはモデルの場所を起動時に受け取るため、止めてから移す)
-async function moveModelDirNow(jobId: string, newRoot: string, setting: string): Promise<StorageMoveResult> {
-    // 先に始まった処理を待つ間と、補助プロセスの終了を待つ間に中断された場合は、何も移さずに終える
-    if (isCancelled(jobId)) return CANCELLED_MOVE;
-    await stopAllWorkersAndWait();
-    if (isCancelled(jobId)) return CANCELLED_MOVE;
-    const oldRoot = getModelDir();
-    if (isSamePath(oldRoot, newRoot)) return { cancelled: false, rebuildRequired: [], remainingPath: null };
-    checkMoveTarget('model', oldRoot, newRoot);
-
-    let remainingPath: string | null = null;
-    if (fs.existsSync(oldRoot)) {
-        const relocated = await relocateTree(jobId, oldRoot, newRoot);
-        if (relocated.cancelled) return CANCELLED_MOVE;
-        remainingPath = relocated.remainingPath;
-    } else {
-        fs.mkdirSync(newRoot, { recursive: true });
-    }
-    saveStorageSetting('model', setting);
-    return { cancelled: false, rebuildRequired: [], remainingPath };
+    return { cancelled: false, rebuildRequired, remainingPath: removed ? null : oldRoot };
 }

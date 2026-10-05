@@ -49,10 +49,12 @@ type TtsState = {
     addCandidate(candidate: TtsCandidate): void;
     removeCandidate(id: string): void;
     select(id: string | null): void;
+    // 作業 (候補) を破棄して、新しい作業の置き場にする (文章と設定は残す)
+    clearWork(): void;
 };
 
 export const useTtsStore = create<TtsState>((set, get) => ({
-    workKey: newWorkKey('tts'),
+    workKey: newWorkKey(),
     text: '',
     savedText: '',
     inputKind: 'text',
@@ -111,5 +113,8 @@ export const useTtsStore = create<TtsState>((set, get) => ({
     },
     select(selectedId) {
         set({ selectedId });
+    },
+    clearWork() {
+        set({ workKey: newWorkKey(), candidates: [], selectedId: null });
     },
 }));

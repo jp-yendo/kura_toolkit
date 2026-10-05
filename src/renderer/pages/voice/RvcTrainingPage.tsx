@@ -18,7 +18,6 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
-import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import SchoolIcon from '@mui/icons-material/School';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -31,79 +30,100 @@ import ReadinessAlert, { useFeatureReadiness } from '../../components/voice/Read
 import VoiceFeatureHeader from '../../components/voice/VoiceFeatureHeader';
 import RecorderControl from '../../components/voice/RecorderControl';
 import SyncPlayer from '../../components/voice/SyncPlayer';
-import { trainingAudioFilters } from '../../components/voice/audioInput';
+import TrainingSetBar from '../../components/voice/TrainingSetBar';
+import { useTrainingSets } from '../../components/voice/useTrainingSets';
+import { audioInputFilters } from '../../components/voice/audioInput';
 import { formatDuration } from '../../components/voice/voiceFormat';
 import { isCancelledError, voiceErrorMessage } from '../../components/voice/voiceErrors';
 import { trainingStatus } from '../../components/voice/trainingProgress';
 import { useJobRunner } from '../../hooks/useJobRunner';
 import { showNotice } from '../../stores/noticeStore';
-import type { DatasetItem, VoiceModelInfo } from '@shared/voice/types';
+import type { TrainingAudio, TrainingSetDetail, VoiceModelInfo } from '@shared/voice/types';
 
-// 外す項目の確認。閉じる間も表示が変わらないよう、開閉とは別に持つ
-type RemoveConfirm = { open: boolean; item: DatasetItem | null };
+// 削除する音声の確認。閉じる間も表示が変わらないよう、開閉とは別に持つ
+type RemoveConfirm = { open: boolean; item: TrainingAudio | null };
 
-// 音声変換 (RVC) のモデルの学習。学習用の音声はマイク録音か音声ファイルの指定で用意する
-// (指定したファイルは元の場所から読む。録音と一覧は学習が終わると main 側で破棄される)
+// 音声変換 (RVC) のモデルの学習。学習セットを選び、マイク録音か音声ファイルの追加で学習用の音声を用意する
 export default function RvcTrainingPage() {
     const { t } = useTranslation();
     const navigate = useNavigate();
     const readiness = useFeatureReadiness('conversionTraining');
-    const [items, setItems] = React.useState<DatasetItem[]>([]);
-    const [playing, setPlaying] = React.useState<DatasetItem | null>(null);
+    const sets = useTrainingSets('converter');
+    const setId = sets.selected?.id ?? null;
+    const [detail, setDetail] = React.useState<TrainingSetDetail | null>(null);
+    const [playing, setPlaying] = React.useState<TrainingAudio | null>(null);
     const [name, setName] = React.useState('');
-    const [confirmClear, setConfirmClear] = React.useState(false);
     const [removeConfirm, setRemoveConfirm] = React.useState<RemoveConfirm>({ open: false, item: null });
     const [created, setCreated] = React.useState<VoiceModelInfo | null>(null);
+    const [recording, setRecording] = React.useState(false);
     const { job, run, cancel } = useJobRunner();
     const ready = readiness.readiness?.ready ?? false;
 
-    const load = React.useCallback(async () => {
-        setItems(await window.kuraToolkit.voice.training.rvcDataset());
-    }, []);
+    // 選んでいる学習セット (読み直しの途中で学習セットを切り替えた場合に、前の学習セットの内容で上書きしないため)
+    const setIdRef = React.useRef(setId);
+    setIdRef.current = setId;
+    const loadDetail = React.useCallback(async () => {
+        if (!setId) {
+            setDetail(null);
+            return;
+        }
+        try {
+            const next = await window.kuraToolkit.voice.trainingSets.get('converter', setId);
+            if (setIdRef.current === setId) setDetail(next);
+        } catch (error) {
+            showNotice('error', voiceErrorMessage(t, error), 12000);
+        }
+    }, [setId, t]);
     React.useEffect(() => {
-        void load();
-    }, [load]);
+        void loadDetail();
+        setPlaying(null);
+    }, [loadDetail]);
 
+    // 音声を変えたら、学習セットの内容と一覧の要約 (音声の数・長さ) を読み直す
+    const refresh = async () => {
+        await Promise.all([loadDetail(), sets.reload()]);
+    };
+
+    const shown = detail && detail.summary.id === setId ? detail : null;
+    const items = shown?.audios ?? [];
     const total = items.reduce((sum, item) => sum + item.durationSec, 0);
 
     const addFiles = async () => {
-        const paths = await window.kuraToolkit.dialog.openFiles({ filters: trainingAudioFilters(t), multi: true });
+        if (!setId) return;
+        const paths = await window.kuraToolkit.dialog.openFiles({ filters: audioInputFilters(t), multi: true });
         if (paths.length === 0) return;
         try {
-            await run(t('voice.training.adding'), jobId => window.kuraToolkit.voice.training.rvcAddFiles(jobId, paths));
-            await load();
+            await run(t('voice.training.adding'), jobId =>
+                window.kuraToolkit.voice.trainingSets.addFiles(jobId, 'converter', setId, paths)
+            );
         } catch (error) {
             if (!isCancelledError(error)) showNotice('error', voiceErrorMessage(t, error));
-            await load();
         }
+        await refresh();
     };
 
-    const removeItem = async (item: DatasetItem) => {
-        await window.kuraToolkit.voice.training.rvcRemove(item.id);
+    const removeItem = async (item: TrainingAudio) => {
+        if (!setId) return;
+        try {
+            await window.kuraToolkit.voice.trainingSets.removeAudio('converter', setId, item.id);
+        } catch (error) {
+            showNotice('error', voiceErrorMessage(t, error));
+        }
         if (playing?.id === item.id) setPlaying(null);
-        await load();
-    };
-
-    // 録音は外すと消えるため確認する。指定したファイルは一覧から外すだけなので、そのまま外す
-    const askRemove = (item: DatasetItem) => {
-        if (item.recorded) setRemoveConfirm({ open: true, item });
-        else void removeItem(item);
+        await refresh();
     };
 
     const startTraining = async () => {
+        if (!setId) return;
         try {
             const info = await run(t('voice.training.running'), jobId =>
-                window.kuraToolkit.voice.training.rvcStart(jobId, name)
+                window.kuraToolkit.voice.training.rvcStart(jobId, setId, name)
             );
             setCreated(info);
             setName('');
         } catch (error) {
             if (isCancelledError(error)) showNotice('warning', t('voice.common.cancelled'));
             else showNotice('error', voiceErrorMessage(t, error), 15000);
-        } finally {
-            // 学習が終わると (成否・キャンセルを問わず) 一覧は空になるため読み直す
-            setPlaying(null);
-            await load();
         }
     };
 
@@ -114,130 +134,136 @@ export default function RvcTrainingPage() {
                 <ReadinessAlert state={readiness} />
                 <Alert severity='info'>{t('voice.training.rvcGuide')}</Alert>
 
-                <Stack direction='row' spacing={1.5} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
-                    <RecorderControl
-                        disabled={job !== null}
-                        onRecorded={async audio => {
-                            try {
-                                await window.kuraToolkit.voice.training.rvcAddRecording(
-                                    audio.wav,
-                                    t('voice.training.recordingName', { date: new Date().toLocaleString() })
-                                );
-                                await load();
-                            } catch (error) {
-                                showNotice('error', voiceErrorMessage(t, error));
-                            }
-                        }}
-                    />
-                    <Button
-                        variant='outlined'
-                        startIcon={<AddIcon />}
-                        disabled={job !== null}
-                        onClick={() => void addFiles()}
-                    >
-                        {t('voice.training.addFiles')}
-                    </Button>
-                </Stack>
-                <Typography variant='caption' color='text.secondary' sx={{ display: 'block', lineHeight: 1.5 }}>
-                    {t('voice.training.rvcDatasetNote')}
-                </Typography>
-
-                {/* すべて外す操作は、追加や学習の操作から離して一覧の見出しに置く */}
-                <SectionLabel
-                    action={
-                        <Button
-                            size='small'
-                            color='inherit'
-                            startIcon={<DeleteSweepIcon />}
-                            disabled={items.length === 0 || job !== null}
-                            onClick={() => setConfirmClear(true)}
-                        >
-                            {t('voice.training.clear')}
-                        </Button>
-                    }
-                >
-                    {t('voice.training.dataset', { count: items.length, duration: formatDuration(total) })}
-                </SectionLabel>
-                <Panel disablePadding sx={{ maxHeight: 360, overflow: 'auto' }}>
-                    {items.length === 0 ? (
-                        <Typography variant='body2' color='text.secondary' sx={{ p: 2 }}>
-                            {t('voice.training.datasetEmpty')}
-                        </Typography>
-                    ) : (
-                        <Table size='small' stickyHeader>
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell>{t('voice.training.itemName')}</TableCell>
-                                    <TableCell align='right'>{t('voice.training.duration')}</TableCell>
-                                    <TableCell padding='checkbox' />
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {items.map(item => (
-                                    <TableRow
-                                        key={item.id}
-                                        hover
-                                        selected={playing?.id === item.id}
-                                        onClick={() => setPlaying(item)}
-                                        sx={{ cursor: 'pointer' }}
-                                    >
-                                        <TableCell>{item.name}</TableCell>
-                                        <TableCell align='right'>{formatDuration(item.durationSec)}</TableCell>
-                                        <TableCell padding='checkbox'>
-                                            <Tooltip title={t('voice.training.removeItem')}>
-                                                <span>
-                                                    <IconButton
-                                                        size='small'
-                                                        aria-label={t('voice.training.removeItem')}
-                                                        disabled={job !== null}
-                                                        onClick={event => {
-                                                            event.stopPropagation();
-                                                            askRemove(item);
-                                                        }}
-                                                    >
-                                                        <DeleteOutlineIcon fontSize='small' />
-                                                    </IconButton>
-                                                </span>
-                                            </Tooltip>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    )}
-                </Panel>
-                <SyncPlayer
-                    source={playing ? { key: playing.id, url: playing.media.url, label: playing.name } : null}
-                    emptyHint={t('voice.training.playHint')}
-                />
-                {total > 0 && total < 600 && <Alert severity='warning'>{t('voice.training.rvcShort')}</Alert>}
-
                 <Panel>
-                    <Stack direction='row' spacing={1.5} sx={{ alignItems: 'center' }}>
-                        <TextField
-                            size='small'
-                            label={t('voice.training.modelName')}
-                            value={name}
-                            onChange={event => setName(event.target.value)}
-                            sx={{ flexGrow: 1 }}
-                        />
-                        <Button
-                            variant='contained'
-                            startIcon={<SchoolIcon />}
-                            disabled={!ready || job !== null || !name.trim() || items.length === 0}
-                            onClick={() => void startTraining()}
-                        >
-                            {t('voice.training.start')}
-                        </Button>
-                    </Stack>
+                    <TrainingSetBar feature='converter' state={sets} disabled={job !== null || recording} />
                     <Typography
                         variant='caption'
                         color='text.secondary'
                         sx={{ display: 'block', mt: 1, lineHeight: 1.5 }}
                     >
-                        {t('voice.training.rvcNote')}
+                        {t('voice.training.datasetNote')}
                     </Typography>
                 </Panel>
+
+                {shown && (
+                    <>
+                        <Stack direction='row' spacing={1.5} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
+                            <RecorderControl
+                                disabled={job !== null}
+                                onActiveChange={setRecording}
+                                onRecorded={async audio => {
+                                    try {
+                                        await window.kuraToolkit.voice.trainingSets.addRecording(
+                                            'converter',
+                                            shown.summary.id,
+                                            audio.wav,
+                                            {
+                                                name: t('voice.training.recordingName', {
+                                                    date: new Date().toLocaleString(),
+                                                }),
+                                            }
+                                        );
+                                    } catch (error) {
+                                        showNotice('error', voiceErrorMessage(t, error));
+                                    }
+                                    await refresh();
+                                }}
+                            />
+                            <Button
+                                variant='outlined'
+                                startIcon={<AddIcon />}
+                                disabled={job !== null || recording}
+                                onClick={() => void addFiles()}
+                            >
+                                {t('voice.training.addFiles')}
+                            </Button>
+                        </Stack>
+
+                        <SectionLabel>
+                            {t('voice.training.dataset', { count: items.length, duration: formatDuration(total) })}
+                        </SectionLabel>
+                        <Panel disablePadding sx={{ maxHeight: 360, overflow: 'auto' }}>
+                            {items.length === 0 ? (
+                                <Typography variant='body2' color='text.secondary' sx={{ p: 2 }}>
+                                    {t('voice.training.datasetEmpty')}
+                                </Typography>
+                            ) : (
+                                <Table size='small' stickyHeader>
+                                    <TableHead>
+                                        <TableRow>
+                                            <TableCell>{t('voice.training.itemName')}</TableCell>
+                                            <TableCell align='right'>{t('voice.training.duration')}</TableCell>
+                                            <TableCell padding='checkbox' />
+                                        </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                        {items.map(item => (
+                                            <TableRow
+                                                key={item.id}
+                                                hover
+                                                selected={playing?.id === item.id}
+                                                onClick={() => setPlaying(item)}
+                                                sx={{ cursor: 'pointer' }}
+                                            >
+                                                <TableCell>{item.name}</TableCell>
+                                                <TableCell align='right'>{formatDuration(item.durationSec)}</TableCell>
+                                                <TableCell padding='checkbox'>
+                                                    <Tooltip title={t('voice.training.deleteAudio')}>
+                                                        <span>
+                                                            <IconButton
+                                                                size='small'
+                                                                aria-label={t('voice.training.deleteAudio')}
+                                                                disabled={job !== null || recording}
+                                                                onClick={event => {
+                                                                    event.stopPropagation();
+                                                                    setRemoveConfirm({ open: true, item });
+                                                                }}
+                                                            >
+                                                                <DeleteOutlineIcon fontSize='small' />
+                                                            </IconButton>
+                                                        </span>
+                                                    </Tooltip>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            )}
+                        </Panel>
+                        <SyncPlayer
+                            source={playing ? { key: playing.id, url: playing.media.url, label: playing.name } : null}
+                            emptyHint={t('voice.training.playHint')}
+                        />
+                        {total > 0 && total < 600 && <Alert severity='warning'>{t('voice.training.rvcShort')}</Alert>}
+
+                        <Panel>
+                            <Stack direction='row' spacing={1.5} sx={{ alignItems: 'center' }}>
+                                <TextField
+                                    size='small'
+                                    label={t('voice.training.modelName')}
+                                    value={name}
+                                    onChange={event => setName(event.target.value)}
+                                    sx={{ flexGrow: 1 }}
+                                />
+                                <Button
+                                    variant='contained'
+                                    startIcon={<SchoolIcon />}
+                                    disabled={!ready || job !== null || recording || !name.trim() || items.length === 0}
+                                    onClick={() => void startTraining()}
+                                >
+                                    {t('voice.training.start')}
+                                </Button>
+                            </Stack>
+                            <Typography
+                                variant='caption'
+                                color='text.secondary'
+                                sx={{ display: 'block', mt: 1, lineHeight: 1.5 }}
+                            >
+                                {t('voice.training.rvcNote')}
+                            </Typography>
+                        </Panel>
+                    </>
+                )}
             </Stack>
 
             <ProgressDialog
@@ -251,40 +277,16 @@ export default function RvcTrainingPage() {
                 onCancel={cancel}
             />
 
-            <AppDialog open={confirmClear} onClose={() => setConfirmClear(false)} maxWidth='xs' fullWidth>
-                <DialogTitle>{t('voice.training.clear')}</DialogTitle>
-                <DialogContent>
-                    <Typography variant='body2' sx={{ lineHeight: 1.6 }}>
-                        {t('voice.training.clearConfirm')}
-                    </Typography>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setConfirmClear(false)}>{t('common.cancel')}</Button>
-                    <Button
-                        variant='contained'
-                        color='error'
-                        onClick={async () => {
-                            setConfirmClear(false);
-                            await window.kuraToolkit.voice.training.rvcClear();
-                            setPlaying(null);
-                            await load();
-                        }}
-                    >
-                        {t('voice.training.clear')}
-                    </Button>
-                </DialogActions>
-            </AppDialog>
-
             <AppDialog
                 open={removeConfirm.open}
                 onClose={() => setRemoveConfirm(previous => ({ ...previous, open: false }))}
                 maxWidth='xs'
                 fullWidth
             >
-                <DialogTitle>{t('voice.training.deleteRecordingTitle')}</DialogTitle>
+                <DialogTitle>{t('voice.training.deleteAudioTitle')}</DialogTitle>
                 <DialogContent>
                     <Typography variant='body2' sx={{ lineHeight: 1.6 }}>
-                        {t('voice.training.deleteRecordingConfirm', { name: removeConfirm.item?.name ?? '' })}
+                        {t('voice.training.deleteAudioConfirm', { name: removeConfirm.item?.name ?? '' })}
                     </Typography>
                 </DialogContent>
                 <DialogActions>
@@ -300,7 +302,7 @@ export default function RvcTrainingPage() {
                             if (item) void removeItem(item);
                         }}
                     >
-                        {t('voice.training.deleteRecording')}
+                        {t('voice.training.deleteAudio')}
                     </Button>
                 </DialogActions>
             </AppDialog>

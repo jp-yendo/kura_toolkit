@@ -51,6 +51,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
         symbolReadings: {
             ja: null,
             en: null,
+            zh: null,
         },
         updatePromptVersion: '',
     },

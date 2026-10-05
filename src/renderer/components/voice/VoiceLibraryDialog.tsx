@@ -8,32 +8,35 @@ import {
     DialogActions,
     DialogContent,
     DialogTitle,
-    FormControl,
     FormControlLabel,
     IconButton,
-    InputAdornment,
-    InputLabel,
     Link,
-    MenuItem,
-    Select,
     Stack,
-    TextField,
+    Tab,
+    Tabs,
     Tooltip,
     Typography,
 } from '@mui/material';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import DownloadIcon from '@mui/icons-material/Download';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import SearchIcon from '@mui/icons-material/Search';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import AppDialog from '../common/AppDialog';
-import Panel from '../common/Panel';
 import ProgressDialog from '../common/ProgressDialog';
 import SectionLabel from '../common/SectionLabel';
 import LibraryItemTable from './LibraryItemTable';
-import { itemLabel, totalSize, withPrerequisites } from './libraryItems';
+import SeparatorModelSection from './SeparatorModelSection';
+import {
+    featureForItems,
+    itemLabel,
+    requirementRows,
+    totalSize,
+    VOICE_FEATURES,
+    withPrerequisites,
+} from './libraryItems';
 import { formatBytes } from './voiceFormat';
 import { voiceErrorMessage } from './voiceErrors';
 import { useJobRunner } from '../../hooks/useJobRunner';
@@ -42,14 +45,13 @@ import { notifyVoiceLibraryChanged, useVoiceLibraryStore } from '../../stores/vo
 import type {
     LibraryDownloadResult,
     LibraryItem,
-    LibraryItemGroup,
     LibraryProgress,
     LibraryStatus,
     SeparationCategory,
     VoiceFeatureId,
 } from '@shared/voice/types';
+import { FEATURE_REQUIREMENTS, requiredItems, SEPARATOR_MODEL_PREFIX } from '@shared/voice/requirements';
 
-const SEPARATION_CATEGORIES: SeparationCategory[] = ['vocals', 'multi', 'karaoke', 'cleanup', 'other'];
 const VC_REDIST_URL = 'https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist';
 
 // 音声機能のダウンロード (Python 本体・パッケージ一式・モデルの取得と削除)。
@@ -64,13 +66,11 @@ export default function VoiceLibraryDialog() {
     const [result, setResult] = React.useState<LibraryDownloadResult | null>(null);
     const [removeTargets, setRemoveTargets] = React.useState<string[] | null>(null);
     const [removePython, setRemovePython] = React.useState(false);
-    const [categoryFilter, setCategoryFilter] = React.useState<SeparationCategory | 'all'>('all');
-    const [search, setSearch] = React.useState('');
-    const [installedOnly, setInstalledOnly] = React.useState(false);
-    const [selectedOnly, setSelectedOnly] = React.useState(false);
-    const [listing, setListing] = React.useState(false);
-    const groupRefs = React.useRef<Partial<Record<LibraryItemGroup, HTMLDivElement | null>>>({});
-    const pendingFocus = React.useRef<LibraryItemGroup | null>(null);
+    // 開いた回数 (分離モデルの絞り込みを開くたびに初期状態に戻すために使う)
+    const [openCount, setOpenCount] = React.useState(0);
+    // 分離モデルの一覧を作れなかったときのエラー (自動では作り直さず、再試行を待つ)
+    const [listError, setListError] = React.useState<string | null>(null);
+    const [tab, setTab] = React.useState<VoiceFeatureId>(VOICE_FEATURES[0]);
     const { job, run, cancel } = useJobRunner();
 
     const refresh = React.useCallback(async () => {
@@ -82,26 +82,43 @@ export default function VoiceLibraryDialog() {
         if (!open) return;
         setSelected(new Set(select));
         setProgress({});
-        setSearch('');
-        setCategoryFilter('all');
-        setInstalledOnly(false);
-        setSelectedOnly(select.some(id => id.startsWith('model:separator:')));
-        pendingFocus.current = focus;
+        setListError(null);
+        setOpenCount(previous => previous + 1);
+        // 呼び出し元が指定した機能 (指定が無ければ、選んだ項目を最も多く含む機能) を表示する
+        setTab(focus ?? featureForItems(select));
         void refresh();
     }, [open, select, focus, refresh]);
 
-    // 他の場所で取得状況が変わった場合 (プリセットの声の取得など) も読み直す
+    // 他の場所で取得状況が変わった場合 (すぐに使えるモデルの取得など) も読み直す
     React.useEffect(() => {
         if (open) void refresh();
     }, [version, open, refresh]);
 
-    // 呼び出し元に関係する区分を表示する
+    // 分離モデルの一覧が無ければ作る (パッケージ一式の導入後。分離のタブを表示したときに裏で作り、操作は妨げない)
+    const needsList =
+        open &&
+        tab === 'separation' &&
+        listError === null &&
+        !!status &&
+        !status.separatorModelsListed &&
+        status.items.find(item => item.id === 'component:separator')?.status === 'installed';
     React.useEffect(() => {
-        const group = pendingFocus.current;
-        if (!open || !status || !group) return;
-        pendingFocus.current = null;
-        window.requestAnimationFrame(() => groupRefs.current[group]?.scrollIntoView({ block: 'start' }));
-    }, [open, status]);
+        if (!needsList) return;
+        let cancelled = false;
+        window.kuraToolkit.voice.library.ensureSeparatorModelList().then(
+            next => {
+                if (cancelled) return;
+                setStatus(next);
+                notifyVoiceLibraryChanged();
+            },
+            error => {
+                if (!cancelled) setListError(voiceErrorMessage(t, error));
+            }
+        );
+        return () => {
+            cancelled = true;
+        };
+    }, [needsList, t]);
 
     // 分離モデルの大きさを配布元に問い合わせる (一覧を取得済みで、まだ分からないものがある場合)
     const needsSizes =
@@ -124,17 +141,30 @@ export default function VoiceLibraryDialog() {
         if (payload?.itemId) setProgress(previous => ({ ...previous, [payload.itemId]: payload }));
     }, [job?.payload]);
 
-    const items = status?.items ?? [];
-    const byId = new Map(items.map(item => [item.id, item]));
+    const items = React.useMemo(() => status?.items ?? [], [status]);
+    const byId = React.useMemo(() => new Map(items.map(item => [item.id, item])), [items]);
     const platform = status?.platform;
 
-    const toggle = (id: string) =>
-        setSelected(previous => {
-            const next = new Set(previous);
-            if (next.has(id)) next.delete(id);
-            else next.add(id);
-            return next;
-        });
+    // 選択の切り替えは同じ関数を渡し続け、変わった行だけを描き直す
+    const toggle = React.useCallback(
+        (id: string) =>
+            setSelected(previous => {
+                const next = new Set(previous);
+                if (next.has(id)) next.delete(id);
+                else next.add(id);
+                return next;
+            }),
+        []
+    );
+    const selectMany = React.useCallback(
+        (ids: string[], on: boolean) =>
+            setSelected(previous => {
+                const next = new Set(previous);
+                ids.forEach(id => (on ? next.add(id) : next.delete(id)));
+                return next;
+            }),
+        []
+    );
 
     const downloadIds = withPrerequisites([...selected], items);
     const totalBytes = totalSize(downloadIds, items);
@@ -189,29 +219,22 @@ export default function VoiceLibraryDialog() {
         }
     };
 
-    const listSeparatorModels = async () => {
-        setListing(true);
-        try {
-            setStatus(await window.kuraToolkit.voice.library.refreshSeparatorModels());
-            notifyVoiceLibraryChanged();
-        } catch (error) {
-            showNotice('error', voiceErrorMessage(t, error), 10000);
-        } finally {
-            setListing(false);
-        }
-    };
-
-    const runtimeItems = items.filter(item => item.kind !== 'model');
-    const converterModels = items.filter(item => item.kind === 'model' && item.group === 'converter');
-    const ttsModels = items.filter(item => item.kind === 'model' && item.group === 'tts');
-    // 分離モデルの一覧が無いときに示す、取得済みの分離モデル
-    const unlistedSeparators = items.filter(item => item.kind === 'model' && item.group === 'separator');
-    const separatorModels = items
-        .filter(item => item.kind === 'model' && item.group === 'separator')
-        .filter(item => categoryFilter === 'all' || item.separator?.category === categoryFilter)
-        .filter(item => !installedOnly || item.status === 'installed')
-        .filter(item => !selectedOnly || selected.has(item.id))
-        .filter(item => !search.trim() || itemLabel(t, item).toLowerCase().includes(search.trim().toLowerCase()));
+    const isInstalled = (id: string) => byId.get(id)?.status === 'installed';
+    const missingRequired = requiredItems(tab).filter(id => !isInstalled(id));
+    const groupRows = React.useMemo(
+        () =>
+            FEATURE_REQUIREMENTS[tab].map(group =>
+                group.itemPrefix === SEPARATOR_MODEL_PREFIX ? [] : requirementRows(group, items)
+            ),
+        [tab, items]
+    );
+    // 呼び出し元が分離モデルを選んで開いた場合は、その種類のモデルを表示する
+    const initialSeparatorCategory = React.useMemo(() => {
+        const categories = new Set(
+            select.map(id => byId.get(id)?.separator?.category).filter((value): value is SeparationCategory => !!value)
+        );
+        return categories.size === 1 ? [...categories][0] : 'vocals';
+    }, [select, byId]);
 
     // 削除の確認に出す内容
     const removeItemsList = (removeTargets ?? []).map(id => byId.get(id)).filter((item): item is LibraryItem => !!item);
@@ -235,27 +258,15 @@ export default function VoiceLibraryDialog() {
     const currentItem = current ? byId.get(current.itemId) : undefined;
 
     // 削除の確認を開く (Python 本体も消すかの選択は毎回初期状態に戻す)
-    const askRemove = (ids: string[]) => {
+    const askRemove = React.useCallback((ids: string[]) => {
         setRemovePython(false);
         setRemoveTargets(ids);
-    };
+    }, []);
 
     const closeDialog = () => {
         if (job) return;
         close();
     };
-
-    const section = (group: LibraryItemGroup, title: string, body: React.ReactNode, action?: React.ReactNode) => (
-        <Box
-            ref={(element: HTMLDivElement | null) => {
-                groupRefs.current[group] = element;
-            }}
-            sx={{ scrollMarginTop: 8 }}
-        >
-            <SectionLabel action={action}>{title}</SectionLabel>
-            {body}
-        </Box>
-    );
 
     return (
         <>
@@ -283,59 +294,74 @@ export default function VoiceLibraryDialog() {
                         </span>
                     </Tooltip>
                 </DialogTitle>
+                {/* 実行環境と機能のタブは、一覧をスクロールしても動かないよう本体の外に置く */}
+                {status && platform && (
+                    <Box sx={{ px: 3 }}>
+                        <Stack
+                            direction='row'
+                            sx={{ flexWrap: 'wrap', alignItems: 'center', columnGap: 2, rowGap: 0.25 }}
+                        >
+                            <Typography variant='caption' color='text.secondary'>
+                                {platform.gpu.kind === 'cuda'
+                                    ? t('voice.platform.cuda', { name: platform.gpu.name ?? '' })
+                                    : platform.gpu.kind === 'mps'
+                                      ? t('voice.platform.mps')
+                                      : t('voice.platform.cpu')}
+                            </Typography>
+                            <Typography variant='caption' color='text.secondary' sx={{ wordBreak: 'break-all' }}>
+                                {t('voice.library.libraryDir')}: {platform.libraryDir}
+                            </Typography>
+                            <Typography variant='caption' color='text.secondary' sx={{ wordBreak: 'break-all' }}>
+                                {t('voice.library.modelDir')}: {platform.modelDir}
+                            </Typography>
+                            <Link
+                                component='button'
+                                variant='caption'
+                                onClick={() => {
+                                    close();
+                                    navigate('/settings');
+                                }}
+                            >
+                                {t('voice.library.changeInSettings')}
+                            </Link>
+                            <Tooltip title={t('voice.library.redetect')}>
+                                <IconButton
+                                    size='small'
+                                    aria-label={t('voice.library.redetect')}
+                                    onClick={async () =>
+                                        setStatus(await window.kuraToolkit.voice.library.refreshPlatform())
+                                    }
+                                >
+                                    <RefreshIcon sx={{ fontSize: 16 }} />
+                                </IconButton>
+                            </Tooltip>
+                        </Stack>
+                        <Tabs
+                            value={tab}
+                            onChange={(_event, value: VoiceFeatureId) => setTab(value)}
+                            variant='scrollable'
+                            scrollButtons='auto'
+                        >
+                            {VOICE_FEATURES.map(feature => (
+                                <Tab
+                                    key={feature}
+                                    value={feature}
+                                    label={t(`voice.features.${feature}`)}
+                                    icon={
+                                        requiredItems(feature).every(isInstalled) ? (
+                                            <CheckCircleIcon fontSize='small' color='success' />
+                                        ) : undefined
+                                    }
+                                    iconPosition='end'
+                                    sx={{ minHeight: 48 }}
+                                />
+                            ))}
+                        </Tabs>
+                    </Box>
+                )}
                 <DialogContent dividers>
                     {status && platform && (
                         <Stack spacing={2}>
-                            <Box>
-                                <SectionLabel
-                                    action={
-                                        <Button
-                                            size='small'
-                                            startIcon={<RefreshIcon />}
-                                            onClick={async () =>
-                                                setStatus(await window.kuraToolkit.voice.library.refreshPlatform())
-                                            }
-                                        >
-                                            {t('voice.library.redetect')}
-                                        </Button>
-                                    }
-                                >
-                                    {t('voice.library.environment')}
-                                </SectionLabel>
-                                <Panel>
-                                    <Stack spacing={0.75}>
-                                        <Typography variant='body2'>
-                                            {t('voice.library.platform')}:{' '}
-                                            {t(`voice.platform.keys.${platform.platform}`)}
-                                        </Typography>
-                                        <Typography variant='body2'>
-                                            {t('voice.library.device')}:{' '}
-                                            {platform.gpu.kind === 'cuda'
-                                                ? t('voice.platform.cuda', { name: platform.gpu.name ?? '' })
-                                                : platform.gpu.kind === 'mps'
-                                                  ? t('voice.platform.mps')
-                                                  : t('voice.platform.cpu')}
-                                        </Typography>
-                                        <Typography variant='body2' sx={{ wordBreak: 'break-all' }}>
-                                            {t('voice.library.libraryDir')}: {platform.libraryDir}
-                                        </Typography>
-                                        <Typography variant='body2' sx={{ wordBreak: 'break-all' }}>
-                                            {t('voice.library.modelDir')}: {platform.modelDir}{' '}
-                                            <Link
-                                                component='button'
-                                                variant='body2'
-                                                onClick={() => {
-                                                    close();
-                                                    navigate('/settings');
-                                                }}
-                                            >
-                                                {t('voice.library.changeInSettings')}
-                                            </Link>
-                                        </Typography>
-                                    </Stack>
-                                </Panel>
-                            </Box>
-
                             {!platform.supported && (
                                 <Alert severity='error'>
                                     <AlertTitle>{t('voice.platform.unsupportedTitle')}</AlertTitle>
@@ -365,176 +391,73 @@ export default function VoiceLibraryDialog() {
                                 <Alert severity='warning'>{t('voice.library.nonAsciiPath')}</Alert>
                             )}
 
-                            <Typography variant='body2' color='text.secondary' sx={{ lineHeight: 1.6 }}>
-                                {t('voice.library.intro')}
-                            </Typography>
-
-                            {section(
-                                'runtime',
-                                t('voice.library.groupRuntime'),
-                                <LibraryItemTable
-                                    items={runtimeItems}
-                                    selected={selected}
-                                    toggle={toggle}
-                                    onRemove={askRemove}
-                                    progress={progress}
-                                />
+                            {tab === 'ttsTraining' && !platform.ttsTrainingAvailable ? (
+                                <Alert severity='info'>{t('voice.library.ttsTrainingUnavailable')}</Alert>
+                            ) : (
+                                missingRequired.length > 0 && (
+                                    <Alert
+                                        severity='info'
+                                        action={
+                                            <Button
+                                                color='inherit'
+                                                size='small'
+                                                onClick={() => selectMany(missingRequired, true)}
+                                            >
+                                                {t('voice.library.selectMissing')}
+                                            </Button>
+                                        }
+                                    >
+                                        {t('voice.library.missingRequired', {
+                                            feature: t(`voice.features.${tab}`),
+                                            count: missingRequired.length,
+                                        })}
+                                    </Alert>
+                                )
                             )}
 
-                            {section(
-                                'separator',
-                                t('voice.library.groupSeparator'),
-                                status.separatorModelsListed ? (
-                                    <Stack spacing={1}>
-                                        <Stack
-                                            direction='row'
-                                            spacing={1}
-                                            sx={{ flexWrap: 'wrap', rowGap: 1, alignItems: 'center' }}
+                            {FEATURE_REQUIREMENTS[tab].map((group, index) => (
+                                <Box key={group.titleKey}>
+                                    <SectionLabel>
+                                        {t('voice.library.groupTitle', {
+                                            name: t(group.titleKey),
+                                            kind: t(`voice.library.requirementKinds.${group.kind}`),
+                                        })}
+                                    </SectionLabel>
+                                    {group.noteKey && (
+                                        <Typography
+                                            variant='body2'
+                                            color='text.secondary'
+                                            sx={{ mb: 1, lineHeight: 1.6 }}
                                         >
-                                            <FormControl size='small' sx={{ minWidth: 220 }}>
-                                                <InputLabel id='separator-category'>
-                                                    {t('voice.separation.category')}
-                                                </InputLabel>
-                                                <Select
-                                                    labelId='separator-category'
-                                                    label={t('voice.separation.category')}
-                                                    value={categoryFilter}
-                                                    onChange={event =>
-                                                        setCategoryFilter(
-                                                            event.target.value as SeparationCategory | 'all'
-                                                        )
-                                                    }
-                                                >
-                                                    <MenuItem value='all'>{t('voice.library.allCategories')}</MenuItem>
-                                                    {SEPARATION_CATEGORIES.map(category => (
-                                                        <MenuItem key={category} value={category}>
-                                                            {t(`voice.separation.categories.${category}`)}
-                                                        </MenuItem>
-                                                    ))}
-                                                </Select>
-                                            </FormControl>
-                                            <TextField
-                                                size='small'
-                                                placeholder={t('voice.library.searchModels')}
-                                                value={search}
-                                                onChange={event => setSearch(event.target.value)}
-                                                slotProps={{
-                                                    input: {
-                                                        startAdornment: (
-                                                            <InputAdornment position='start'>
-                                                                <SearchIcon fontSize='small' />
-                                                            </InputAdornment>
-                                                        ),
-                                                    },
-                                                }}
-                                            />
-                                            <FormControlLabel
-                                                control={
-                                                    <Checkbox
-                                                        size='small'
-                                                        checked={installedOnly}
-                                                        onChange={(_e, value) => setInstalledOnly(value)}
-                                                    />
-                                                }
-                                                label={t('voice.library.installedOnly')}
-                                            />
-                                            <FormControlLabel
-                                                control={
-                                                    <Checkbox
-                                                        size='small'
-                                                        checked={selectedOnly}
-                                                        onChange={(_e, value) => setSelectedOnly(value)}
-                                                    />
-                                                }
-                                                label={t('voice.library.selectedOnly')}
-                                            />
-                                        </Stack>
+                                            {t(group.noteKey)}
+                                        </Typography>
+                                    )}
+                                    {group.itemPrefix === SEPARATOR_MODEL_PREFIX ? (
+                                        <SeparatorModelSection
+                                            key={openCount}
+                                            group={group}
+                                            status={status}
+                                            items={items}
+                                            initialCategory={initialSeparatorCategory}
+                                            selected={selected}
+                                            toggle={toggle}
+                                            selectMany={selectMany}
+                                            onRemove={askRemove}
+                                            progress={progress}
+                                            listError={listError}
+                                            onRetryList={() => setListError(null)}
+                                        />
+                                    ) : (
                                         <LibraryItemTable
-                                            items={separatorModels}
+                                            rows={groupRows[index]}
                                             selected={selected}
                                             toggle={toggle}
                                             onRemove={askRemove}
                                             progress={progress}
-                                            maxHeight={420}
                                         />
-                                    </Stack>
-                                ) : (
-                                    <Stack spacing={1}>
-                                        <Panel>
-                                            <Stack
-                                                direction='row'
-                                                spacing={2}
-                                                sx={{ alignItems: 'center', justifyContent: 'space-between' }}
-                                            >
-                                                <Typography
-                                                    variant='body2'
-                                                    color='text.secondary'
-                                                    sx={{ lineHeight: 1.6 }}
-                                                >
-                                                    {t('voice.library.separatorListHint')}
-                                                </Typography>
-                                                <Button
-                                                    variant='outlined'
-                                                    size='small'
-                                                    disabled={
-                                                        listing ||
-                                                        byId.get('component:separator')?.status !== 'installed'
-                                                    }
-                                                    onClick={listSeparatorModels}
-                                                    sx={{ flexShrink: 0 }}
-                                                >
-                                                    {t('voice.library.listModels')}
-                                                </Button>
-                                            </Stack>
-                                        </Panel>
-                                        {/* 一覧が無くても、取得済みの分離モデルは削除できるよう示す */}
-                                        {unlistedSeparators.length > 0 && (
-                                            <LibraryItemTable
-                                                items={unlistedSeparators}
-                                                selected={selected}
-                                                toggle={toggle}
-                                                onRemove={askRemove}
-                                                progress={progress}
-                                                maxHeight={420}
-                                            />
-                                        )}
-                                    </Stack>
-                                ),
-                                status.separatorModelsListed ? (
-                                    <Button
-                                        size='small'
-                                        startIcon={<RefreshIcon />}
-                                        disabled={listing}
-                                        onClick={listSeparatorModels}
-                                    >
-                                        {t('voice.library.refreshList')}
-                                    </Button>
-                                ) : undefined
-                            )}
-
-                            {section(
-                                'converter',
-                                t('voice.library.groupConverter'),
-                                <LibraryItemTable
-                                    items={converterModels}
-                                    selected={selected}
-                                    toggle={toggle}
-                                    onRemove={askRemove}
-                                    progress={progress}
-                                />
-                            )}
-
-                            {section(
-                                'tts',
-                                t('voice.library.groupTts'),
-                                <LibraryItemTable
-                                    items={ttsModels}
-                                    selected={selected}
-                                    toggle={toggle}
-                                    onRemove={askRemove}
-                                    progress={progress}
-                                />
-                            )}
+                                    )}
+                                </Box>
+                            ))}
                         </Stack>
                     )}
                 </DialogContent>

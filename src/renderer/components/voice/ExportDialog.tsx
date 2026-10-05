@@ -51,6 +51,8 @@ type Props = {
     entries: ExportEntry[];
     // 元のファイルのパス (ファイル名と既定の書き出し先に使う)
     sourcePath: string;
+    // 書き出す結果がある作業
+    workKey: string;
 };
 
 type EntryState = { checked: boolean; name: string; customPath: string | null };
@@ -60,7 +62,7 @@ function extension(format: AudioExportFormat): string {
 }
 
 // 音声の書き出し。書き出しの設定は音声機能で共通で、変えた時点で保存する
-export default function ExportDialog({ open, onClose, entries, sourcePath }: Props) {
+export default function ExportDialog({ open, onClose, entries, sourcePath, workKey }: Props) {
     const { t } = useTranslation();
     const { settings, update } = useSettingsStore();
     // 設定は起動時に読み込み済み (読み込む前は画面を描画しない)
@@ -123,7 +125,7 @@ export default function ExportDialog({ open, onClose, entries, sourcePath }: Pro
             const result = await run(t('voice.export.running'), async jobId => {
                 const items = [];
                 for (const entry of selected) items.push({ source: await entry.resolve(jobId), dest: destOf(entry) });
-                return window.kuraToolkit.voice.export.run(jobId, items, exportSettings);
+                return window.kuraToolkit.voice.export.run(jobId, workKey, items, exportSettings);
             });
             if (result.cancelled) {
                 showNotice('warning', t('voice.common.cancelled'));

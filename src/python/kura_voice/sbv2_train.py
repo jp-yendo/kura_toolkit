@@ -2,8 +2,8 @@
 
 Usage: python sbv2_train.py --job job.json
 
-The job lists the clips (files the user picked, read where they are, and recordings in the work
-directory) and the sentence each clip reads (the transcript is the presented sentence itself;
+The job lists the clips (the audio of a training set, read where it is) and the sentence each
+clip reads (the transcript is the presented sentence itself;
 nothing is transcribed automatically). The steps mirror the repository's Web UI: initialise,
 resample, text preprocessing, BERT features, style vectors and training. Models (BERT, WavLM, the
 pretrained weights) are read from the app's model directory. The training data, features and
@@ -110,13 +110,12 @@ def resample_clip(source: str, dest: str) -> None:
 def prepare_dataset(dataset: str, job: dict) -> None:
     """The training list and the resampled audio, read directly from each clip.
 
-    The clips are files the user picked (read where they are, never removed) and
-    recordings in the work directory, so the repository's resample.py (which reads one folder)
-    is replaced by the same processing per file.
+    The clips are the audio of a training set (read where it is, never removed), so the
+    repository's resample.py (which reads one folder) is replaced by the same processing per file.
     """
     wavs = os.path.join(dataset, "wavs")
     os.makedirs(wavs, exist_ok=True)
-    language = "JP" if job["language"] == "ja" else "EN"
+    language = {"ja": "JP", "en": "EN", "zh": "ZH"}[job["language"]]
     lines = []
     tasks = []
     for clip in job["clips"]:

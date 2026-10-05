@@ -262,14 +262,47 @@ export default {
             model: 'モデルディレクトリ',
             modelHint: 'アプリが使用するモデルの保存先です。',
             work: '作業ディレクトリ',
-            workHint: '処理中の一時ファイルの保存先です。',
+            workHint:
+                '処理中の一時ファイルを置く一時ディレクトリです (既定は OS の一時ディレクトリ)。アプリはこの中に「kura_toolkit_」で始まるフォルダを処理ごとに作り、処理が終わると消します。',
             isDefault: '既定',
             move: '移動...',
             change: '変更...',
             resetDefault: '既定の場所に戻す',
             moreActions: 'その他の操作',
             moveTitle: '{{name}}を移動します',
-            moveMessage: '中身を選んだフォルダへ移動します。容量によっては時間がかかります。',
+            moveMessage:
+                '中身を選んだフォルダへ移動します。選んだフォルダに中身がある場合は、まとまりごとに合わせます。容量によっては時間がかかります。',
+            checking: '移動先を確認しています',
+            merge: {
+                transfer: 'そのまま移すもの: {{count}} 件 ({{size}})',
+                conflicts:
+                    '移動先にも同じものが {{count}} 件あります。それぞれ上書きするかを選んでください。上書きする場合は移動先のものを削除してから移し、上書きしない場合は移動先のものを使って移動元のものを削除します。',
+                overwriteAll: 'すべて上書きする',
+                keepAll: 'すべて上書きしない',
+                unit: '項目',
+                source: '移動元',
+                target: '移動先',
+                modifiedAt: '最終更新日時',
+                contentsLabel: 'ファイル数 / 合計サイズ',
+                contents: '{{count}} 個 / {{size}}',
+                choice: '上書き',
+                targetName: '移動先での名前: {{name}}',
+                overwrite: 'する',
+                keep: 'しない',
+                note: '最終更新日時は、中のファイルのうち最も新しいものです (新しいほうを太字で示します)。移動元は、移動が終わった後にすべて削除します。',
+                kinds: {
+                    download: 'ダウンロードしたモデル',
+                    componentFiles: 'パッケージ一式のモデル設定',
+                    voice: '声のモデル ({{feature}})',
+                    trainingSet: '学習セット ({{feature}})',
+                    python: 'Python 本体',
+                    library: 'ライブラリ',
+                },
+                features: {
+                    converter: '音声変換',
+                    tts: '読み上げ',
+                },
+            },
             moveRun: '移動する',
             moving: '{{name}}を移動しています',
             moved: '{{name}}を移動しました。',
@@ -283,9 +316,12 @@ export default {
                 STORAGE_MOVE_NESTED: '今の場所の中や、今の場所を含む場所へは移動できません。',
                 STORAGE_OVERLAP: 'ほかの保存場所 (ライブラリ・モデル・作業ディレクトリ) と重なる場所は選べません。',
                 STORAGE_TARGET_NOT_EMPTY:
-                    '選んだフォルダが空ではありません。空のフォルダを選んでください。({{detail}})',
+                    '選んだフォルダには、この保存場所のもの以外のファイルがあります。空のフォルダか、同じ種類の保存場所として使っていたフォルダを選んでください。({{detail}})',
+                STORAGE_MOVE_UNDECIDED: '上書きするかを選んでいない項目があります。({{detail}})',
                 STORAGE_IN_USE:
                     '中のファイルがほかのプログラムで使用中のため移動できませんでした。元の場所をそのまま使います。使用しているプログラムを閉じてから、もう一度お試しください。({{detail}})',
+                STORAGE_NO_SPACE:
+                    '移動先のドライブの空き容量が足りないため移動できません。元の場所をそのまま使います。(必要な容量 / 空き容量: {{detail}})',
                 STORAGE_LINK_LOOP: 'フォルダの中に、自分自身を指すリンクがあるため移動できません。({{detail}})',
                 WORK_DIR_IN_USE:
                     '処理中のものや作業中の結果 (候補など) があるため変更できません。処理が終わってから、または作業を破棄してから変更してください。',

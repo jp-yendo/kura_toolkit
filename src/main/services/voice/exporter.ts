@@ -3,7 +3,7 @@ import path from 'path';
 import { emitJobEvent, finishJob, isCancelled, startJob } from '../job-manager';
 import { isCancelledError } from '../ffmpeg/ffmpeg';
 import { encodeExport } from './audio-tools';
-import { isInsideWorkRoot } from '../work-dir';
+import { isInsideWork } from '../work-dir';
 import type { AudioExportSettings, ExportItem, ExportResult } from '../../../shared/voice/types';
 
 // 音声の書き出し (分離・変換・読み上げで共通)。形式は MP3 と FLAC。
@@ -16,6 +16,7 @@ export function existingPaths(paths: string[]): string[] {
 
 export async function exportAudio(
     jobId: string,
+    workKey: string,
     items: ExportItem[],
     settings: AudioExportSettings
 ): Promise<ExportResult> {
@@ -35,7 +36,7 @@ export async function exportAudio(
                 message: path.basename(item.dest),
             });
             try {
-                if (!isInsideWorkRoot(item.source)) throw new Error('INVALID_PATH');
+                if (!isInsideWork(workKey, item.source)) throw new Error('INVALID_PATH');
                 const folder = path.dirname(item.dest);
                 if (!fs.existsSync(folder)) throw new Error(`EXPORT_FOLDER_MISSING: ${folder}`);
                 await encodeExport(item.source, item.dest, settings, jobId);

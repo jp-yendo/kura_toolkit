@@ -7,6 +7,7 @@ import { openVoiceLibrary, useVoiceLibraryStore } from '../../stores/voiceLibrar
 import type { FeatureReadiness, LibraryStatus, VoiceFeatureId } from '@shared/voice/types';
 
 type ReadinessState = {
+    feature: VoiceFeatureId;
     readiness: FeatureReadiness | null;
     status: LibraryStatus | null;
     refresh(): Promise<void>;
@@ -31,14 +32,14 @@ export function useFeatureReadiness(feature: VoiceFeatureId, extra: string[] = [
     React.useEffect(() => {
         void refresh();
     }, [refresh, version]);
-    return { readiness, status, refresh };
+    return { feature, readiness, status, refresh };
 }
 
 // 指定の項目がそろっていれば action を実行し、足りなければそれを選んだ状態でダウンロードを開く
 export function whenInstalled(state: ReadinessState, required: string[], action: () => void): void {
     const byId = new Map((state.status?.items ?? []).map(item => [item.id, item]));
     const missing = required.filter(id => byId.get(id)?.status !== 'installed');
-    if (missing.length > 0) openVoiceLibrary({ select: missing });
+    if (missing.length > 0) openVoiceLibrary({ select: missing, focus: state.feature });
     else action();
 }
 
@@ -69,7 +70,7 @@ export default function ReadinessAlert({ state }: Props) {
                     color='inherit'
                     size='small'
                     startIcon={<DownloadIcon />}
-                    onClick={() => openVoiceLibrary({ select: readiness.missing })}
+                    onClick={() => openVoiceLibrary({ select: readiness.missing, focus: state.feature })}
                     sx={{ whiteSpace: 'nowrap' }}
                 >
                     {t('voice.readiness.openLibrary')}

@@ -1,7 +1,14 @@
 import type { TFunction } from 'i18next';
+import i18n from '../../i18n/config';
 import type { VoiceModelInfo } from '@shared/voice/types';
 
 // 音声機能の画面で共通に使う表示用の整形
+
+// 分離の出力 (ステム) の名前。訳がある名前は訳を、それ以外はそのまま表示する
+export function stemName(t: TFunction, name: string): string {
+    const key = `voice.stems.${name.toLowerCase()}`;
+    return i18n.exists(key) ? t(key) : name;
+}
 
 export function formatBytes(bytes: number | null | undefined): string {
     if (bytes === null || bytes === undefined || !Number.isFinite(bytes)) return '-';
@@ -22,12 +29,12 @@ export function formatDuration(seconds: number): string {
         : `${m}:${String(s).padStart(2, '0')}`;
 }
 
-// 声のモデルの表示名。プリセットは名前を変えるまで配布時の名前とエンジンから作る
+// 声のモデルの表示名。すぐに使えるモデルは名前を変えるまで配布時の名前とエンジンから作る
 export function voiceLabel(t: TFunction, voice: VoiceModelInfo): string {
     if (voice.name) return voice.name;
-    if (voice.presetName) {
+    if (voice.distributedName) {
         const engine = voice.tts ? t(`voice.engine.${voice.tts.engine}`) : '';
-        return t('voice.models.presetLabel', { name: voice.presetName.replace(/-jp$/, ''), engine });
+        return t('voice.models.readyLabel', { name: voice.distributedName.replace(/-jp$/, ''), engine });
     }
     return voice.id;
 }
@@ -39,9 +46,9 @@ export function hasSameVoiceName(t: TFunction, voices: VoiceModelInfo[], name: s
     return voices.some(voice => voice.id !== exceptId && voiceLabel(t, voice).trim().toLowerCase() === normalized);
 }
 
-// 作業 (分離・変換・読み上げの 1 回分の作業) の識別子
-export function newWorkKey(prefix: string): string {
-    return `${prefix}-${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
+// 作業 (分離・変換・読み上げの 1 回分の作業) の識別子。作業の結果を置くフォルダの名前になるため、意味を持たないランダムな値にする
+export function newWorkKey(): string {
+    return crypto.randomUUID().replace(/-/g, '').slice(0, 16);
 }
 
 // パスからファイル名 (拡張子なし) を取り出す

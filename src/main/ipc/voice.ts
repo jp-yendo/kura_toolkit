@@ -8,37 +8,36 @@ import {
     downloadItems,
     getLibraryStatus,
     getPendingUpdates,
+    isComponentCurrent,
     markUpdatePrompted,
     removeItems,
 } from '../services/voice/library';
 import { getPlatformInfo } from '../services/voice/platform';
 import { listPresets, removePreset, renamePreset, savePreset, type PresetParams } from '../services/voice/presets';
-import { probeSeparatorSizes, refreshSeparatorModelList } from '../services/voice/separator-models';
+import { ensureSeparatorModelList, probeSeparatorSizes } from '../services/voice/separator-models';
 import {
     discardPaths,
     discardWork,
     listSeparationModels,
     mixStems,
     prepareInput,
+    transferMedia,
     runSeparation,
 } from '../services/voice/separation';
 import { loadTextFile, saveTextFile } from '../services/voice/text-files';
 import { mediaRef } from '../services/voice/media';
-import { isInsideWorkRoot } from '../services/work-dir';
+import { isInsideWork } from '../services/work-dir';
+import { startRvcTraining, startTtsTraining } from '../services/voice/training';
 import {
-    addRvcFiles,
-    addRvcRecording,
-    clearRvcDataset,
-    clearTtsDraft,
-    getRvcDataset,
-    getTtsDraft,
-    setTtsSentenceFile,
-    removeRvcItem,
-    removeTtsRecording,
-    saveTtsRecording,
-    startRvcTraining,
-    startTtsTraining,
-} from '../services/voice/training';
+    addTrainingFiles,
+    addTrainingRecording,
+    createTrainingSet,
+    getTrainingSet,
+    listTrainingSets,
+    removeTrainingAudio,
+    removeTrainingSet,
+    renameTrainingSet,
+} from '../services/voice/training-sets';
 import { cancelTtsConfirmation, runTts } from '../services/voice/tts';
 import {
     cancelImport,
@@ -52,7 +51,7 @@ import {
     renameVoice,
     setVoiceLanguages,
 } from '../services/voice/voice-models';
-import { isVoiceLanguage, type CorpusSetId, type TtsEngineId, type VoiceLanguage } from '../../shared/voice/languages';
+import { isVoiceLanguage, type TtsEngineId, type VoiceLanguage } from '../../shared/voice/languages';
 import type {
     AudioExportSettings,
     ConversionRunRequest,
@@ -82,9 +81,9 @@ function checkLanguages(values: unknown): VoiceLanguage[] {
     return values.map(value => checkLanguage(value));
 }
 
-// renderer から渡された学習用の文章の種類を確かめる (録音の保存先のフォルダ名に使うため、決まった値に限る)
-function checkCorpusSet(value: unknown): CorpusSetId {
-    if (value !== 'quick' && value !== 'accurate') throw new Error(`INVALID_CORPUS_SET: ${String(value)}`);
+// renderer から渡された声のモデルの機能を確かめる (保存先のフォルダ名に使うため、決まった値に限る)
+function checkFeatureId(value: unknown): VoiceModelFeature {
+    if (value !== 'converter' && value !== 'tts') throw new Error(`INVALID_FEATURE: ${String(value)}`);
     return value;
 }
 
@@ -104,9 +103,9 @@ export function registerVoiceIpcHandlers() {
     ipcMain.handle(IPC_CHANNELS.VOICE_LIBRARY_REMOVE, (_e, ids: string[], options?: { removePython?: boolean }) =>
         removeItems(ids, options)
     );
-    ipcMain.handle(IPC_CHANNELS.VOICE_LIBRARY_REFRESH_SEPARATOR, async () => {
-        await refreshSeparatorModelList();
-        void probeSeparatorSizes().catch(error => console.warn('failed to look up separation model sizes', error));
+    ipcMain.handle(IPC_CHANNELS.VOICE_LIBRARY_ENSURE_SEPARATOR_LIST, async () => {
+        // 更新が必要なパッケージ一式 (古い版) では一覧を作らない (古い版の一覧を新しい版のものとして残さないため)
+        if (await isComponentCurrent('separator')) await ensureSeparatorModelList();
         return getLibraryStatus();
     });
     ipcMain.handle(IPC_CHANNELS.VOICE_LIBRARY_PROBE_SIZES, async () => {
@@ -132,16 +131,21 @@ export function registerVoiceIpcHandlers() {
         (_e, jobId: string, workKey: string, paths: string[], channels: number) =>
             mixStems(jobId, workKey, paths, channels)
     );
-    ipcMain.handle(IPC_CHANNELS.VOICE_MEDIA_DISCARD, (_e, paths: string[]) => discardPaths(paths));
+    ipcMain.handle(IPC_CHANNELS.VOICE_MEDIA_DISCARD, (_e, workKey: string, paths: string[]) =>
+        discardPaths(workKey, paths)
+    );
+    ipcMain.handle(IPC_CHANNELS.VOICE_MEDIA_TRANSFER, (_e, fromWorkKey: string, toWorkKey: string, paths: string[]) =>
+        transferMedia(fromWorkKey, toWorkKey, paths)
+    );
     ipcMain.handle(IPC_CHANNELS.VOICE_MEDIA_DISCARD_WORK, (_e, workKey: string) => discardWork(workKey));
-    ipcMain.handle(IPC_CHANNELS.VOICE_MEDIA_REF, (_e, filePath: string) => {
-        // 任意のファイルを公開しないよう、作業ディレクトリ内のものに限る
-        if (!isInsideWorkRoot(filePath)) throw new Error('INVALID_PATH');
+    ipcMain.handle(IPC_CHANNELS.VOICE_MEDIA_REF, (_e, workKey: string, filePath: string) => {
+        // 任意のファイルを公開しないよう、その作業の置き場の中のものに限る
+        if (!isInsideWork(workKey, filePath)) throw new Error('INVALID_PATH');
         return mediaRef(filePath);
     });
 
     // --- 分離 ---
-    ipcMain.handle(IPC_CHANNELS.VOICE_SEPARATION_MODELS, (_e, refresh?: boolean) => listSeparationModels(refresh));
+    ipcMain.handle(IPC_CHANNELS.VOICE_SEPARATION_MODELS, () => listSeparationModels());
     ipcMain.handle(IPC_CHANNELS.VOICE_SEPARATION_RUN, (_e, jobId: string, request: SeparationRunRequest) =>
         runSeparation(jobId, request)
     );
@@ -200,7 +204,7 @@ export function registerVoiceIpcHandlers() {
         openHttps(hubSearchUrl(feature))
     );
 
-    // --- プリセット ---
+    // --- パラメーターのプリセット ---
     ipcMain.handle(IPC_CHANNELS.VOICE_PRESETS_LIST, (_e, kind: PresetKind) => listPresets(kind));
     ipcMain.handle(
         IPC_CHANNELS.VOICE_PRESETS_SAVE,
@@ -211,52 +215,51 @@ export function registerVoiceIpcHandlers() {
     );
     ipcMain.handle(IPC_CHANNELS.VOICE_PRESETS_REMOVE, (_e, kind: PresetKind, id: string) => removePreset(kind, id));
 
+    // --- 学習セット ---
+    ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_SETS_LIST, (_e, feature: unknown) =>
+        listTrainingSets(checkFeatureId(feature))
+    );
+    ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_SETS_GET, (_e, feature: unknown, id: string) =>
+        getTrainingSet(checkFeatureId(feature), id)
+    );
+    ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_SETS_CREATE, (_e, feature: unknown, name: string, language: unknown) =>
+        createTrainingSet(checkFeatureId(feature), name, language === undefined ? undefined : checkLanguage(language))
+    );
+    ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_SETS_RENAME, (_e, feature: unknown, id: string, name: string) =>
+        renameTrainingSet(checkFeatureId(feature), id, name)
+    );
+    ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_SETS_REMOVE, (_e, feature: unknown, id: string) =>
+        removeTrainingSet(checkFeatureId(feature), id)
+    );
+    ipcMain.handle(
+        IPC_CHANNELS.VOICE_TRAINING_SETS_ADD_RECORDING,
+        (_e, feature: unknown, id: string, wav: Uint8Array, target: { name: string; sentenceId?: string }) =>
+            addTrainingRecording(checkFeatureId(feature), id, wav, target)
+    );
+    ipcMain.handle(
+        IPC_CHANNELS.VOICE_TRAINING_SETS_ADD_FILES,
+        (_e, jobId: string, feature: unknown, id: string, paths: string[], sentenceId?: string) =>
+            addTrainingFiles(jobId, checkFeatureId(feature), id, paths, sentenceId)
+    );
+    ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_SETS_REMOVE_AUDIO, (_e, feature: unknown, id: string, audioId: string) =>
+        removeTrainingAudio(checkFeatureId(feature), id, audioId)
+    );
+
     // --- 学習 ---
-    ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_RVC_DATASET, () => getRvcDataset());
-    ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_RVC_ADD_FILES, (_e, jobId: string, paths: string[]) =>
-        addRvcFiles(jobId, paths)
-    );
-    ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_RVC_ADD_RECORDING, (_e, wav: Uint8Array, name: string) =>
-        addRvcRecording(wav, name)
-    );
-    ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_RVC_REMOVE, (_e, id: string) => removeRvcItem(id));
-    ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_RVC_CLEAR, () => clearRvcDataset());
-    ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_RVC_START, (_e, jobId: string, name: string) =>
-        startRvcTraining(jobId, name)
-    );
-    ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_TTS_DRAFT, (_e, language: unknown, set: unknown) =>
-        getTtsDraft(checkLanguage(language), checkCorpusSet(set))
-    );
-    ipcMain.handle(
-        IPC_CHANNELS.VOICE_TRAINING_TTS_SAVE_RECORDING,
-        (_e, language: unknown, set: unknown, sentenceId: string, wav: Uint8Array) =>
-            saveTtsRecording(checkLanguage(language), checkCorpusSet(set), sentenceId, wav)
-    );
-    ipcMain.handle(
-        IPC_CHANNELS.VOICE_TRAINING_TTS_SET_FILE,
-        (_e, jobId: string, language: unknown, set: unknown, sentenceId: string, source: string) =>
-            setTtsSentenceFile(jobId, checkLanguage(language), checkCorpusSet(set), sentenceId, source)
-    );
-    ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_TTS_REMOVE, (_e, language: unknown, set: unknown, sentenceId: string) =>
-        removeTtsRecording(checkLanguage(language), checkCorpusSet(set), sentenceId)
-    );
-    ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_TTS_CLEAR, (_e, language: unknown, set: unknown) =>
-        clearTtsDraft(checkLanguage(language), checkCorpusSet(set))
+    ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_RVC_START, (_e, jobId: string, setId: string, name: string) =>
+        startRvcTraining(jobId, setId, name)
     );
     ipcMain.handle(
         IPC_CHANNELS.VOICE_TRAINING_TTS_START,
-        (_e, jobId: string, options: { language: unknown; corpusSet: unknown; engine: TtsEngineId; name: string }) =>
-            startTtsTraining(jobId, {
-                ...options,
-                language: checkLanguage(options.language),
-                corpusSet: checkCorpusSet(options.corpusSet),
-            })
+        (_e, jobId: string, options: { setId: string; engine: TtsEngineId; name: string }) =>
+            startTtsTraining(jobId, options)
     );
 
     // --- 書き出し ---
     ipcMain.handle(
         IPC_CHANNELS.VOICE_EXPORT_RUN,
-        (_e, jobId: string, items: ExportItem[], settings: AudioExportSettings) => exportAudio(jobId, items, settings)
+        (_e, jobId: string, workKey: string, items: ExportItem[], settings: AudioExportSettings) =>
+            exportAudio(jobId, workKey, items, settings)
     );
     ipcMain.handle(IPC_CHANNELS.VOICE_EXPORT_EXISTING, (_e, paths: string[]) => existingPaths(paths));
 }

@@ -1,7 +1,7 @@
 import type { ChildProcess, SpawnOptions } from 'child_process';
 import { killTree, spawnGroup } from '../../utils/process-tree';
 import { onJobCancel } from '../job-manager';
-import { processTempDir, removeTemp } from '../work-dir';
+import { newTempDir, discardLater } from '../work-dir';
 
 // 外部プロセス (Python: pip・学習スクリプト・動作確認など) を行単位の出力を受け取りながら実行する。
 // ジョブがキャンセルされたら子孫プロセスごと終了させ、KURA_CANCELLED で失敗させる。
@@ -28,7 +28,7 @@ const DEFAULT_TAIL = 40;
 
 export function runProcess(command: string, args: string[], options: ProcessOptions): Promise<ProcessResult> {
     const { jobId, onLine, tailLines = DEFAULT_TAIL, env: baseEnv, ...spawnOptions } = options;
-    const temp = processTempDir();
+    const temp = newTempDir();
     const env = { ...baseEnv, TEMP: temp, TMP: temp, TMPDIR: temp };
     const running = new Promise<ProcessResult>((resolve, reject) => {
         let child: ChildProcess;
@@ -78,7 +78,7 @@ export function runProcess(command: string, args: string[], options: ProcessOpti
         });
     });
     // プロセスが終了したら一時ファイルを消す (close はプロセスの終了後に来る)
-    return running.finally(() => removeTemp(temp));
+    return running.finally(() => discardLater(temp));
 }
 
 // Windows で必要な DLL が見つからずにプロセスが起動できなかったことを表す終了コード (STATUS_DLL_NOT_FOUND)

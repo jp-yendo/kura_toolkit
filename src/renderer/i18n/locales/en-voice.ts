@@ -38,19 +38,15 @@ export default {
     languages: {
         ja: 'Japanese',
         en: 'English',
+        zh: 'Chinese',
     },
     platform: {
         unsupportedTitle: 'Voice features are not available on this system',
         unsupported: {
-            os: 'Audio Separation, Voice Conversion and Text to Speech are available on Windows and macOS.',
-            arch: 'Audio Separation, Voice Conversion and Text to Speech are available on 64-bit Windows (x64) and Apple Silicon Macs, because the libraries used by the voice features do not support Intel Macs or Arm-based Windows.',
+            os: 'Audio Separation, Voice Conversion and Text to Speech are available on Windows, macOS and Linux.',
+            arch: 'Audio Separation, Voice Conversion and Text to Speech are available on 64-bit Windows (x64), Apple Silicon Macs and 64-bit Linux (x64), because the libraries used by the voice features do not support Intel Macs or Arm-based Windows and Linux.',
             macosVersion:
                 'macOS 14 (Sonoma) or later is required, because the libraries used by the voice features do not support macOS 13 or earlier.',
-        },
-        keys: {
-            'win32-x64': 'Windows (x64)',
-            'darwin-arm64': 'macOS (Apple Silicon)',
-            unsupported: 'Unsupported system',
         },
         cuda: 'NVIDIA GPU ({{name}})',
         mps: 'Apple Silicon GPU',
@@ -59,7 +55,7 @@ export default {
     readiness: {
         title: 'Download required',
         message: 'Download the following to use this feature.',
-        openLibrary: 'Download...',
+        openLibrary: 'Downloads',
     },
     player: {
         play: 'Play',
@@ -71,14 +67,9 @@ export default {
     library: {
         title: 'Voice Feature Downloads',
         open: 'Downloads',
-        selectedOnly: 'Selected only',
-        intro: 'Python, the package sets and the models are large, so they are only downloaded when you select them here and start the download. Each downloaded item can be removed individually.',
-        environment: 'Environment',
-        platform: 'System',
-        device: 'Processing device',
-        libraryDir: 'Library directory',
-        modelDir: 'Model directory',
-        changeInSettings: 'Change the location in App Settings',
+        libraryDir: 'Library',
+        modelDir: 'Models',
+        changeInSettings: 'Change in settings',
         redetect: 'Detect Again',
         vcRuntimeMissing:
             'The Microsoft Visual C++ Redistributable was not found. The voice features need it, so install it before downloading the package sets.',
@@ -87,10 +78,221 @@ export default {
             'The NVIDIA GPU driver is too old to use the GPU. Update the driver to process on the GPU (press "Detect Again" afterwards).',
         nonAsciiPath:
             'A storage location contains non-ASCII characters, so things may not work correctly. Changing it to an ASCII-only location in App Settings is recommended.',
-        groupRuntime: 'Python and package sets',
-        groupSeparator: 'Separation models',
-        groupConverter: 'Voice Conversion models',
-        groupTts: 'Text to Speech engines, training models and preset voices',
+        requirements: {
+            separationRuntime: 'Separation runtime',
+            separatorModels: 'Separation models',
+            separatorModelsNote:
+                'The models used for separation. At least one is needed (not needed if you only use signal processing: center channel cancellation).',
+            conversionRuntime: 'Conversion runtime and helper models',
+            conversionExtras: 'For extra features',
+            whenFcpe: 'Needed when FCPE is chosen as the pitch extraction method',
+            whenSeparateInput:
+                'Needed to separate the vocals from the input on the conversion screen (choose separation models on the "Audio Separation" tab)',
+            importedEmbedders: 'For imported voice models',
+            importedEmbeddersNote:
+                'If an imported voice model was made with a method other than ContentVec, the model for that method is needed. The method is shown in the "Voice Models" list. It has nothing to do with the language of the voice you convert. Voices trained in this app do not need these.',
+            conversionTrainingRuntime: 'Training runtime and helper models',
+            ttsRuntime: 'Text to Speech runtime',
+            ttsLanguageModels: 'Language models for the language read',
+            ttsLanguageModelsNote:
+                'The language model for the language of the text is needed. Japanese, English and Chinese text is analysed with the language model of that language, whatever the format of the voice model. Under each language model are the ready-to-use models that can read that language.',
+            whenJapanese: 'Needed to read Japanese (used by both JP-Extra and multilingual voices)',
+            whenEnglish: 'Needed to read English',
+            whenChinese: 'Needed to read Chinese',
+            ttsTrainingRuntime: 'Training runtime',
+            trainingFormat: 'Models for each training format',
+            trainingFormatNote:
+                'The pretrained model of the format chosen on the training screen (JP-Extra or Multilingual) is needed.',
+            whenTrainJpExtra: 'Needed to train in the JP-Extra format',
+            whenTrainMultilingual: 'Needed to train in the Multilingual format',
+            whenTrainEnglish: 'Needed to train an English voice',
+            whenTrainChinese: 'Needed to train a Chinese voice',
+            whenTrainJapanese: 'Needed to train a Japanese voice',
+            trainingLanguageModels: 'Language model for the training language',
+            trainingLanguageModelsNote: 'The language model for the language of the training text is needed.',
+            readyModelOption: 'Ready-to-use model (optional)',
+        },
+        groupTitle: '{{name}} ({{kind}})',
+        requirementKinds: {
+            all: 'Required',
+            anyOf: 'At least one',
+            optional: 'Optional',
+        },
+        separatorArch: 'Method: {{arch}}',
+        separatorOutputs: 'Outputs: {{outputs}}',
+        separatorRecommendations: 'Recommendations by purpose',
+        separatorRecommendationsNote:
+            'Verified model combinations (ensembles) bundled with audio-separator, based on a community guide for separation models (deton24), arranged by purpose. Selecting a combination selects all the models listed under it. On the separation screen, choose them under "Recommended" as the method.',
+        separatorSingleModels: 'Individual models',
+        separatorSingleModelsNote:
+            'Choose models one by one. The methods are MDX-Net, VR Arch, Demucs and the newer MDXC (Roformer); MDXC generally gives higher quality but is heavier to run. Each separation type lists the models with the highest separation quality first.',
+        separatorNoMatch: 'No models match the conditions.',
+        separatorEnsemblePartial: '{{installed}} of {{total}} downloaded',
+        separatorEnsembleDescriptions: {
+            instrumental_clean:
+                'Keeps vocals out of the accompaniment the most. In exchange, the instruments may sound slightly thinner.',
+            instrumental_full:
+                'Keeps the instruments as intact as possible. In exchange, a little vocal residue or noise may remain.',
+            instrumental_balanced:
+                'Balances little leftover noise in the accompaniment against the fullness of the instruments.',
+            instrumental_low_resource: 'For little GPU memory, or when speed comes first.',
+            vocal_balanced: 'The best overall vocal quality.',
+            vocal_clean:
+                'Keeps the accompaniment out of the vocals the most. In exchange, parts of the voice may be lost.',
+            vocal_full:
+                'Keeps as much of the voice as possible, including harmonies and chorus. In exchange, a little accompaniment may remain.',
+            vocal_rvc: 'Suited to making voices for Voice Conversion (RVC) training.',
+            karaoke: 'Splits vocals into lead vocals and backing vocals, with higher quality than a single model.',
+        },
+        separatorPurposes: {
+            vocals: {
+                title: 'Vocal extraction',
+                note: 'If unsure, choose "Standard". The other combinations differ in whether they put keeping the accompaniment out or keeping the voice intact first.',
+            },
+            accompaniment: {
+                title: 'Accompaniment extraction',
+                note: 'If unsure, choose "Standard". The other combinations differ in whether they put keeping vocals out or keeping the instruments intact first.',
+            },
+            both: {
+                title: 'Vocals and accompaniment',
+                note: 'A model that extracts both vocals and accompaniment without favoring either.',
+            },
+            layers: {
+                title: 'Lead, backing and accompaniment',
+                note: 'One combination cannot do this, so it takes two stages: split into vocals and accompaniment first, then add a stage on the separation screen and split the vocals into lead and backing vocals. Both combinations are needed.',
+            },
+        },
+        separatorPurposeLabels: {
+            standard: 'Standard',
+            step1: 'Stage 1: split into vocals and accompaniment',
+            step2: 'Stage 2: split the vocals into lead and backing vocals',
+        },
+        separatorModelNotes: {
+            vrHp: 'A high-quality (HP) VR Arch model aimed mainly at extracting the accompaniment.',
+            vrHp2: 'An improved high-quality (HP2) VR Arch model aimed mainly at extracting the accompaniment.',
+            vrHpVocal: 'A high-quality VR Arch model aimed mainly at extracting vocals.',
+            vrKaraoke:
+                'A VR Arch model that separates the lead vocals from the rest (backing vocals and accompaniment).',
+            vrSp: 'An older-generation VR Arch model (SP). The number in the name is the sample rate it handles. HP and later models, or MDX-Net and later, generally give higher quality.',
+            vrWind: 'Separates woodwinds (flute, saxophone and the like) from the rest of the sound.',
+            vrDeEcho: 'Removes echo (delayed, repeated reflections).',
+            vrDeEchoAggressive: 'Removes echo more strongly than Normal.',
+            vrDeEchoDeReverb: 'Removes echo and reverb together.',
+            vrDeNoise: 'Removes noise.',
+            vrDeNoiseLite: 'A lighter version of the noise removal model.',
+            vrBve: 'Splits vocals into lead vocals and backing vocals (BVE: backing vocal extraction). Extract the vocals first, then use it on them.',
+            vrMgmHigh: 'An older-generation (v4) VR Arch model that focuses on the high frequency range.',
+            vrMgmLow: 'An older-generation (v4) VR Arch model that focuses on the low frequency range.',
+            vrMgmMain: 'The standard older-generation (v4) VR Arch model.',
+            vrDeReverb: 'A VR Arch model that removes reverb.',
+            mdxInstHq:
+                'A high-quality (HQ) MDX-Net model aimed mainly at extracting the accompaniment. Higher numbers are newer versions.',
+            mdxVocalEarly: 'An early MDX-Net model aimed mainly at extracting vocals.',
+            mdxInstEarly: 'An early MDX-Net model aimed mainly at extracting the accompaniment.',
+            mdxKaraoke:
+                'An MDX-Net model that separates the lead vocals from the rest (backing vocals and accompaniment).',
+            mdxVocFt: 'A tuned MDX-Net vocal model, with high vocal quality among MDX-Net models.',
+            mdxKimVocal: 'An MDX-Net model by Kim aimed mainly at extracting vocals. 2 is an improved version of 1.',
+            mdxKimInst: 'An MDX-Net model by Kim aimed mainly at extracting the accompaniment.',
+            mdxReverb: 'Splits the sound into the reverb and the sound without reverb.',
+            crowd: 'Removes crowd noise and applause from live recordings.',
+            kuielabVocals:
+                'Made for the Music Demixing Challenge; separates vocals from the rest. a and b were trained separately.',
+            kuielabOther:
+                'Made for the Music Demixing Challenge; separates the instruments other than vocals, drums and bass. a and b were trained separately.',
+            kuielabBass:
+                'Made for the Music Demixing Challenge; separates bass from the rest. a and b were trained separately.',
+            kuielabDrums:
+                'Made for the Music Demixing Challenge; separates drums from the rest. a and b were trained separately.',
+            demucs: 'The standard Demucs v4 model, splitting into vocals, drums, bass and other.',
+            demucsFt:
+                'A tuned Demucs v4 model splitting into vocals, drums, bass and other. Higher quality than the standard model but about 4 times slower.',
+            demucsMmi: 'A previous-generation (Hybrid Demucs) model splitting into vocals, drums, bass and other.',
+            demucs6s:
+                'A Demucs v4 model splitting into vocals, drums, bass, guitar, piano and other. The piano separation is of lower quality.',
+            mdx23cInstVoc: 'An MDX23C model that splits into vocals and accompaniment.',
+            viperxBsRoformer:
+                'A BS-Roformer model by viperx that splits into vocals and accompaniment; an early high-quality Roformer model.',
+            viperxMelRoformer: 'A Mel-Roformer model by viperx that splits into vocals and accompaniment.',
+            drumBass: 'Separates drums and bass together from the rest of the sound.',
+            unwaInst:
+                'A Mel-Roformer model by unwa aimed mainly at extracting the accompaniment. V2 is an improved version of V1.',
+            unwaInstPlus: "An improved version of unwa's accompaniment model (Inst V1).",
+            unwaInstE:
+                "A version (E) of unwa's accompaniment model that focuses on keeping the fullness of the instruments; more noise tends to remain. Plus is its improved version.",
+            unwaDuality:
+                'A model by unwa that aims to extract both vocals and accompaniment equally cleanly. V2 is an improved version of V1.',
+            mdx23cDeReverb: 'An MDX23C model that removes reverb.',
+            drumSep:
+                'Splits drums into kick, snare, toms, hi-hat, ride and crash. Extract the drums first, then use it on them.',
+            roformerKaraoke:
+                'A Roformer model that separates the lead vocals from the rest (backing vocals and accompaniment). Each author tunes it differently.',
+            melDenoise: 'A Mel-Roformer model that removes noise.',
+            melDenoiseAggressive: 'A version of the Mel-Roformer noise removal model that removes noise more strongly.',
+            denoiseDebleed:
+                'Removes noise and vocal leakage left in the accompaniment. Use it after extracting the accompaniment.',
+            bsDeReverb: 'A BS-Roformer model that removes reverb.',
+            kimVocals: 'A Mel-Roformer vocal model by Kimberley Jensen; the base of many tuned versions.',
+            kimFt: "Versions of Kim's vocal model tuned by unwa. Higher numbers are newer versions.",
+            kimFtBleedless:
+                'A version of the tuned Kim vocal model (FT 2) that leaves less instrument sound in the vocals.',
+            revive: 'A BS-Roformer vocal model by unwa.',
+            reviveV2: "A version of unwa's vocal model (Revive) that leaves less instrument sound in the vocals.",
+            reviveV3e: "A version of unwa's vocal model (Revive) that keeps more of the vocals, including harmonies.",
+            becruilyVocals: 'A Mel-Roformer vocal model by becruily.',
+            becruilyInst: 'A Mel-Roformer accompaniment model by becruily, with especially high accompaniment quality.',
+            vocalFullness:
+                'A model by Aname that focuses on keeping as much of the vocals as possible, including harmonies.',
+            gaboxBsVocals: 'A BS-Roformer vocal model by Gabox.',
+            gaboxVocals: 'A Mel-Roformer vocal model by Gabox. V2 is an improved version.',
+            gaboxVocalsFv:
+                "Versions (FV) of Gabox's vocal model that focus on keeping the fullness of the vocals. Higher numbers are newer versions.",
+            gaboxInst: 'A Mel-Roformer accompaniment model by Gabox. Higher numbers are newer versions.',
+            gaboxInstBleedless:
+                "Versions of Gabox's accompaniment model that focus on leaving less vocals in the accompaniment. Higher numbers are newer versions.",
+            gaboxInstFullness:
+                "Versions of Gabox's accompaniment model that focus on keeping the fullness of the instruments; a little vocals may remain. Higher numbers are newer versions.",
+            gaboxInstFullnessNoisy:
+                "Keeps even more of the instruments than Gabox's Fullness V4; more noise tends to remain.",
+            gaboxInstV: "Newer versions (INSTV) of Gabox's accompaniment model. Higher numbers are newer versions.",
+            gaboxInstVN:
+                "Versions (N) of Gabox's INSTV accompaniment models that put the fullness of the instruments first; more noise tends to remain.",
+            gaboxInstFv7z:
+                "A version of Gabox's accompaniment model that leaves especially little vocals in the accompaniment.",
+            gaboxInstFv: "Newer versions (FV) of Gabox's accompaniment model.",
+            anvuewDeReverb: 'A Mel-Roformer model by anvuew that removes reverb.',
+            anvuewDeReverbLess: "A version of anvuew's reverb removal model that removes reverb more gently.",
+            anvuewDeReverbMono: "A version of anvuew's reverb removal model for mono recordings.",
+            sucialDeReverbBig:
+                'A large Mel-Roformer model by Sucial that removes reverb. Super Big is an even larger version.',
+            sucialDeReverbEcho: 'A model by Sucial that removes reverb and echo together. V2 is an improved version.',
+            sucialDeReverbEchoFused: "Sucial's reverb and echo removal models merged into one.",
+            syhft: "Versions of Kim's vocal model tuned by SYH99999. Higher numbers are newer, and Big is a larger version.",
+            bigBeta: 'A large Mel-Roformer vocal model by unwa. Higher numbers are newer versions.',
+            chorusMaleFemale: 'A model by Sucial that splits a chorus into male and female voices.',
+            maleFemale: 'A model by aufr33 that splits voices into male and female voices.',
+            aspiration:
+                'A model by Sucial that separates breath sounds from vocals. Less Aggressive separates them more gently.',
+            bleedSuppressor:
+                'Removes vocal and other leakage left in the accompaniment. Use it after extracting the accompaniment.',
+            resurrectionVocals: 'A BS-Roformer vocal model by unwa with high vocal quality.',
+            resurrectionInst:
+                'A BS-Roformer accompaniment model by unwa. The file is small and processing is relatively light.',
+            resurrectionInstGabox: "unwa's accompaniment model (Instrumental Resurrection) tuned by Gabox.",
+            bsRoformerSw:
+                'A BS-Roformer model by jarredou that splits into vocals, drums, bass, guitar, piano and other.',
+        },
+        separatorCategoryNotes: {
+            vocals: 'Splits into vocals and accompaniment (the instruments). Used to convert a singing voice or to use only the accompaniment.',
+            multi: 'Splits into instrument parts such as vocals, drums, bass and others.',
+            karaoke:
+                'Splits vocals into lead vocals and backing vocals. Split into vocals and accompaniment first, then use it on the vocals.',
+            cleanup: 'Removes reverb, echo, noise and similar. Used to clean up extracted vocals.',
+            other: 'Separations that fit none of the above, such as splitting male and female voices.',
+        },
+        prerequisites: 'Requires: {{items}} (downloaded together when selected)',
+        selectMissing: 'Select missing items',
+        missingRequired: '{{count}} of the items required for {{feature}} are not downloaded.',
         colName: 'Name',
         colSize: 'Size',
         colStatus: 'Status',
@@ -112,13 +314,15 @@ export default {
             failed: 'Failed',
             cancelled: 'Interrupted',
         },
-        allCategories: 'All types',
-        searchModels: 'Filter by model name',
+        separatorCategoryCount: '{{name}} ({{count}})',
+        separatorFilterArch: 'Method',
+        separatorFilterOutput: 'Output',
+        separatorFilterAll: 'All',
+        searchModels: 'Search model names and descriptions',
         installedOnly: 'Downloaded only',
-        separatorListHint:
-            'The list of separation models can be fetched after the "Audio Separation package set" has been downloaded.',
-        listModels: 'Get List',
-        refreshList: 'Refresh List',
+        separatorListHint: 'Download the "Audio Separation package set" to show the list of separation models.',
+        separatorListCreating: 'Creating the list of separation models…',
+        separatorListFailed: 'Could not create the list of separation models: {{message}}',
         selection: '{{count}} items (including prerequisites) / {{size}} in total',
         selectionNone: 'Select items to download or remove.',
         downloadSelected: 'Download Selected',
@@ -139,46 +343,69 @@ export default {
             'Downloaded items can be used again after downloading them again. Voice models you trained or imported are not removed here.',
         removed: 'Removed.',
         removeFailed: '{{count}} items could not be removed.',
-        ttsTrainingUnavailable: 'Text to Speech model training is only available on Windows with an NVIDIA GPU.',
+        ttsTrainingUnavailable:
+            'Text to Speech model training is only available on Windows and Linux with an NVIDIA GPU.',
         separatorModelNotFound: 'The files of this model were not found at the distribution source.',
         items: {
             python: 'Python 3.11',
-            pythonDesc: 'Used by all voice features.',
+            pythonDesc:
+                'The runtime that runs the voice feature programs. It is kept in a location of its own and runs separately from any Python installed on your computer.',
             separatorPackages: 'Audio Separation package set',
             separatorPackagesDesc:
-                'Everything needed for Audio Separation. On macOS, the Xcode Command Line Tools must be installed first.',
+                'The Audio Separation program (python-audio-separator) and the libraries it needs (PyTorch and others). On macOS, the Xcode Command Line Tools must be installed first.',
             converterPackages: 'Voice Conversion package set',
-            converterPackagesDesc: 'Everything needed for Voice Conversion and for training its models.',
+            converterPackagesDesc:
+                'The Voice Conversion (RVC) program (Applio) and the libraries it needs (PyTorch and others). Used for conversion and for training its models.',
             ttsPackages: 'Text to Speech package set',
-            ttsPackagesDesc: 'Everything needed for Text to Speech.',
+            ttsPackagesDesc:
+                'The Text to Speech program (Style-Bert-VITS2) and the libraries it needs (PyTorch and others).',
             ttsTrainPackages: 'Text to Speech training package set',
             ttsTrainPackagesDesc:
-                'Everything needed to train Text to Speech models. Available only on Windows with an NVIDIA GPU.',
+                'The extra programs needed to train Text to Speech models, and a speaker embedding model that computes the tone (style) of a voice. Available only on Windows and Linux with an NVIDIA GPU.',
             rmvpe: 'Pitch extraction model (RMVPE)',
-            rmvpeDesc: 'Estimates pitch for conversion and training (required).',
+            rmvpeDesc:
+                'Estimates how the pitch of a voice moves. Used in conversion and training to keep the intonation of the original voice.',
             fcpe: 'Pitch extraction model (FCPE)',
-            fcpeDesc: 'Only needed when FCPE is chosen as the pitch extraction method.',
-            contentvec: 'Speaker feature model (ContentVec)',
-            contentvecDesc: 'Used for conversion and training (required).',
+            fcpeDesc: 'Estimates pitch with a different method from RMVPE. It is lighter and faster than RMVPE.',
+            contentvec: 'Speech feature model (ContentVec)',
+            contentvecDesc:
+                'Extracts features describing what is being said. Conversion re-voices these features with a voice model. Training in this app always uses this method, as do most distributed voice models.',
             rvcPretrained: 'Pretrained model for training (40 kHz)',
-            rvcPretrainedDesc: 'Used to train Voice Conversion models.',
-            embedderDesc: 'Only needed for imported models that were made with this method.',
-            embedderSpin: 'Speaker feature model (SPIN)',
-            embedderSpinV2: 'Speaker feature model (SPIN v2)',
-            embedderJapaneseHubert: 'Speaker feature model (Japanese HuBERT)',
-            embedderChineseHubert: 'Speaker feature model (Chinese HuBERT)',
-            embedderKoreanHubert: 'Speaker feature model (Korean HuBERT)',
-            engineJpExtra: 'Text to Speech engine (JP-Extra)',
-            engineJpExtraDesc: 'Used to read Japanese. Recommended when you only need Japanese.',
-            engineMultilingual: 'Text to Speech engine (Multilingual)',
-            engineMultilingualDesc:
-                'Used to read English. It also uses the JP-Extra engine, which is downloaded together.',
+            rvcPretrainedDesc:
+                'A model already trained on many voices. Training starts from it, so a voice can be trained in less time from fewer recordings.',
+            embedderSpin: 'Speech feature model (SPIN)',
+            embedderSpinDesc:
+                'Plays the same role as ContentVec. It is designed to extract features that depend less on the speaker.',
+            embedderSpinV2: 'Speech feature model (SPIN v2)',
+            embedderSpinV2Desc: 'An improved version of SPIN.',
+            embedderJapaneseHubert: 'Speech feature model (Japanese HuBERT)',
+            embedderJapaneseHubertDesc: 'Plays the same role as ContentVec, trained on Japanese speech.',
+            embedderChineseHubert: 'Speech feature model (Chinese HuBERT)',
+            embedderChineseHubertDesc: 'Plays the same role as ContentVec, trained on Chinese speech.',
+            embedderKoreanHubert: 'Speech feature model (Korean HuBERT)',
+            embedderKoreanHubertDesc: 'Plays the same role as ContentVec, trained on Korean speech.',
+            languageModelJa: 'Japanese language model (DeBERTa)',
+            languageModelJaDesc:
+                'A language model (DeBERTa) that decides natural intonation from the meaning and context of Japanese text. Used to read Japanese (with both JP-Extra and multilingual voices).',
+            languageModelEn: 'English language model (DeBERTa)',
+            languageModelEnDesc:
+                'A language model (DeBERTa) that decides natural intonation from the meaning and context of English text. Also includes a dictionary for English pronunciation (CMUdict) and related data. Used to read English.',
+            languageModelZh: 'Chinese language model (RoBERTa)',
+            languageModelZhDesc:
+                'A language model (chinese-roberta-wwm-ext-large) that decides natural intonation from the meaning and context of Chinese text. Used to read Chinese.',
             ttsTrainJpExtra: 'Pretrained model for training (JP-Extra)',
-            ttsTrainJpExtraDesc: 'Used to train JP-Extra models.',
+            ttsTrainJpExtraDesc:
+                'The trained model that JP-Extra training starts from, and a model (WavLM) that judges how natural the audio sounds during training.',
             ttsTrainMultilingual: 'Pretrained model for training (Multilingual)',
-            ttsTrainMultilingualDesc: 'Used to train multilingual models.',
-            presetJpExtraDesc: 'Preset voice (JP-Extra), made from the JVNV corpus.',
-            presetMultilingualDesc: 'Preset voice (Multilingual), made from the JVNV corpus.',
+            ttsTrainMultilingualDesc: 'The trained model that multilingual training starts from.',
+            jvnvFemaleJpExtraDesc:
+                'A female voice (JP-Extra), made from Japanese speech spoken with emotion (the JVNV corpus). Ready to use for reading.',
+            jvnvMaleJpExtraDesc:
+                'A male voice (JP-Extra), made from Japanese speech spoken with emotion (the JVNV corpus). Ready to use for reading.',
+            jvnvFemaleMultilingualDesc:
+                'A female voice (Multilingual), made from Japanese speech spoken with emotion (the JVNV corpus). It can also read English and Chinese, but with a Japanese accent because the speaker is Japanese.',
+            jvnvMaleMultilingualDesc:
+                'A male voice (Multilingual), made from Japanese speech spoken with emotion (the JVNV corpus). It can also read English and Chinese, but with a Japanese accent because the speaker is Japanese.',
         },
     },
     update: {
@@ -211,16 +438,25 @@ export default {
             other: 'Other',
         },
         method: 'Method',
-        classicMethods: 'Signal processing methods',
+        pickModes: {
+            recommended: 'Recommended',
+            model: 'Model',
+            ensemble: 'Combination',
+            signal: 'Signal processing',
+        },
+        recommended: 'Recommended',
+        model: 'Model',
+        modelSearch: 'Search by name, method or description',
+        noMatch: 'No matching models',
+        noModels:
+            'No models for this separation type have been downloaded. Get them from "Download Separation Models".',
         centerCancel: 'Center channel cancellation',
-        ensemblePresets: 'Ensembles (verified combinations)',
-        customEnsemble: 'Combine multiple models (ensemble)',
-        models: 'Models',
-        notDownloaded: 'Not downloaded',
+        centerCancelDescription:
+            'Center channel cancellation: cancels the sound shared by the left and right channels (such as centered vocals). A simple method that uses no model; it cannot be used for mono audio.',
         quality: 'Separation quality (higher is better): {{values}}',
         qualityHint: 'A score for how cleanly each output is separated (SDR). Higher values mean a cleaner result.',
         ensembleModels: 'Models to combine',
-        modelCount: '{{count}} models',
+        ensembleHint: 'Choose two or more models. Their results are merged using the selected method.',
         algorithm: 'Combination method',
         algorithms: {
             avg_wave: 'Average (waveform)',
@@ -256,7 +492,6 @@ export default {
         },
         run: 'Separate',
         running: 'Separating',
-        downloadModel: 'Download This Model',
         getModels: 'Download Separation Models',
         candidates: 'Candidates',
         noCandidates:
@@ -291,6 +526,34 @@ export default {
         guitar: 'Guitar',
         piano: 'Piano',
         instrumental: 'Accompaniment',
+        woodwinds: 'Woodwinds',
+        'no woodwinds': 'Without woodwinds',
+        echo: 'Echo',
+        'no echo': 'Without echo',
+        reverb: 'Reverb',
+        'no reverb': 'Without reverb',
+        noreverb: 'Without reverb',
+        noise: 'Noise',
+        'no noise': 'Without noise',
+        dry: 'Cleaned sound',
+        'no dry': 'Removed sound',
+        'no other': 'Without other',
+        'no bass': 'Without bass',
+        'no drums': 'Without drums',
+        crowd: 'Crowd',
+        'no crowd': 'Without crowd',
+        kick: 'Kick',
+        snare: 'Snare',
+        toms: 'Toms',
+        hh: 'Hi-hat',
+        ride: 'Ride',
+        crash: 'Crash',
+        'drum-bass': 'Drums and bass',
+        'no drum-bass': 'Without drums and bass',
+        male: 'Male',
+        female: 'Female',
+        aspiration: 'Breath',
+        bleed: 'Leakage',
     },
     tracks: {
         source: 'Original',
@@ -413,11 +676,11 @@ export default {
     models: {
         import: 'Import',
         searchHub: 'Search Hugging Face',
-        getPresets: 'Get Preset Voices',
+        getReadyModels: 'Get Ready-to-Use Models',
         intro: {
             converter:
                 'Voice models for Voice Conversion (RVC). "Trained" models were created in this app; "Imported" models were obtained elsewhere.',
-            tts: 'Voice models for Text to Speech (Style-Bert-VITS2). "Preset" voices were downloaded, "Imported" models were obtained elsewhere and "Trained" models were created in this app.',
+            tts: 'Voice models for Text to Speech (Style-Bert-VITS2). "Ready-to-use" models were downloaded, "Imported" models were obtained elsewhere and "Trained" models were created in this app.',
         },
         empty: 'There are no voice models.',
         name: 'Name',
@@ -427,9 +690,9 @@ export default {
         categories: {
             trained: 'Trained',
             imported: 'Imported',
-            preset: 'Preset',
+            ready: 'Ready-to-use',
         },
-        presetLabel: '{{name}} ({{engine}})',
+        readyLabel: '{{name}} ({{engine}})',
         rvcInfo: 'RVC {{version}} / {{rate}} Hz / index: {{index}} / {{embedder}}',
         indexYes: 'yes',
         indexNo: 'no',
@@ -439,7 +702,7 @@ export default {
             'Choose the languages this multilingual model is used for. It can then only be used for text in those languages.',
         rename: 'Rename',
         editLanguages: 'Change languages',
-        presetRenameNote: 'Renaming keeps the model in the Preset type.',
+        readyRenameNote: 'Renaming keeps the model in the Ready-to-use type.',
         duplicateName: 'A model with this name already exists.\nA different name makes them easier to tell apart.',
         export: 'Export',
         exporting: 'Exporting',
@@ -449,7 +712,7 @@ export default {
         deleteConfirm: 'Delete "{{name}}"?',
         deleteUserData:
             'This model was created by training or importing, so it cannot be downloaded again. Deleting it moves it to the trash (if the trash cannot be used, it is deleted permanently).',
-        deletePreset: 'Preset voices can be downloaded again from Downloads.',
+        deleteReady: 'Ready-to-use models can be downloaded again from Downloads.',
     },
     import: {
         title: 'Import a Voice Model',
@@ -506,11 +769,11 @@ export default {
             'Open an SRT or WebVTT file or type one here. Each cue is read aloud and placed at its start time.',
         language: 'Language',
         engine: 'Engine',
-        getEngines: 'Download Engines',
-        engineMissing: 'No text to speech engine for {{language}} has been downloaded.',
+        getLanguageModels: 'Download Language Models',
+        languageModelMissing: 'The language model for {{language}} is not downloaded.',
         voice: 'Voice model',
         noVoices:
-            'No voice model can be used with this engine and language. Get the preset voices or import a model in "Voice Models".',
+            'No voice model can be used with this engine and language. Get ready-to-use models or import a model in "Voice Models".',
         style: 'Style',
         speaker: 'Speaker',
         styleWeight: 'Style strength',
@@ -603,9 +866,12 @@ export default {
                 'Sets the reading and accent of the wrapped word (Japanese accent notation).\nWrite the katakana reading in ph and put "\'" right after the mora before the pitch falls. Without "\'" the word is flat. Separate accent phrases with "/".\nHigh and low pitch follow the Tokyo accent rules (if the pitch falls right after the first mora, only the first mora is high; otherwise the first mora is low and the morae from the second up to the one marked with "\'" are high. In a flat word, the morae from the second onward are high).',
             descriptionEn:
                 'Sets the pronunciation of the wrapped words in IPA. Separate words with spaces and mark stress with "ˈ" and "ˌ". The Japanese accent notation cannot be used in English text.',
+            descriptionZh:
+                'Specifies the pronunciation of the enclosed Chinese characters in pinyin, for example to choose the reading of a character with several readings. Each character takes one syllable, so enclose Chinese characters only. The tones are used as written, without automatic tone changes (tone sandhi).',
             phJa: "Katakana reading with accent marks, for example ハ'シ / ハシ' / ハシ",
             phEn: 'IPA pronunciation, for example təˈmɑːtoʊ',
-            alphabet: 'Optional. x-kana (accent notation) for Japanese, ipa for English',
+            phZh: 'Pinyin with a tone number (1-4, 5 for the neutral tone) for each character, separated by spaces. Write ü as v. Example: yin2 hang2 (银行)',
+            alphabet: 'Optional. x-kana (accent notation) for Japanese, ipa for English, x-pinyin (pinyin) for Chinese',
         },
         escapeTitle: 'Writing tag-like text',
         escape: 'To write text that starts with a known tag name (such as "<break") as plain text, use the entities "&lt;" (<), "&gt;" (>) and "&amp;" (&).\nOther "<...>" text and full-width "＜" "＞" are treated as plain text and follow the symbol reading setting.',
@@ -628,7 +894,13 @@ export default {
         emptyContent: 'The "{{tag}}" tag does not wrap any text.',
         nestedTagNotAllowed: 'The tag "{{value}}" cannot be placed inside the "{{tag}}" tag.',
         accentNotJapanese: 'The Japanese accent notation can only be used in Japanese text.',
-        ipaNotEnglish: 'IPA pronunciation can only be used in English text. Use the accent notation for Japanese.',
+        ipaNotEnglish: 'IPA pronunciations can only be used in English text.',
+        pinyinNotChinese: 'Pinyin pronunciations can only be used in Chinese text.',
+        pinyinSyllable:
+            'The pinyin "{{value}}" cannot be used. Write a syllable followed by a tone number (1-5), such as zhong1.',
+        pinyinSurface: 'Enclose only Chinese characters when specifying pinyin.',
+        pinyinCount:
+            'The number of pinyin syllables ({{value}}) does not match the number of Chinese characters ({{expected}}).',
         accentSyntax: 'Accent notation error "{{value}}": {{accent}}',
         ipaSymbol: 'The phonetic symbol "{{value}}" is not supported.',
         ipaWordCount:
@@ -644,7 +916,7 @@ export default {
             rate: '"120%", "+20%" or a label (25% to 400%)',
             pitch: '"+2st", "+10%" or a label (±24 semitones)',
             volume: '"+6dB", "-3dB" or a label (-40 to +20 dB)',
-            alphabet: 'x-kana or ipa',
+            alphabet: 'x-kana, ipa or x-pinyin',
             nonEmpty: 'cannot be empty',
         },
         accent: {
@@ -677,6 +949,23 @@ export default {
         denied: 'The microphone cannot be used. Allow this app to use the microphone in System Settings.',
         error: 'The microphone could not be started: {{detail}}',
     },
+    trainingSets: {
+        label: 'Training set',
+        none: 'No training sets',
+        empty: 'Training audio is saved in a named training set. Create a training set first.',
+        ttsDetail: '{{language}} / {{count}} sentences with audio / {{duration}}',
+        rvcDetail: '{{count}} items / {{duration}}',
+        create: 'New Training Set',
+        createAction: 'Create',
+        rename: 'Rename',
+        renameAction: 'Rename',
+        remove: 'Delete Training Set',
+        removeAction: 'Delete',
+        removeConfirm: 'Delete the training set "{{name}}"? It is moved to the trash.',
+        removed: 'The training set "{{name}}" was moved to the trash.',
+        name: 'Name',
+        languageFixed: 'The language cannot be changed after the training set is created.',
+    },
     training: {
         stages: {
             prepare: 'Preparing',
@@ -692,17 +981,13 @@ export default {
         rvcGuide:
             'Recordings made in an environment close to the audio you want to convert (microphone, room, and way of speaking or singing) make a better model. Singing and speaking voices both work.',
         addFiles: 'Add Audio Files',
-        clear: 'Remove All',
-        clearConfirm:
-            'Remove all training audio? Recordings are deleted and cannot be restored. Your audio files themselves are not deleted.',
-        removeItem: 'Remove from the list',
-        deleteRecordingTitle: 'Delete recording',
-        deleteRecordingConfirm: 'Delete "{{name}}"? A deleted recording cannot be restored.',
-        deleteSentenceRecordingConfirm:
-            'Delete the recording of this sentence? A deleted recording cannot be restored.',
-        deleteRecording: 'Delete',
-        rvcDatasetNote:
-            'Added audio files are read directly from their original location, so do not move or delete them until training finishes. When training ends (including when it is cancelled or fails), the list is cleared and recordings are deleted. The same happens when you quit the app.',
+        deleteAudioTitle: 'Delete audio',
+        deleteAudioConfirm: 'Delete "{{name}}" from the training set? Deleted audio cannot be restored.',
+        deleteSentenceAudioConfirm:
+            'Delete the audio of this sentence from the training set? Deleted audio cannot be restored.',
+        deleteAudio: 'Delete Audio',
+        datasetNote:
+            'Recordings and chosen audio files are saved in the training set (you can move or delete the original files after adding them). Training sets remain after training.',
         dataset: 'Training audio ({{count}} items / {{duration}} in total)',
         datasetEmpty: 'Record your voice or add audio files.',
         itemName: 'Name',
@@ -719,33 +1004,26 @@ export default {
         openModels: 'Open Voice Models',
         ttsUnavailableTitle: 'Text to Speech models cannot be trained on this system',
         ttsUnavailable:
-            'Text to Speech models can only be trained on Windows with an NVIDIA GPU. A model trained on such a Windows PC can be exported and then imported here.',
-        corpusSet: 'Sentences',
-        corpus: {
-            quick: 'Quick (fewer sentences)',
-            accurate: 'Accurate (takes longer, better results)',
-        },
+            'Text to Speech models can only be trained on Windows and Linux with an NVIDIA GPU. A model trained on such a computer can be exported and then imported here.',
         ttsGuide:
-            'Read each presented sentence aloud and record it, or choose an audio file of that sentence being read. The presented sentence is used as is as the transcript of that audio. Split recordings of several sentences into one file per sentence before choosing them.',
-        ttsDatasetNote:
-            'Chosen audio files are read directly from their original location, so do not move or delete them until training finishes. When training ends (including when it is cancelled or fails), the audio is removed from all sentences and recordings are deleted. The same happens when you quit the app.',
+            'Choose a sentence in the list on the left, then read it aloud and record it, or choose an audio file of that sentence being read. You can start with any sentence and skip sentences you do not want to read. The presented sentence is used as is as the transcript of that audio. Split recordings of several sentences into one file per sentence before choosing them.',
         sentenceIndex: 'Sentence {{index}} / {{total}} ({{id}})',
         recorded: 'Has audio',
         notRecorded: 'No audio',
         rerecord: 'Record Again',
         chooseSentenceFile: 'Choose Audio File for This Sentence',
-        removeSentenceAudio: 'Remove the audio from this sentence',
+        removeSentenceAudio: 'Delete the audio of this sentence',
         clipLength: 'This audio is {{duration}} s long. Audio of about {{min}} to {{max}} s suits training best.',
         noRecording: 'This sentence has no audio yet',
         previous: 'Previous',
         next: 'Next',
         progressSummary: '{{recorded}} / {{total}} sentences have audio ({{duration}} in total)',
-        needMore: 'Training needs audio for at least {{count}} sentences.',
+        sentenceCounts:
+            'Sentences with audio needed for training: at least {{minimum}}, {{recommended}} or more recommended. The more sentences, the better the voice and speaking style are reproduced.',
     },
     // Names of the file types in file dialogs
     fileFilters: {
         audio: 'Audio and video files',
-        trainingAudio: 'Audio files',
         allFiles: 'All files',
         rvcModel: 'RVC models',
         ttsModel: 'Style-Bert-VITS2 models',
@@ -766,22 +1044,23 @@ export default {
         VENV_FAILED: 'The package set could not be prepared. ({{detail}})',
         PIP_FAILED: 'Installing the packages failed. Check your connection and try again. ({{detail}})',
         BUILD_TOOLS_MISSING:
-            'The developer tools needed to build a package were not found. Install the Microsoft C++ Build Tools on Windows, or the Command Line Tools with "xcode-select --install" on macOS, and try again.',
+            'The developer tools needed to build a package were not found. Install the Microsoft C++ Build Tools on Windows, the Command Line Tools with "xcode-select --install" on macOS, or a C/C++ compiler (such as build-essential) on Linux, and try again.',
         VERIFY_FAILED: 'The package set could not be installed correctly. Try again. ({{detail}})',
         DOWNLOAD_FAILED: 'The download failed. Check your connection and try again. ({{detail}})',
         PREREQUISITE_FAILED: 'Skipped because a prerequisite could not be obtained.',
-        SEPARATOR_NOT_INSTALLED: 'The Audio Separation package set has not been downloaded.',
+        SEPARATOR_NOT_INSTALLED:
+            'The Audio Separation package set has not been downloaded or needs an update. Get it from Downloads.',
         MODEL_NOT_INSTALLED: 'A required model has not been downloaded.',
         SEPARATOR_MODEL_NOT_FOUND:
             'A file of the separation model was not found at the distribution source. ({{detail}})',
-        ENSEMBLE_PRESET_NOT_FOUND: 'The chosen ensemble preset is not in the list of separation models. ({{detail}})',
+        ENSEMBLE_NOT_FOUND: 'The chosen verified combination is not in the list of separation models. ({{detail}})',
         MODEL_REQUIRED: 'A required model has not been downloaded. Get it from Downloads.',
         MODEL_FILE_MISSING: 'A model file was not found ({{detail}}). Download it again from Downloads.',
         SEPARATION_NO_OUTPUT: 'The separation produced no output.',
         CENTER_CANCEL_MONO: 'Center channel cancellation only works with stereo audio.',
         NO_AUDIO_STREAM: 'This file contains no audio.',
         RUBBERBAND_UNAVAILABLE:
-            'The configured ffmpeg does not include the rubberband filter (used to transpose the accompaniment and fine-tune the speech speed). Use an ffmpeg build that includes rubberband (for example Gyan.FFmpeg from winget on Windows, or ffmpeg from Homebrew on macOS) and review the ffmpeg setting in App Settings.',
+            'The configured ffmpeg does not include the rubberband filter (used to transpose the accompaniment and fine-tune the speech speed). Use an ffmpeg build that includes rubberband (for example Gyan.FFmpeg from winget on Windows, ffmpeg from Homebrew on macOS, or the ffmpeg package of your Linux distribution) and review the ffmpeg setting in App Settings.',
         EMBEDDER_MISSING:
             'The speaker feature model used by this voice model ({{detail}}) has not been downloaded. Get it from Downloads.',
         EMBEDDER_UNSUPPORTED: 'The speaker feature method used by this voice model ({{detail}}) is not supported.',
@@ -798,8 +1077,6 @@ export default {
         IMPORT_EXPIRED: 'The import was interrupted. Start again.',
         IMPORT_UNSAFE_NOT_ALLOWED: 'Loading without restrictions was not allowed.',
         INVALID_SAFETENSORS: 'The model weights (safetensors) could not be read.',
-        TTS_ENGINE_NOT_INSTALLED:
-            'The text to speech engine this model needs ({{detail}}) has not been downloaded. Get it from Downloads.',
         TTS_NOT_INSTALLED: 'The Text to Speech package set has not been downloaded.',
         TTS_ENGINE_MISMATCH: 'The selected engine does not match the format of the voice model.',
         TTS_LANGUAGE_UNSUPPORTED: 'This voice model does not support the selected language.',
@@ -808,18 +1085,30 @@ export default {
         VOICE_LANGUAGES_EMPTY: 'Choose at least one language.',
         VOICE_LANGUAGES_FIXED: 'JP-Extra models are Japanese only.',
         INVALID_TTS_MODEL: 'The files could not be read as a text to speech model. ({{detail}})',
-        NLTK_DATA_MISSING: 'The data needed to read English is missing. Download the multilingual engine again.',
+        NLTK_DATA_MISSING:
+            'The data needed to read English is missing. Download "English language model (DeBERTa)" again.',
+        PINYIN_ALIGN_FAILED:
+            'The characters with a pinyin pronunciation could not be aligned with the text. Check the pronunciation.',
         IPA_WORD_SPLIT: 'A pronunciation cannot be set for "{{detail}}". Use the sub tag to set its reading.',
-        TTS_TRAINING_UNAVAILABLE: 'Text to Speech model training is only available on Windows with an NVIDIA GPU.',
+        TTS_TRAINING_UNAVAILABLE:
+            'Text to Speech model training is only available on Windows and Linux with an NVIDIA GPU.',
         TTS_ENGINE_LANGUAGE_MISMATCH: 'This language cannot be trained with this engine.',
         TTS_CONFIRMATION_EXPIRED: 'This confirmation is no longer valid. Read aloud again.',
         TRAINING_DATA_TOO_SHORT: 'The training audio is too short.',
         TRAINING_DATA_TOO_FEW: 'Too few sentences have audio.',
-        TRAINING_FILE_UNSUPPORTED:
-            'This audio file format cannot be used for training. Choose a WAV, MP3, FLAC, or OGG file. ({{detail}})',
         TRAINING_FILE_UNREADABLE: 'This training audio file could not be read. ({{detail}})',
         TRAINING_FILE_MISSING:
-            'Some training audio files could not be found. If you moved or deleted them, remove them and choose them again. ({{detail}})',
+            'Some audio files of the training set could not be found. Delete that audio, then record it again or choose the file again. ({{detail}})',
+        TRAINING_SET_NOT_FOUND: 'The training set could not be found.',
+        TRAINING_SET_IN_USE: 'This training set cannot be changed or deleted while it is used for training.',
+        TRAINING_SET_NAME_EMPTY: 'Enter a name for the training set.',
+        TRAINING_SET_LANGUAGE_MISMATCH: 'The language of the training set is not valid.',
+        INVALID_TRAINING_SET_ID: 'The training set is not valid.',
+        SEPARATOR_LIST_OUTDATED:
+            'The Audio Separation package set changed, so the list of separation models must be created again. Please try again.',
+        UNKNOWN_SENTENCE: 'The sentence is not valid.',
+        INVALID_FEATURE: 'The feature is not valid. ({{detail}})',
+        INVALID_LANGUAGE: 'The language is not valid. ({{detail}})',
         TRAINING_FAILED: 'Training failed. ({{detail}})',
         TRAINING_STEP_FAILED: 'Training failed partway. ({{detail}})',
         TRAINING_NO_AUDIO: 'No usable audio was found for training (silence and very short audio cannot be used).',

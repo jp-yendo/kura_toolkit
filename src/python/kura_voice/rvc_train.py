@@ -2,9 +2,8 @@
 
 Usage: python rvc_train.py --job job.json
 
-The job lists the audio files to train on (``files``: files the user picked, read where they are,
-and recordings in the work directory), the Applio folder and the pretrained models in the app's
-model directory. Progress is reported as JSON lines on the protocol stream (see training_common.py).
+The job lists the audio files to train on (``files``: the audio of a training set, read where it
+is), the Applio folder and the pretrained models in the app's model directory. Progress is reported as JSON lines on the protocol stream (see training_common.py).
 The training data, features and checkpoints are written to the job folder in the work directory.
 The finished model (model.safetensors / model.json / model.index) is written straight
 into ``outputDir``, the model's folder being created in the model directory.

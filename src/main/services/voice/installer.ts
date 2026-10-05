@@ -15,8 +15,8 @@ import {
     type DownloadAsset,
     type SpecFile,
 } from './spec';
-import { newJobTempDir, removeTemp } from '../work-dir';
-import type { VoiceComponentId, VoicePlatformInfo } from '../../../shared/voice/types';
+import { newTempDir, discardLater } from '../work-dir';
+import type { CudaFlavor, VoiceComponentId, VoicePlatformInfo } from '../../../shared/voice/types';
 
 // Python 本体・パッケージ一式・モデルの取得と展開。
 // 進捗は「受け取ったバイト数 / 全体のバイト数 (分かる場合)」と、処理中の内容 (ファイル名など) で通知する。
@@ -178,16 +178,27 @@ function readRequirementLines(name: string): string[] {
     return lines;
 }
 
-// PyTorch を環境に合った版 (CUDA 版など) にする。CUDA 版は版番号に +cuXXX が付く
+// PyTorch の取得元の種類。Windows と Linux は NVIDIA GPU に合った CUDA 版、Linux で GPU を使えない場合は CPU 版
+// (Linux の PyPI の PyTorch は CUDA のライブラリ一式を含むため)。それ以外 (Windows の CPU・macOS) は PyPI のもの
+function torchFlavor(platform: VoicePlatformInfo): CudaFlavor | 'cpu' | null {
+    if (platform.platform === 'win32-x64') return platform.gpu.cudaFlavor ?? null;
+    if (platform.platform === 'linux-x64') return platform.gpu.cudaFlavor ?? 'cpu';
+    return null;
+}
+
+// PyTorch を環境に合った版 (CUDA 版など) にする。CUDA 版・CPU 版は版番号に +cuXXX・+cpu が付く。
+// OS を指定した行 (sys_platform == / !=) は、この OS に当てはまるものだけを書き換える (ほかは pip が読み飛ばす)
 function resolveRequirements(
     spec: ComponentSpec,
     platform: VoicePlatformInfo
 ): { lines: string[]; indexUrls: string[] } {
-    const flavor = platform.platform === 'win32-x64' ? platform.gpu.cudaFlavor : null;
+    const flavor = torchFlavor(platform);
     const lines = readRequirementLines(spec.requirements).map(line => {
-        const match = /^(torch|torchaudio|torchvision)==([0-9.]+)(\s*;\s*sys_platform\s*==\s*"(\w+)")?$/.exec(line);
+        const match = /^(torch|torchaudio|torchvision)==([0-9.]+)(\s*;\s*sys_platform\s*(==|!=)\s*"(\w+)")?$/.exec(
+            line
+        );
         if (!match || !flavor) return line;
-        if (match[4] && match[4] !== 'win32') return line;
+        if (match[3] && (match[4] === '==') !== (match[5] === process.platform)) return line;
         return `${match[1]}==${match[2]}+${flavor}`;
     });
     return { lines, indexUrls: flavor ? [TORCH_INDEX[flavor]] : [] };
@@ -223,14 +234,15 @@ async function ensureVenv(env: VoiceComponentId): Promise<void> {
         env: buildPythonEnv(null),
     });
     if (result.code !== 0) throw new Error(`VENV_FAILED: ${result.tail.join('\n')}`);
-    if (process.platform === 'darwin') await copyLibpython(lib.env(env));
+    if (process.platform !== 'win32') await copyLibpython(lib.env(env));
 }
 
-// macOS の Python 本体の実行ファイルは、隣の lib/ にある libpython を相対パス (@executable_path/../lib) で読む。
+// macOS と Linux の Python 本体の実行ファイルは、隣の lib/ にある libpython を相対パス
+// (macOS は @executable_path/../lib、Linux は $ORIGIN/../lib) で読む。
 // 写した実行ファイルが起動できるよう、仮想環境の lib/ にも libpython を置く
 async function copyLibpython(venv: string): Promise<void> {
     const source = path.join(libraryPaths().python, 'lib');
-    const names = (await fs.promises.readdir(source)).filter(name => /^libpython3.*\.dylib$/.test(name));
+    const names = (await fs.promises.readdir(source)).filter(name => /^libpython3.*\.(dylib|so(\.\d+)*)$/.test(name));
     if (names.length === 0) throw new Error(`VENV_FAILED: libpython not found in ${source}`);
     for (const name of names) await fs.promises.copyFile(path.join(source, name), path.join(venv, 'lib', name));
 }
@@ -240,11 +252,11 @@ async function copyLibpython(venv: string): Promise<void> {
 async function pipInstall(spec: ComponentSpec, platform: VoicePlatformInfo, estimate: number, context: InstallContext) {
     const { lines, indexUrls } = resolveRequirements(spec, platform);
     // pip に渡す要件ファイルは作業ディレクトリに書き、導入が終わったら (成否・キャンセルを問わず) 消す
-    const workDir = newJobTempDir(`pip-${spec.id}`);
+    const workDir = newTempDir();
     try {
         await runPip(spec, lines, indexUrls, workDir, estimate, context);
     } finally {
-        await removeTemp(workDir);
+        discardLater(workDir);
     }
 }
 

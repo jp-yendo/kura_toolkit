@@ -1,25 +1,11 @@
 import React from 'react';
-import {
-    Alert,
-    Box,
-    Button,
-    DialogActions,
-    DialogContent,
-    DialogTitle,
-    IconButton,
-    Menu,
-    MenuItem,
-    Stack,
-    Tooltip,
-    Typography,
-} from '@mui/material';
+import { Alert, Box, Button, IconButton, Menu, MenuItem, Stack, Tooltip, Typography } from '@mui/material';
 import DriveFileMoveIcon from '@mui/icons-material/DriveFileMove';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import i18n from '../../i18n/config';
-import AppDialog from '../common/AppDialog';
 import Panel from '../common/Panel';
 import ProgressDialog from '../common/ProgressDialog';
 import SectionLabel from '../common/SectionLabel';
@@ -28,15 +14,17 @@ import { useJobRunner } from '../../hooks/useJobRunner';
 import { showNotice } from '../../stores/noticeStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { notifyVoiceLibraryChanged, openVoiceLibrary } from '../../stores/voiceLibraryStore';
-import type { StorageInfo, StorageKind } from '@shared/types';
+import StorageMoveDialog from './StorageMoveDialog';
+import type { StorageInfo, StorageKind, StorageMoveDecisions, StorageMovePlan } from '@shared/types';
+import type { LibraryItem } from '@shared/voice/types';
 
 // アプリ全体の保存場所 (ライブラリ・モデル・作業ディレクトリ)。3 つはそれぞれ独立して変更する。
 // ライブラリとモデルは、中身を選んだフォルダへ移動する。作業ディレクトリは一時ファイルの置き場のため移動しない。
 // 既定の場所へ戻す操作は、誤って押さないよう各項目のメニューに置く
 
 type MovableKind = Exclude<StorageKind, 'work'>;
-// target が null の場合は既定の場所へ戻す
-type MoveRequest = { kind: MovableKind; target: string | null };
+// target が null の場合は既定の場所へ戻す。plan は移動先と比べた結果 (両方にあるまとまり)
+type MoveRequest = { kind: MovableKind; target: string | null; plan: StorageMovePlan; items: LibraryItem[] };
 
 const KINDS: StorageKind[] = ['library', 'model', 'work'];
 
@@ -57,6 +45,8 @@ export default function StorageSection() {
     const [info, setInfo] = React.useState<StorageInfo | null>(null);
     const [request, setRequest] = React.useState<MoveRequest | null>(null);
     const [menu, setMenu] = React.useState<{ kind: StorageKind; anchor: HTMLElement } | null>(null);
+    // 移動先を調べている間 (中身を数えるため、ライブラリでは時間がかかる)
+    const [checking, setChecking] = React.useState(false);
     const { job, run, cancel } = useJobRunner();
 
     const refresh = React.useCallback(async () => {
@@ -71,13 +61,13 @@ export default function StorageSection() {
     const label = (kind: StorageKind) => t(`settingsPage.storage.${kind}`);
     const isDefault = (kind: StorageKind) => info.dirs[kind] === info.defaults[kind];
 
-    const move = async () => {
+    const move = async (decisions: StorageMoveDecisions) => {
         if (!request) return;
         const { kind, target } = request;
         setRequest(null);
         try {
             const result = await run(t('settingsPage.storage.moving', { name: label(kind) }), jobId =>
-                window.kuraToolkit.storage.move(jobId, kind, target)
+                window.kuraToolkit.storage.move(jobId, kind, target, decisions)
             );
             await useSettingsStore.getState().reload();
             await refresh();
@@ -91,7 +81,7 @@ export default function StorageSection() {
             } else if (result.rebuildRequired.length > 0) {
                 // 使えなくなったパッケージ一式を選んだ状態でダウンロードを開く (取り直しは利用者の確認を経る)
                 showNotice('warning', `${t('settingsPage.storage.rebuildRequired')}${remains}`, 12000);
-                openVoiceLibrary({ select: result.rebuildRequired, focus: 'runtime' });
+                openVoiceLibrary({ select: result.rebuildRequired });
             } else if (remains) {
                 showNotice('warning', `${t('settingsPage.storage.moved', { name: label(kind) })}${remains}`, 12000);
             } else {
@@ -113,13 +103,19 @@ export default function StorageSection() {
         }
     };
 
-    // 移動先を選べるかを先に確かめてから、確認画面を出す
+    // 移動先を選べるかを確かめ、移動先にもあるまとまりを求めてから、確認画面を出す
     const askMove = async (kind: MovableKind, target: string | null) => {
+        setChecking(true);
         try {
-            await window.kuraToolkit.storage.checkMove(kind, target);
-            setRequest({ kind, target });
+            const [plan, status] = await Promise.all([
+                window.kuraToolkit.storage.planMove(kind, target),
+                window.kuraToolkit.voice.library.getStatus(),
+            ]);
+            setRequest({ kind, target, plan, items: status.items });
         } catch (error) {
             showNotice('error', storageErrorMessage(t, error), 10000);
+        } finally {
+            setChecking(false);
         }
     };
 
@@ -215,27 +211,17 @@ export default function StorageSection() {
                 </MenuItem>
             </Menu>
 
-            <AppDialog open={request !== null} onClose={() => setRequest(null)} maxWidth='sm' fullWidth>
-                <DialogTitle>
-                    {request && t('settingsPage.storage.moveTitle', { name: label(request.kind) })}
-                </DialogTitle>
-                <DialogContent>
-                    <Typography variant='body2' sx={{ lineHeight: 1.6, mb: 1 }}>
-                        {t('settingsPage.storage.moveMessage')}
-                    </Typography>
-                    {request && (
-                        <Typography variant='body2' color='text.secondary' sx={{ wordBreak: 'break-all' }}>
-                            {info.dirs[request.kind]} → {request.target ?? info.defaults[request.kind]}
-                        </Typography>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setRequest(null)}>{t('common.cancel')}</Button>
-                    <Button variant='contained' onClick={() => void move()}>
-                        {t('settingsPage.storage.moveRun')}
-                    </Button>
-                </DialogActions>
-            </AppDialog>
+            <StorageMoveDialog
+                open={request !== null}
+                name={request ? label(request.kind) : ''}
+                from={request ? info.dirs[request.kind] : ''}
+                to={request ? (request.target ?? info.defaults[request.kind]) : ''}
+                plan={request?.plan ?? null}
+                items={request?.items ?? []}
+                onClose={() => setRequest(null)}
+                onRun={decisions => void move(decisions)}
+            />
+            <ProgressDialog open={checking} title={t('settingsPage.storage.checking')} />
             <ProgressDialog open={job !== null} title={job?.title ?? ''} percent={job?.percent} onCancel={cancel} />
         </Box>
     );

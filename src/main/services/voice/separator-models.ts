@@ -25,10 +25,9 @@ type SeparatorModelEntry = {
     files: { name: string; urls: string[] }[];
 };
 
-type SeparatorPresetEntry = {
+type SeparatorEnsembleEntry = {
     id: string;
     name: string;
-    description: string;
     models: string[];
     algorithm: string;
     category: SeparationCategory;
@@ -37,7 +36,7 @@ type SeparatorPresetEntry = {
 type ModelListCache = {
     componentVersion: string;
     models: SeparatorModelEntry[];
-    presets: SeparatorPresetEntry[];
+    ensembles: SeparatorEnsembleEntry[];
 };
 
 // ファイルの取得元 (候補のうちファイルが実際にある URL) と、その大きさ
@@ -62,7 +61,7 @@ const notFound = new Set<string>();
 let generation = 0;
 
 // 一覧の作り方 (分離の種類の判定など) を変えたら上げる。版が違う一覧は作り直す
-const LIST_FORMAT = 3;
+const LIST_FORMAT = 5;
 
 function listCacheVersion(): string {
     return `${componentSpec('separator').version}+list${LIST_FORMAT}`;
@@ -83,19 +82,41 @@ export function readSeparatorModelList(): ModelListCache | null {
 // 保存した一覧と取得元を読み直させる (パッケージ一式の導入・削除と、ライブラリの移動の後)
 export function forgetSeparatorModelList(): void {
     cachedList = null;
+    pendingList = null;
     sourceCache = null;
     notFound.clear();
     generation += 1;
 }
 
-// パッケージ一式の Python から一覧を取得して保存する
+// 作成中の一覧 (同時に呼ばれても Python への問い合わせを 1 回にするため)
+let pendingList: Promise<ModelListCache> | null = null;
+
+// 一覧が無い (導入時に作れなかった・アプリの更新で一覧の版が変わった) 場合に作る。作成中なら、その完了を待つ。
+// 呼び出し側は、パッケージ一式を導入済みであることを確かめてから呼ぶ
+export function ensureSeparatorModelList(): Promise<ModelListCache> {
+    const list = readSeparatorModelList();
+    if (list) return Promise.resolve(list);
+    if (!pendingList) {
+        const request = refreshSeparatorModelList().finally(() => {
+            // 作成中に一覧を読み直させて別の作成が始まっていれば、そちらは残す
+            if (pendingList === request) pendingList = null;
+        });
+        pendingList = request;
+    }
+    return pendingList;
+}
+
+// パッケージ一式の Python から一覧を取得して保存する。取得している間に一覧を読み直させた場合
+// (パッケージ一式の削除・導入、ライブラリの移動) は、古い結果を保存も記録もしない
 export async function refreshSeparatorModelList(): Promise<ModelListCache> {
+    const started = generation;
     const worker = getWorker('separator');
-    const result = await worker.request<{ models: SeparatorModelEntry[]; presets: SeparatorPresetEntry[] }>(
+    const result = await worker.request<{ models: SeparatorModelEntry[]; ensembles: SeparatorEnsembleEntry[] }>(
         'list_models',
         { modelDir: modelPaths().group('separator') }
     );
     const data: ModelListCache = { componentVersion: listCacheVersion(), ...result };
+    if (started !== generation) throw new Error('SEPARATOR_LIST_OUTDATED');
     writeJsonFile(listCachePath(), data, { pretty: false });
     cachedList = data;
     return data;

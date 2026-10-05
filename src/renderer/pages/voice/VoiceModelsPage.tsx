@@ -41,16 +41,14 @@ import { useJobRunner } from '../../hooks/useJobRunner';
 import { showNotice } from '../../stores/noticeStore';
 import { notifyVoiceLibraryChanged, openVoiceLibrary, useVoiceLibraryStore } from '../../stores/voiceLibraryStore';
 import { VOICE_LANGUAGES, type VoiceLanguage } from '@shared/voice/languages';
+import { TTS_READY_PREFIX } from '@shared/voice/requirements';
 import type { VoiceModelCategory, VoiceModelFeature, VoiceModelInfo } from '@shared/voice/types';
 
 const CATEGORY_COLORS: Record<VoiceModelCategory, 'primary' | 'secondary' | 'default'> = {
     trained: 'primary',
     imported: 'secondary',
-    preset: 'default',
+    ready: 'default',
 };
-
-// プリセットの声のダウンロード項目
-const PRESET_ITEM_PREFIX = 'model:tts:preset:';
 
 type Props = {
     feature: VoiceModelFeature;
@@ -84,17 +82,17 @@ export default function VoiceModelsPage({ feature }: Props) {
             showNotice('error', voiceErrorMessage(t, error), 12000);
         }
     }, [feature, t]);
-    // プリセットの声のダウンロード・削除で一覧が変わるため、取得状況が変わったら読み直す
+    // すぐに使えるモデルのダウンロード・削除で一覧が変わるため、取得状況が変わったら読み直す
     React.useEffect(() => {
         void load();
     }, [load, libraryVersion]);
 
-    // プリセットの声は「ダウンロード管理」で取得する。まだ取得していないものを選んだ状態で開く
-    const openPresets = () => {
-        const presets = (readiness.status?.items ?? []).filter(
-            item => item.id.startsWith(PRESET_ITEM_PREFIX) && item.available && item.status !== 'installed'
+    // すぐに使えるモデルは「ダウンロード管理」で取得する。まだ取得していないものを選んだ状態で開く
+    const openReadyModels = () => {
+        const readyModels = (readiness.status?.items ?? []).filter(
+            item => item.id.startsWith(TTS_READY_PREFIX) && item.available && item.status !== 'installed'
         );
-        openVoiceLibrary({ select: presets.map(item => item.id), focus: 'tts' });
+        openVoiceLibrary({ select: readyModels.map(item => item.id), focus: 'tts' });
     };
 
     const exportVoice = async (voice: VoiceModelInfo) => {
@@ -170,8 +168,8 @@ export default function VoiceModelsPage({ feature }: Props) {
                     {t('voice.models.searchHub')}
                 </Button>
                 {feature === 'tts' && (
-                    <Button variant='outlined' startIcon={<LibraryAddIcon />} onClick={openPresets}>
-                        {t('voice.models.getPresets')}
+                    <Button variant='outlined' startIcon={<LibraryAddIcon />} onClick={openReadyModels}>
+                        {t('voice.models.getReadyModels')}
                     </Button>
                 )}
             </Stack>
@@ -300,9 +298,9 @@ export default function VoiceModelsPage({ feature }: Props) {
                         }
                         slotProps={{ formHelperText: { sx: { color: 'warning.main', whiteSpace: 'pre-line' } } }}
                     />
-                    {rename?.voice.category === 'preset' && (
+                    {rename?.voice.category === 'ready' && (
                         <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 1 }}>
-                            {t('voice.models.presetRenameNote')}
+                            {t('voice.models.readyRenameNote')}
                         </Typography>
                     )}
                 </DialogContent>
@@ -377,9 +375,9 @@ export default function VoiceModelsPage({ feature }: Props) {
                     <Typography variant='body2' sx={{ lineHeight: 1.6 }}>
                         {t('voice.models.deleteConfirm', { name: remove.voice ? voiceLabel(t, remove.voice) : '' })}
                     </Typography>
-                    {remove.voice?.category === 'preset' ? (
+                    {remove.voice?.category === 'ready' ? (
                         <Typography variant='body2' color='text.secondary' sx={{ mt: 1.5, lineHeight: 1.6 }}>
-                            {t('voice.models.deletePreset')}
+                            {t('voice.models.deleteReady')}
                         </Typography>
                     ) : (
                         <Alert severity='warning' sx={{ mt: 1.5 }}>
@@ -398,9 +396,9 @@ export default function VoiceModelsPage({ feature }: Props) {
                             closeRemove();
                             try {
                                 await window.kuraToolkit.voice.models.remove(feature, target.id);
-                                // プリセットの声の削除はダウンロードの取得状況も変えるため、取得状況の変化として知らせる
+                                // すぐに使えるモデルの削除はダウンロードの取得状況も変えるため、取得状況の変化として知らせる
                                 // (一覧は取得状況の変化を受けて読み直される)
-                                if (target.category === 'preset') notifyVoiceLibraryChanged();
+                                if (target.category === 'ready') notifyVoiceLibraryChanged();
                                 else await load();
                             } catch (error) {
                                 showNotice('error', voiceErrorMessage(t, error));

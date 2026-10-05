@@ -7,7 +7,7 @@ import { buildMetadata } from './metadata';
 import { extractSubtitleRange, extractTextSubtitle, retimeSubtitleFile, TEXT_SUBTITLE_EXTRACT } from './subtitles';
 import { findVideoStreamIndex, probeMedia, probeSubtitlePalette, type FfStream } from './probe';
 import type { ChapterInfo } from '../../../shared/types';
-import { newJobTempDir, produceFile, removeTemp } from '../work-dir';
+import { newTempDir, produceFile, discardLater } from '../work-dir';
 
 // チャプター範囲の切り抜き本体 (元: cut-chapter.py の cut_range)
 
@@ -148,7 +148,7 @@ export async function cutRange(options: CutRangeOptions): Promise<void> {
     const outExt = path.extname(output);
     // 一時ファイル (pass1 の出力・切り出した字幕・カバーアート・チャプター情報) は作業ディレクトリの
     // この処理用のフォルダに置き、終わったらフォルダごと消す
-    const tempDir = newJobTempDir('chapter');
+    const tempDir = newTempDir();
     const tempOutput = path.join(tempDir, `pass1${outExt}`);
     // 切り出した字幕ファイルと、pass2 で合流させるときに足す時刻のずれ
     const subTempPaths: Array<{ path: string; offset: number }> = [];
@@ -350,6 +350,6 @@ export async function cutRange(options: CutRangeOptions): Promise<void> {
         log('done');
     } finally {
         // 成否・キャンセルを問わず消す (消せなかったものは次の起動時に消す)
-        await removeTemp(tempDir);
+        discardLater(tempDir);
     }
 }

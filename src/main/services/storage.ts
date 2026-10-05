@@ -5,12 +5,13 @@ import { getSettings } from './settings';
 import type { StorageInfo, StorageKind } from '../../shared/types';
 
 // アプリ全体で使う 3 つの保存場所 (設定画面の「保存場所」)。
-// 利用者が選んだフォルダを、そのままその保存場所として使う。
+// ライブラリ・モデルディレクトリは、利用者が選んだフォルダをそのまま保存場所として使う。
 // - ライブラリディレクトリ: 外部のライブラリ (Python 本体、各ライブラリの仮想環境・ソース一式など)。
 //   中はライブラリごとのディレクトリに分け、ライブラリが増えてもこの下に追加する
 // - モデルディレクトリ: ダウンロードしたモデルと、利用者が学習・取り込みしたモデル。
 //   中は分類 (audio など) の階層を挟み、ほかの種類のモデルが増えてもこの下に追加する
-// - 作業ディレクトリ: 全機能の一時ファイル (work-dir.ts)。既定は OS の一時ディレクトリの中のこのアプリ用のフォルダ
+// - 作業ディレクトリ: 一時ディレクトリ (既定は OS の一時ディレクトリ。Linux は ~/.kura_toolkit/temp)。アプリはその中に
+//   処理ごとの kura_toolkit_<ランダムな値> フォルダを作り、全機能の一時ファイルをそこに置く (work-dir.ts)
 // 設定が空の場合は既定の場所を使う。既定の場所は設定ファイルに書き込まず、画面には実際に使う場所を示す。
 
 export function hasNonAscii(text: string): boolean {
@@ -20,7 +21,9 @@ export function hasNonAscii(text: string): boolean {
 export function defaultStorageDir(kind: StorageKind): string {
     if (kind === 'library') return path.join(getAppRootDir(), 'libraries');
     if (kind === 'model') return path.join(getAppRootDir(), 'models');
-    return path.join(os.tmpdir(), 'kura_toolkit');
+    // Linux の OS の一時ディレクトリ (/tmp) はユーザー間で共有されるため、ユーザーごとの場所を既定にする
+    if (process.platform === 'linux') return path.join(getAppRootDir(), 'temp');
+    return os.tmpdir();
 }
 
 const SETTING_KEYS = { library: 'libraryDir', model: 'modelDir', work: 'workDir' } as const;

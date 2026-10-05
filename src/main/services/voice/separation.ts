@@ -4,17 +4,26 @@ import path from 'path';
 import { emitJobEvent, finishJob, startJob } from '../job-manager';
 import { resolveFfmpegPath } from '../ffmpeg/ffmpeg';
 import { centerCancel, convertChannels, decodeToWav, mixFiles } from './audio-tools';
-import { isItemInstalled } from './library';
+import { isComponentCurrent, isItemInstalled } from './library';
 import { forgetMedia, forgetMediaUnder } from './media-protocol';
 import { mediaRef } from './media';
 import { modelPaths } from './paths';
 import { getWorker } from './python-worker';
-import { readSeparatorModelList, refreshSeparatorModelList, separatorModelInstalled } from './separator-models';
+import { ensureSeparatorModelList, readSeparatorModelList, separatorModelInstalled } from './separator-models';
 import { separatorItemId } from './spec';
 import { withGpu } from './gpu-lock';
-import { isInsideWorkRoot, newId, produceFile, removeSession, removeTemp, sessionDir, sessionPath } from '../work-dir';
+import {
+    discardLater,
+    isInsideWork,
+    keepWorkFile,
+    newId,
+    produceFile,
+    removeSession,
+    sessionDir,
+    sessionPath,
+} from '../work-dir';
 import type {
-    EnsemblePreset,
+    VerifiedEnsemble,
     MediaRef,
     PreparedInput,
     SeparationCandidate,
@@ -39,7 +48,7 @@ export async function prepareInput(jobId: string, workKey: string, sourcePath: s
             return { media: await mediaRef(output), channels: Math.min(2, info.channels), sourcePath };
         } catch (error) {
             // 失敗・キャンセルした場合は書きかけを消す
-            await removeTemp(output);
+            discardLater(output);
             throw error;
         }
     } finally {
@@ -47,12 +56,10 @@ export async function prepareInput(jobId: string, workKey: string, sourcePath: s
     }
 }
 
-export async function listSeparationModels(refresh = false): Promise<SeparationModelList> {
-    let list = refresh ? null : readSeparatorModelList();
-    if (!list) {
-        if (!isItemInstalled('component:separator')) throw new Error('SEPARATOR_NOT_INSTALLED');
-        list = await refreshSeparatorModelList();
-    }
+export async function listSeparationModels(): Promise<SeparationModelList> {
+    // 更新が必要なパッケージ一式 (古い版) では一覧を作らない (古い版の一覧を新しい版のものとして残さないため)
+    if (!(await isComponentCurrent('separator'))) throw new Error('SEPARATOR_NOT_INSTALLED');
+    const list = await ensureSeparatorModelList();
     const installed = new Set<string>();
     const models: SeparationModel[] = list.models.map(model => {
         const ready = separatorModelInstalled(model);
@@ -70,20 +77,19 @@ export async function listSeparationModels(refresh = false): Promise<SeparationM
         };
     });
     const known = new Set(list.models.map(model => model.filename));
-    const presets: EnsemblePreset[] = list.presets
-        // 一覧に無いモデルを使うプリセットは扱えない
-        .filter(preset => preset.models.every(filename => known.has(filename)))
-        .map(preset => ({
-            itemId: `ensemble:${preset.id}`,
-            id: preset.id,
-            name: preset.name,
-            description: preset.description,
-            models: preset.models,
-            algorithm: preset.algorithm,
-            category: preset.category,
-            installed: preset.models.every(filename => installed.has(filename)),
+    const ensembles: VerifiedEnsemble[] = list.ensembles
+        // 一覧に無いモデルを使う組み合わせは扱えない
+        .filter(ensemble => ensemble.models.every(filename => known.has(filename)))
+        .map(ensemble => ({
+            itemId: `ensemble:${ensemble.id}`,
+            id: ensemble.id,
+            name: ensemble.name,
+            models: ensemble.models,
+            algorithm: ensemble.algorithm,
+            category: ensemble.category,
+            installed: ensemble.models.every(filename => installed.has(filename)),
         }));
-    return { models, presets };
+    return { models, ensembles };
 }
 
 // 方式に必要なモデル (アンサンブルは構成するモデルすべて)
@@ -91,10 +97,10 @@ function requiredModels(request: SeparationRunRequest): string[] {
     const method = request.method;
     if (method.kind === 'model') return [method.filename];
     if (method.kind === 'ensemble') return method.filenames;
-    if (method.kind === 'ensemblePreset') {
-        const preset = readSeparatorModelList()?.presets.find(item => item.id === method.presetId);
-        if (!preset) throw new Error(`ENSEMBLE_PRESET_NOT_FOUND: ${method.presetId}`);
-        return preset.models;
+    if (method.kind === 'verifiedEnsemble') {
+        const ensemble = readSeparatorModelList()?.ensembles.find(item => item.id === method.ensembleId);
+        if (!ensemble) throw new Error(`ENSEMBLE_NOT_FOUND: ${method.ensembleId}`);
+        return ensemble.models;
     }
     return [];
 }
@@ -104,8 +110,8 @@ function methodLabel(request: SeparationRunRequest): string {
     const list = readSeparatorModelList();
     if (method.kind === 'model')
         return list?.models.find(model => model.filename === method.filename)?.name ?? method.filename;
-    if (method.kind === 'ensemblePreset')
-        return list?.presets.find(preset => preset.id === method.presetId)?.name ?? method.presetId;
+    if (method.kind === 'verifiedEnsemble')
+        return list?.ensembles.find(ensemble => ensemble.id === method.ensembleId)?.name ?? method.ensembleId;
     if (method.kind === 'ensemble') {
         const names = method.filenames.map(
             filename => list?.models.find(model => model.filename === filename)?.name ?? filename
@@ -134,14 +140,14 @@ function usedParams(request: SeparationRunRequest): Partial<SeparationParams> {
 export async function runSeparation(jobId: string, request: SeparationRunRequest): Promise<SeparationCandidate> {
     startJob(jobId);
     try {
-        if (!isInsideWorkRoot(request.input)) throw new Error('INVALID_PATH');
+        if (!isInsideWork(request.workKey, request.input)) throw new Error('INVALID_PATH');
         const id = newId();
         const dir = sessionDir(request.workKey, 'candidates', id);
         try {
             return await separateInto(jobId, request, id, dir);
         } catch (error) {
             // 失敗・キャンセルした場合は作りかけの候補を消す
-            await removeTemp(dir);
+            discardLater(dir);
             throw error;
         }
     } finally {
@@ -200,7 +206,7 @@ async function separateInto(
             await convertChannels(stem.path, target, request.channels, jobId);
             stems.push({ name: stem.name, path: target });
         }
-        await removeTemp(raw);
+        discardLater(raw);
     }
     const refs: SeparationStem[] = [];
     for (const stem of stems) refs.push({ name: stem.name, media: await mediaRef(stem.path) });
@@ -225,7 +231,7 @@ export async function mixStems(jobId: string, workKey: string, paths: string[], 
     startJob(jobId);
     try {
         for (const item of paths) {
-            if (!isInsideWorkRoot(item)) throw new Error('INVALID_PATH');
+            if (!isInsideWork(workKey, item)) throw new Error('INVALID_PATH');
         }
         const key = crypto
             .createHash('sha1')
@@ -233,27 +239,42 @@ export async function mixStems(jobId: string, workKey: string, paths: string[], 
             .digest('hex')
             .slice(0, 16);
         const output = path.join(sessionDir(workKey, 'mixes'), `${key}.wav`);
-        if (!fs.existsSync(output)) {
-            await produceFile(output, target => mixFiles(paths, target, channels, jobId));
-        }
+        if (fs.existsSync(output)) keepWorkFile(output);
+        else await produceFile(output, target => mixFiles(paths, target, channels, jobId));
         return await mediaRef(output);
     } finally {
         finishJob(jobId);
     }
 }
 
-// 候補や作業を破棄する。消せるのは作業ディレクトリの中のものだけで、外のパスが含まれていれば何も消さない
-export function discardPaths(paths: string[]): void {
+// 候補などを破棄する。消せるのはその作業の置き場の中のものだけで、外のパスが含まれていれば何も消さない
+export function discardPaths(workKey: string, paths: string[]): void {
     for (const item of paths) {
-        if (!isInsideWorkRoot(item)) throw new Error('INVALID_PATH');
+        if (!isInsideWork(workKey, item)) throw new Error('INVALID_PATH');
     }
     for (const item of paths) {
         forgetMedia(item);
-        void removeTemp(item);
+        discardLater(item);
     }
+}
+
+// 別の機能の作業へ渡す音声を、渡す先の作業の置き場へ移す (渡した元の作業を破棄しても消えないようにするため)。
+// 同じ作業ディレクトリの中の移動のため、名前の変更で移す。移した後の音声を、渡したパスの順に返す
+export async function transferMedia(fromWorkKey: string, toWorkKey: string, paths: string[]): Promise<MediaRef[]> {
+    for (const item of paths) {
+        if (!isInsideWork(fromWorkKey, item)) throw new Error('INVALID_PATH');
+    }
+    const moved = new Map<string, string>();
+    for (const item of new Set(paths.map(entry => path.resolve(entry)))) {
+        const dest = path.join(sessionDir(toWorkKey, 'received'), `${newId()}${path.extname(item)}`);
+        await fs.promises.rename(item, dest);
+        forgetMedia(item);
+        moved.set(item, dest);
+    }
+    return Promise.all(paths.map(entry => mediaRef(moved.get(path.resolve(entry)) as string)));
 }
 
 export function discardWork(workKey: string): void {
     forgetMediaUnder(sessionPath(workKey));
-    void removeSession(workKey);
+    removeSession(workKey);
 }

@@ -54,7 +54,7 @@ import { useJobRunner } from '../../hooks/useJobRunner';
 import { showNotice } from '../../stores/noticeStore';
 import { useConversionSeparationStore } from '../../stores/separationWorkStore';
 import { useConversionStore, type ConversionInputMode } from '../../stores/conversionStore';
-import { useVoiceHandoffStore, type VoiceHandoff } from '../../stores/voiceHandoffStore';
+import { useVoiceHandoffStore } from '../../stores/voiceHandoffStore';
 import { openVoiceLibrary } from '../../stores/voiceLibraryStore';
 import {
     F0_METHODS,
@@ -76,10 +76,6 @@ const F0_ITEMS: Record<F0Method, string | null> = {
 type Step1Target =
     { kind: 'converted' | 'withAccompaniment'; candidateId: string } | { kind: 'originalVocals' } | { kind: 'source' };
 
-// 新しい作業の確認。受け取った音声 (handoff) がある場合は、作業を破棄した後にそれで始める。
-// 閉じる間も表示が変わらないよう、開閉とは別に持つ
-type ResetConfirm = { open: boolean; handoff: VoiceHandoff | null };
-
 // 候補を破棄するときに消すファイル (変換した声と、伴奏と重ねたもの)
 function candidateFiles(candidate: ConversionCandidate): string[] {
     return candidate.withAccompaniment
@@ -99,12 +95,14 @@ export default function ConversionPage() {
     const [mixTarget, setMixTarget] = React.useState<'mix' | 'source'>('mix');
     const [exportOpen, setExportOpen] = React.useState(false);
     const [confirmInvalidate, setConfirmInvalidate] = React.useState(false);
-    const [resetConfirm, setResetConfirm] = React.useState<ResetConfirm>({ open: false, handoff: null });
+    const [resetConfirm, setResetConfirm] = React.useState(false);
     const { job, run, cancel } = useJobRunner();
     const ready = readiness.readiness?.ready ?? false;
     const workKey = sep.workKey;
     const installed = (id: string | null) =>
         !id || readiness.status?.items.find(item => item.id === id)?.status === 'installed';
+    // ピッチ抽出の方式は、必要なモデルを取得済みのものだけを示す
+    const f0Methods = F0_METHODS.filter(method => installed(F0_ITEMS[method]));
 
     React.useEffect(() => {
         let cancelled = false;
@@ -121,31 +119,28 @@ export default function ConversionPage() {
         };
     }, [t]);
 
-    // 作業を破棄して新しい作業を始める。受け取った音声があれば、それを入力にして変換から始める
-    const startNewWork = (handoff: VoiceHandoff | null) => {
+    // 作業を破棄して新しい作業を始める
+    const startNewWork = () => {
         const separation = useConversionSeparationStore.getState();
-        const conversion = useConversionStore.getState();
         void window.kuraToolkit.voice.media.discardWork(separation.workKey);
         separation.reset();
-        conversion.reset();
+        useConversionStore.getState().reset();
         setTarget({ kind: 'originalVocals' });
         setMixTarget('mix');
-        if (handoff) {
-            conversion.setInputMode('external');
-            conversion.setExternal(handoff);
-            conversion.setStep(1);
-        }
     };
 
-    // 分離や読み上げから受け取った音声で作業を始める。作業中の結果がある場合は、破棄してよいかを先に確かめる
+    // 分離や読み上げから受け取った音声で作業を始める。受け取った音声は、この画面の作業の置き場に移されている。
+    // 別の機能から移ってきたとき (変換の作業は、別の機能へ移ったときに破棄されている) に受け取る
     React.useEffect(() => {
         const handoff = useVoiceHandoffStore.getState().take();
         if (!handoff) return;
-        const hasWork =
-            useConversionSeparationStore.getState().source !== null ||
-            useConversionStore.getState().candidates.length > 0;
-        if (hasWork) setResetConfirm({ open: true, handoff });
-        else startNewWork(handoff);
+        const conversion = useConversionStore.getState();
+        conversion.reset();
+        setTarget({ kind: 'originalVocals' });
+        setMixTarget('mix');
+        conversion.setInputMode('external');
+        conversion.setExternal(handoff);
+        conversion.setStep(1);
     }, []);
 
     // --- 変換に使うボーカルと伴奏 (どちらも複数の音から成る場合は、使うときに 1 つに重ねる) ---
@@ -183,19 +178,27 @@ export default function ConversionPage() {
             return;
         }
         let cancelled = false;
-        const request =
-            vocals.length === 1
-                ? window.kuraToolkit.voice.media.ref(vocals[0])
-                : window.kuraToolkit.voice.media.mix(crypto.randomUUID(), workKey, vocals, channels);
+        const mixed = vocals.length > 1;
+        const request = mixed
+            ? window.kuraToolkit.voice.media.mix(crypto.randomUUID(), workKey, vocals, channels)
+            : window.kuraToolkit.voice.media.ref(workKey, vocals[0]);
+        let media: MediaRef | null = null;
         request
-            .then(media => {
-                if (!cancelled) setVocalsMedia(media);
+            .then(result => {
+                media = result;
+                if (!cancelled) setVocalsMedia(result);
             })
             .catch(error => {
                 if (!cancelled) showNotice('error', voiceErrorMessage(t, error));
             });
         return () => {
             cancelled = true;
+            // ボーカルの組み合わせが変わったら、前の組み合わせを重ねた音は要らなくなるため消す
+            void request
+                .then(() => {
+                    if (mixed && media) void window.kuraToolkit.voice.media.discard(workKey, [media.path]);
+                })
+                .catch(() => undefined);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps -- ボーカルの組み合わせ (vocalsKey) が変わったときだけ読み直す
     }, [vocalsKey]);
@@ -218,7 +221,7 @@ export default function ConversionPage() {
         }
         const missing = missingItemsFromError(error);
         showNotice('error', voiceErrorMessage(t, error), 12000);
-        if (missing.length > 0) openVoiceLibrary({ select: missing, focus: 'converter' });
+        if (missing.length > 0) openVoiceLibrary({ select: missing, focus: 'conversion' });
     };
 
     const loadSource = async (paths: string[]) => {
@@ -245,7 +248,7 @@ export default function ConversionPage() {
     const invalidateResults = () => {
         const previousMix = conv.mix;
         const removed = conv.clearResults();
-        void window.kuraToolkit.voice.media.discard([
+        void window.kuraToolkit.voice.media.discard(workKey, [
             ...removed.flatMap(candidateFiles),
             ...(previousMix ? [previousMix.path] : []),
         ]);
@@ -299,7 +302,8 @@ export default function ConversionPage() {
         // 前の合成結果は使わなくなるため消す
         const previous = useConversionStore.getState().mix;
         conv.setMix(media, mixSignature);
-        if (previous && previous.path !== media.path) void window.kuraToolkit.voice.media.discard([previous.path]);
+        if (previous && previous.path !== media.path)
+            void window.kuraToolkit.voice.media.discard(workKey, [previous.path]);
         return media;
     };
 
@@ -383,11 +387,7 @@ export default function ConversionPage() {
                         </Step>
                     ))}
                 </Stepper>
-                <Button
-                    startIcon={<RestartAltIcon />}
-                    onClick={() => setResetConfirm({ open: true, handoff: null })}
-                    disabled={busy}
-                >
+                <Button startIcon={<RestartAltIcon />} onClick={() => setResetConfirm(true)} disabled={busy}>
                     {t('voice.common.newWork')}
                 </Button>
             </Stack>
@@ -536,24 +536,14 @@ export default function ConversionPage() {
                                 <Select
                                     labelId='conversion-f0'
                                     label={t('voice.conversion.f0Method')}
-                                    value={conv.params.f0Method}
+                                    value={f0Methods.includes(conv.params.f0Method) ? conv.params.f0Method : ''}
                                     onChange={event =>
                                         conv.setParams({ ...conv.params, f0Method: event.target.value as F0Method })
                                     }
                                 >
-                                    {F0_METHODS.map(method => (
+                                    {f0Methods.map(method => (
                                         <MenuItem key={method} value={method}>
                                             {t(`voice.conversion.f0Methods.${method}`)}
-                                            {F0_ITEMS[method] && !installed(F0_ITEMS[method]) && (
-                                                <Typography
-                                                    component='span'
-                                                    variant='caption'
-                                                    color='text.secondary'
-                                                    sx={{ ml: 1 }}
-                                                >
-                                                    {t('voice.separation.notDownloaded')}
-                                                </Typography>
-                                            )}
                                         </MenuItem>
                                     ))}
                                 </Select>
@@ -598,7 +588,9 @@ export default function ConversionPage() {
                             <Button
                                 variant='contained'
                                 startIcon={<RecordVoiceOverIcon />}
-                                disabled={busy || !voice || !hasVocals || !ready}
+                                disabled={
+                                    busy || !voice || !hasVocals || !ready || !f0Methods.includes(conv.params.f0Method)
+                                }
                                 onClick={() => void runConversion()}
                             >
                                 {t('voice.conversion.run')}
@@ -714,6 +706,7 @@ export default function ConversionPage() {
                                                                 onClick={() => {
                                                                     conv.removeCandidate(candidate.id);
                                                                     void window.kuraToolkit.voice.media.discard(
+                                                                        workKey,
                                                                         candidateFiles(candidate)
                                                                     );
                                                                 }}
@@ -811,6 +804,7 @@ export default function ConversionPage() {
             )}
 
             <ExportDialog
+                workKey={workKey}
                 open={exportOpen}
                 onClose={() => setExportOpen(false)}
                 entries={exportEntries}
@@ -832,12 +826,7 @@ export default function ConversionPage() {
                 </DialogActions>
             </AppDialog>
 
-            <AppDialog
-                open={resetConfirm.open}
-                onClose={() => setResetConfirm(previous => ({ ...previous, open: false }))}
-                maxWidth='xs'
-                fullWidth
-            >
+            <AppDialog open={resetConfirm} onClose={() => setResetConfirm(false)} maxWidth='xs' fullWidth>
                 <DialogTitle>{t('voice.common.newWork')}</DialogTitle>
                 <DialogContent>
                     <Typography variant='body2' sx={{ lineHeight: 1.6 }}>
@@ -845,15 +834,13 @@ export default function ConversionPage() {
                     </Typography>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setResetConfirm(previous => ({ ...previous, open: false }))}>
-                        {t('common.cancel')}
-                    </Button>
+                    <Button onClick={() => setResetConfirm(false)}>{t('common.cancel')}</Button>
                     <Button
                         variant='contained'
                         color='warning'
                         onClick={() => {
-                            startNewWork(resetConfirm.handoff);
-                            setResetConfirm({ open: false, handoff: null });
+                            startNewWork();
+                            setResetConfirm(false);
                         }}
                     >
                         {t('voice.common.discard')}

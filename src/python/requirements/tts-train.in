@@ -1,5 +1,5 @@
 # 読み上げのモデルの学習 (派生版リポジトリの学習スクリプト)。読み上げの仮想環境に追加で入れる。
-# NVIDIA GPU を搭載した Windows でのみ使う
+# NVIDIA GPU を使える Windows と Linux でのみ使う
 -r tts.in
 torchaudio==2.11.0
 pyannote.audio==4.0.7

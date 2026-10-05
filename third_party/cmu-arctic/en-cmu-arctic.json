@@ -3,7 +3,7 @@
  "name": "CMU ARCTIC prompts",
  "source": "http://www.festvox.org/cmu_arctic/",
  "license": "CMU ARCTIC license (see LICENSE.txt)",
- "modifications": "Converted from cmuarctic.data into JSON (utterance id, set and prompt text). The prompt text itself is unchanged. Kura Toolkit presents the first 100 prompts of set A as the \"quick\" sentence set and all 1,132 prompts as the \"accurate\" set.",
+ "modifications": "Converted from cmuarctic.data into JSON (utterance id, set and prompt text). The prompt text itself is unchanged. Kura Toolkit presents all 1,132 prompts.",
  "sentences": [
   {
    "id": "arctic_a0001",

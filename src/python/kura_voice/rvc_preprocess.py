@@ -2,9 +2,9 @@
 
 Usage: python script_runner.py --patch applio --root <Applio> -- rvc_preprocess.py <experiment dir> <files.json> <sample rate> <processes>
 
-Applio's own script collects the audio files of one folder. The app trains on files the user
-picked (read where they are) and on recordings in the work directory, so the list is given
-explicitly; each file is processed by Applio's own per-file code.
+Applio's own script collects the audio files of one folder. The app trains on the audio of a
+training set (stored in the model directory), so the list is given explicitly; each file is
+processed by Applio's own per-file code.
 """
 
 from __future__ import annotations

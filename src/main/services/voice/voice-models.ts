@@ -1,24 +1,16 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { shell } from 'electron';
 import { extractZip, readZipText, writeZip } from './archive';
 import { isItemInstalled, removeItems } from './library';
 import { writeJsonFile } from './json-file';
 import { modelPaths } from './paths';
-import { readPresetOverrides, writePresetOverrides, type PresetOverride } from './preset-overrides';
+import { readReadyModelOverrides, writeReadyModelOverrides, type ReadyModelOverride } from './ready-model-overrides';
 import { getWorker, stopWorker } from './python-worker';
-import {
-    JVNV_PRESET_NAMES,
-    presetItemId,
-    RVC_EMBEDDER_ITEMS,
-    RVC_VERSIONS,
-    RVC_VOCODERS,
-    TTS_ENGINE_ITEMS,
-    TTS_PRESET_DIR,
-} from './spec';
-import { removeTemp } from '../work-dir';
+import { JVNV_MODEL_NAMES, readyItemId, RVC_EMBEDDER_ITEMS, RVC_VERSIONS, RVC_VOCODERS, TTS_READY_DIR } from './spec';
+import { discardLater } from '../work-dir';
 import { renameWithRetry } from '../../utils/rename-retry';
+import { moveToTrash } from '../../utils/trash';
 import { languagesForEngine, type TtsEngineId, type VoiceLanguage } from '../../../shared/voice/languages';
 import type {
     ImportCandidate,
@@ -36,7 +28,7 @@ import type {
 // <モデルディレクトリ>/audio/<conversion|tts>/voices/<ID>/ に置き、meta.json に名前・区分などを記録する。
 // 作成中のモデル (学習・取り込みの確定) は同じ場所の .staging-<ID>/ に作り、meta.json を書いてから
 // <ID>/ に名前を変える (作りかけのものを声のモデルとして扱わないため)。
-// 読み上げのプリセット (JVNV) はダウンロード物として audio/tts/presets/ に置き、名前と言語の変更だけをここで記録する。
+// 読み上げのすぐに使えるモデル (JVNV) はダウンロード物として audio/tts/ready/ に置き、名前と言語の変更だけをここで記録する。
 
 const VOICE_FILE_EXTENSION = 'kuravoice';
 const VOICE_FILE_FORMAT = 'kura-voice';
@@ -100,17 +92,17 @@ export function removeVoiceStagingLeftovers(): void {
             continue;
         }
         for (const name of names) {
-            if (isStagingName(name)) void removeTemp(path.join(dir, name));
+            if (isStagingName(name)) discardLater(path.join(dir, name));
         }
     }
 }
 
-function presetName(id: string): string | null {
-    return id.startsWith('preset:') ? id.slice('preset:'.length) : null;
+function readyModelName(id: string): string | null {
+    return id.startsWith('ready:') ? id.slice('ready:'.length) : null;
 }
 
-function presetDir(name: string): string {
-    return path.join(modelPaths().file(TTS_PRESET_DIR), name);
+function readyModelDir(name: string): string {
+    return path.join(modelPaths().file(TTS_READY_DIR), name);
 }
 
 function readJson<T>(file: string): T {
@@ -230,8 +222,8 @@ function verifySafetensors(file: string): void {
 
 // --- 一覧・取得 ---
 
-function presetInfo(name: string, overrides: Record<string, PresetOverride>): VoiceModelInfo {
-    const dir = presetDir(name);
+function readyModelInfo(name: string, overrides: Record<string, ReadyModelOverride>): VoiceModelInfo {
+    const dir = readyModelDir(name);
     const meta = ttsMetaFromConfig(readDataFile<SbvConfig>(path.join(dir, 'config.json')));
     let createdAt: number;
     try {
@@ -242,13 +234,13 @@ function presetInfo(name: string, overrides: Record<string, PresetOverride>): Vo
     const override = overrides[name] ?? {};
     if (override.languages && meta.engine === 'multilingual') meta.languages = override.languages;
     return {
-        id: `preset:${name}`,
+        id: `ready:${name}`,
         feature: 'tts',
         name: override.name ?? '',
-        presetName: name,
-        category: 'preset',
+        distributedName: name,
+        category: 'ready',
         createdAt,
-        presetItemId: presetItemId(name),
+        readyItemId: readyItemId(name),
         tts: meta,
     };
 }
@@ -263,9 +255,9 @@ export function listVoices(feature: VoiceModelFeature): VoiceModelInfo[] {
         }
     }
     if (feature === 'tts') {
-        const overrides = readPresetOverrides();
-        for (const name of JVNV_PRESET_NAMES) {
-            if (isItemInstalled(presetItemId(name))) result.push(presetInfo(name, overrides));
+        const overrides = readReadyModelOverrides();
+        for (const name of JVNV_MODEL_NAMES) {
+            if (isItemInstalled(readyItemId(name))) result.push(readyModelInfo(name, overrides));
         }
     }
     return result.sort((a, b) => a.category.localeCompare(b.category) || b.createdAt - a.createdAt);
@@ -277,10 +269,10 @@ type ResolvedVoice = {
 };
 
 export function getVoice(feature: VoiceModelFeature, id: string): ResolvedVoice {
-    const preset = presetName(id);
-    if (feature === 'tts' && preset) {
-        if (!isItemInstalled(presetItemId(preset))) throw new Error('VOICE_NOT_FOUND');
-        return { info: presetInfo(preset, readPresetOverrides()), dir: presetDir(preset) };
+    const readyModel = readyModelName(id);
+    if (feature === 'tts' && readyModel) {
+        if (!isItemInstalled(readyItemId(readyModel))) throw new Error('VOICE_NOT_FOUND');
+        return { info: readyModelInfo(readyModel, readReadyModelOverrides()), dir: readyModelDir(readyModel) };
     }
     const dir = voiceDir(feature, id);
     if (!fs.existsSync(dir)) throw new Error('VOICE_NOT_FOUND');
@@ -296,9 +288,9 @@ export function ttsModelFiles(voice: ResolvedVoice): { weights: string; config: 
     };
 }
 
-// 重みのファイル。プリセットは配布時のファイル名のため、拡張子で探す
+// 重みのファイル。すぐに使えるモデルは配布時のファイル名のため、拡張子で探す
 function ttsWeightsFile(voice: ResolvedVoice): string {
-    if (voice.info.category === 'preset') {
+    if (voice.info.category === 'ready') {
         const name = fs.readdirSync(voice.dir).find(item => item.endsWith('.safetensors'));
         if (!name) throw new Error(`MODEL_FILE_MISSING: ${voice.dir}`);
         return path.join(voice.dir, name);
@@ -313,13 +305,13 @@ function ttsWeightsFile(voice: ResolvedVoice): string {
 export function renameVoice(feature: VoiceModelFeature, id: string, name: string): VoiceModelInfo {
     const trimmed = name.trim();
     if (!trimmed) throw new Error('VOICE_NAME_EMPTY');
-    const preset = presetName(id);
-    if (feature === 'tts' && preset) {
-        // 名前は変えられるが、プリセットという区分は保持する
+    const readyModel = readyModelName(id);
+    if (feature === 'tts' && readyModel) {
+        // 名前は変えられるが、すぐに使えるモデルという区分は保持する
         getVoice(feature, id);
-        const overrides = readPresetOverrides();
-        overrides[preset] = { ...overrides[preset], name: trimmed };
-        writePresetOverrides(overrides);
+        const overrides = readReadyModelOverrides();
+        overrides[readyModel] = { ...overrides[readyModel], name: trimmed };
+        writeReadyModelOverrides(overrides);
         return getVoice(feature, id).info;
     }
     const voice = getVoice(feature, id);
@@ -333,11 +325,11 @@ export function setVoiceLanguages(id: string, languages: VoiceLanguage[]): Voice
     if (languages.length === 0) throw new Error('VOICE_LANGUAGES_EMPTY');
     const voice = getVoice('tts', id);
     if (voice.info.tts?.engine !== 'multilingual') throw new Error('VOICE_LANGUAGES_FIXED');
-    const preset = presetName(id);
-    if (preset) {
-        const overrides = readPresetOverrides();
-        overrides[preset] = { ...overrides[preset], languages };
-        writePresetOverrides(overrides);
+    const readyModel = readyModelName(id);
+    if (readyModel) {
+        const overrides = readReadyModelOverrides();
+        overrides[readyModel] = { ...overrides[readyModel], languages };
+        writeReadyModelOverrides(overrides);
         return getVoice('tts', id).info;
     }
     const next: VoiceModelInfo = { ...voice.info, tts: { ...(voice.info.tts as TtsModelMeta), languages } };
@@ -346,23 +338,16 @@ export function setVoiceLanguages(id: string, languages: VoiceLanguage[]): Voice
 }
 
 export async function removeVoice(feature: VoiceModelFeature, id: string): Promise<void> {
-    const preset = presetName(id);
-    if (feature === 'tts' && preset) {
-        // プリセットはダウンロード物なので、ライブラリから削除する (再ダウンロードできる)。
+    const readyModel = readyModelName(id);
+    if (feature === 'tts' && readyModel) {
+        // すぐに使えるモデルはダウンロード物なので、ライブラリから削除する (再ダウンロードできる)。
         // 名前と言語の変更の記録は、削除に成功したときにライブラリの削除が消す
-        const result = await removeItems([presetItemId(preset)]);
+        const result = await removeItems([readyItemId(readyModel)]);
         if (result.failed.length > 0) throw new Error(result.failed[0].error);
         return;
     }
-    // 利用者が学習・取り込みしたモデルは作り直せないため、ごみ箱に移す (戻せるようにする)。
-    // ごみ箱に移せない場合 (ごみ箱の無いドライブなど) は完全に削除する
-    const dir = voiceDir(feature, id);
-    try {
-        await shell.trashItem(dir);
-    } catch (error) {
-        console.warn(`failed to move ${dir} to the trash; deleting it`, error);
-        await fs.promises.rm(dir, { recursive: true, force: true });
-    }
+    // 利用者が学習・取り込みしたモデルは作り直せないため、ごみ箱に移す
+    await moveToTrash(voiceDir(feature, id));
 }
 
 // --- 書き出し ---
@@ -397,7 +382,7 @@ export async function exportVoice(feature: VoiceModelFeature, id: string, destPa
     const manifest: VoiceManifest = {
         format: VOICE_FILE_FORMAT,
         feature,
-        name: voice.info.name || voice.info.presetName || id,
+        name: voice.info.name || voice.info.distributedName || id,
         category: voice.info.category,
         ...(voice.info.tts ? { tts: { languages: voice.info.tts.languages } } : {}),
     };
@@ -484,7 +469,6 @@ async function inspectKuraFile(feature: VoiceModelFeature, file: string, staging
         if (manifest.tts?.languages !== undefined && tts.engine === 'multilingual') {
             tts.languages = manifestLanguages(manifest.tts.languages, tts.engine);
         }
-        requireEngine(tts.engine);
         const result = await getWorker('tts').request<{ safe: boolean; detail?: string }>('inspect_style_vectors', {
             path: files['style_vectors.npy'],
         });
@@ -501,18 +485,13 @@ async function inspectKuraFile(feature: VoiceModelFeature, file: string, staging
             source: 'kura',
             suggestedName: manifest.name ?? path.basename(file, path.extname(file)),
             // 本アプリで書き出したファイルは、元の区分を復元する
-            category:
-                manifest.category === 'trained' || manifest.category === 'preset' ? manifest.category : 'imported',
+            category: manifest.category === 'trained' || manifest.category === 'ready' ? manifest.category : 'imported',
             safe,
             unsafeDetail,
             rvc,
             tts,
         },
     };
-}
-
-function requireEngine(engine: TtsEngineId): void {
-    if (!isItemInstalled(TTS_ENGINE_ITEMS[engine])) throw new Error(`TTS_ENGINE_NOT_INSTALLED: ${engine}`);
 }
 
 // 選んだファイルを調べた結果 (取り込むファイルと、検査結果のうちファイルで決まる項目)
@@ -551,7 +530,6 @@ async function inspectTtsChoice(weights: string): Promise<ChoiceInspection> {
     if (missing.length > 0) throw new Error(`IMPORT_FILES_MISSING: ${missing.join(', ')}`);
     const parsedConfig = parseImportJson<SbvConfig>(fs.readFileSync(config, 'utf-8'), 'config.json');
     const tts = ttsMetaFromConfig(parsedConfig);
-    requireEngine(tts.engine);
     verifySafetensors(weights);
     const result = await getWorker('tts').request<{ safe: boolean; detail?: string }>('inspect_style_vectors', {
         path: style,
@@ -771,7 +749,7 @@ export function registerTrainedVoice(
 
 // 作成中の置き場を消す
 export async function discardVoiceDir(feature: VoiceModelFeature, id: string): Promise<void> {
-    await removeTemp(voiceStagingDir(feature, id));
+    discardLater(voiceStagingDir(feature, id));
 }
 
 // 作成中の置き場に記録 (meta.json) を書き、名前を <ID> に変えて声のモデルにする

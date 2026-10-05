@@ -7,6 +7,8 @@ import type {
     VoicePlatformInfo,
     VoicePlatformKey,
 } from '../../../shared/voice/types';
+import { languagesForEngine, TTS_LANGUAGE_MODEL_ITEMS, type VoiceLanguage } from '../../../shared/voice/languages';
+import { SEPARATOR_MODEL_PREFIX, TTS_READY_PREFIX } from '../../../shared/voice/requirements';
 import { libraryPaths, MODEL_GROUP_DIRS } from './paths';
 
 // 音声機能が使う Python 本体・パッケージ一式・モデルの定義。
@@ -51,6 +53,11 @@ export const PYTHON_SPEC = {
             size: 26974674,
             sha256: '0c9fbd0b2ddfbb6877493a650259bf379ee71a91b17f0f5f06dd2dcd52fbcade',
         },
+        'linux-x64': {
+            url: `${PBS_RELEASE}/cpython-3.11.17%2B20261003-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz`,
+            size: 30785899,
+            sha256: 'aadcba18994cb8f9ee752aceb31d61e04f75b5d900d76fb575c6fbfabadec434',
+        },
     } as Record<Exclude<VoicePlatformKey, 'unsupported'>, DownloadAsset>,
     license: { name: 'PSF-2.0 and others', url: 'https://github.com/astral-sh/python-build-standalone' } as LicenseInfo,
     source: { name: 'python-build-standalone', url: 'https://github.com/astral-sh/python-build-standalone' },
@@ -92,10 +99,12 @@ export type ComponentSpec = {
 };
 
 // PyTorch の CUDA 版の取得元
-export const TORCH_INDEX: Record<CudaFlavor, string> = {
+export const TORCH_INDEX: Record<CudaFlavor | 'cpu', string> = {
     cu126: 'https://download.pytorch.org/whl/cu126',
     cu128: 'https://download.pytorch.org/whl/cu128',
     cu130: 'https://download.pytorch.org/whl/cu130',
+    // Linux の PyPI の PyTorch は CUDA のライブラリ一式を含むため、GPU を使えない Linux では CPU 版を使う
+    cpu: 'https://download.pytorch.org/whl/cpu',
 };
 
 // CUDA 版 PyTorch 本体の大きさ (目安の根拠。配布物の実測値)
@@ -232,7 +241,7 @@ export function estimateComponentBytes(spec: ComponentSpec, platform: VoicePlatf
     const torch =
         spec.id === 'tts-train'
             ? 0
-            : platform.platform === 'win32-x64' && platform.gpu.cudaFlavor
+            : (platform.platform === 'win32-x64' || platform.platform === 'linux-x64') && platform.gpu.cudaFlavor
               ? TORCH_CUDA_BYTES[platform.gpu.cudaFlavor]
               : TORCH_CPU_BYTES;
     return torch + PACKAGE_BYTES[spec.id] + (spec.source?.size ?? 0);
@@ -240,7 +249,7 @@ export function estimateComponentBytes(spec: ComponentSpec, platform: VoicePlatf
 
 // パッケージ一式の版。CUDA 版の種類が変わった場合 (GPU やドライバーの交換) も入れ直しが必要になるため含める
 export function componentVariant(platform: VoicePlatformInfo): string {
-    if (platform.platform === 'win32-x64') return platform.gpu.cudaFlavor ?? 'cpu';
+    if (platform.platform === 'win32-x64' || platform.platform === 'linux-x64') return platform.gpu.cudaFlavor ?? 'cpu';
     return platform.platform;
 }
 
@@ -261,8 +270,10 @@ export type ModelSpec = {
     license?: LicenseInfo;
     source?: SourceInfo;
     credit?: string;
-    // この環境で取得できるか (読み上げの学習用は NVIDIA GPU を搭載した Windows のみ)
+    // この環境で取得できるか (読み上げの学習用は NVIDIA GPU を使える Windows と Linux のみ)
     trainingOnly?: 'tts';
+    // すぐに使えるモデル (読み上げ) が読める言語
+    readsLanguages?: VoiceLanguage[];
 };
 
 const APPLIO_HF = 'https://huggingface.co/IAHispano/Applio/resolve/70ed563897504c756ec94067c12c902c4fd42025/Resources';
@@ -280,6 +291,7 @@ function embedderSpec(
     id: string,
     dir: string,
     nameKey: string,
+    descriptionKey: string,
     size: number,
     sha256: string,
     configSize: number
@@ -289,7 +301,7 @@ function embedderSpec(
         group: 'converter',
         version: '1',
         nameKey,
-        descriptionKey: 'voice.library.items.embedderDesc',
+        descriptionKey,
         files: [
             applioFile(`embedders/${dir}/pytorch_model.bin`, `embedders/${dir}/pytorch_model.bin`, size, sha256),
             applioFile(`embedders/${dir}/config.json`, `embedders/${dir}/config.json`, configSize),
@@ -309,7 +321,7 @@ const JVNV_SOURCE: SourceInfo = {
     url: 'https://huggingface.co/litagin/style_bert_vits2_jvnv',
 };
 
-type JvnvPreset = {
+type JvnvModel = {
     name: string;
     weights: string;
     size: number;
@@ -318,7 +330,7 @@ type JvnvPreset = {
     jpExtra: boolean;
 };
 
-const JVNV_PRESETS: JvnvPreset[] = [
+const JVNV_MODELS: JvnvModel[] = [
     {
         name: 'jvnv-F1-jp',
         weights: 'jvnv-F1-jp_e160_s14000.safetensors',
@@ -385,40 +397,43 @@ const JVNV_PRESETS: JvnvPreset[] = [
     },
 ];
 
-// プリセットの声の項目 ID
-export function presetItemId(name: string): string {
-    return `model:tts:preset:${name}`;
+// すぐに使えるモデル (JVNV) の項目 ID
+export function readyItemId(name: string): string {
+    return `${TTS_READY_PREFIX}${name}`;
 }
 
-export const TTS_PRESET_DIR = `${MODEL_GROUP_DIRS.tts}/presets`;
+export const TTS_READY_DIR = `${MODEL_GROUP_DIRS.tts}/ready`;
 
-function presetSpec(preset: JvnvPreset): ModelSpec {
-    const base = `${TTS_PRESET_DIR}/${preset.name}`;
+function jvnvSpec(model: JvnvModel): ModelSpec {
+    const base = `${TTS_READY_DIR}/${model.name}`;
     return {
-        id: presetItemId(preset.name),
+        id: readyItemId(model.name),
         group: 'tts',
         version: '1',
-        name: `JVNV ${preset.name}`,
-        descriptionKey: preset.jpExtra
-            ? 'voice.library.items.presetJpExtraDesc'
-            : 'voice.library.items.presetMultilingualDesc',
+        name: `JVNV ${model.name}`,
+        // 名前の F は女性、M は男性の話者
+        descriptionKey: `voice.library.items.jvnv${model.name.startsWith('jvnv-F') ? 'Female' : 'Male'}${
+            model.jpExtra ? 'JpExtra' : 'Multilingual'
+        }Desc`,
         files: [
-            { url: `${JVNV_HF}/${preset.name}/config.json`, dest: `${base}/config.json` },
+            { url: `${JVNV_HF}/${model.name}/config.json`, dest: `${base}/config.json` },
             {
-                url: `${JVNV_HF}/${preset.name}/style_vectors.npy`,
+                url: `${JVNV_HF}/${model.name}/style_vectors.npy`,
                 dest: `${base}/style_vectors.npy`,
                 size: 7296,
-                sha256: preset.styleSha256,
+                sha256: model.styleSha256,
             },
             {
-                url: `${JVNV_HF}/${preset.name}/${preset.weights}`,
-                dest: `${base}/${preset.weights}`,
-                size: preset.size,
-                sha256: preset.sha256,
+                url: `${JVNV_HF}/${model.name}/${model.weights}`,
+                dest: `${base}/${model.weights}`,
+                size: model.size,
+                sha256: model.sha256,
             },
         ],
-        // プリセットは対応するエンジンが無いと使えない
-        requires: [preset.jpExtra ? TTS_ENGINE_ITEMS['jp-extra'] : TTS_ENGINE_ITEMS.multilingual],
+        // JP-Extra 版の声は日本語だけを読むため、日本語の言語モデルが無いと使えない。多言語版の声は、読み上げる言語の
+        // 言語モデルがあれば使える (読み上げの実行時に確かめる)
+        requires: model.jpExtra ? [TTS_LANGUAGE_MODEL_ITEMS.ja] : [],
+        readsLanguages: model.jpExtra ? ['ja'] : languagesForEngine('multilingual'),
         usedBy: ['tts'],
         license: JVNV_LICENSE,
         source: JVNV_SOURCE,
@@ -426,7 +441,7 @@ function presetSpec(preset: JvnvPreset): ModelSpec {
     };
 }
 
-export const JVNV_PRESET_NAMES = JVNV_PRESETS.map(preset => preset.name);
+export const JVNV_MODEL_NAMES = JVNV_MODELS.map(model => model.name);
 
 // 変換に使える RVC モデルの版とボコーダー (補助プロセスの converter_service.py と同じもの)
 export const RVC_VERSIONS: readonly string[] = ['v1', 'v2'];
@@ -442,15 +457,10 @@ export const RVC_EMBEDDER_ITEMS: Record<string, string> = {
     'korean-hubert-base': 'model:converter:embedder-korean-hubert-base',
 };
 
-// 読み上げエンジンに対応するダウンロード項目 (多言語版は日本語 BERT も使うため JP-Extra 版の項目を前提とする)
-export const TTS_ENGINE_ITEMS = {
-    'jp-extra': 'model:tts:bert-ja',
-    multilingual: 'model:tts:bert-en',
-} as const;
-
 export const TTS_BERT_DIRS = {
     ja: `${MODEL_GROUP_DIRS.tts}/bert/deberta-v2-large-japanese-char-wwm`,
     en: `${MODEL_GROUP_DIRS.tts}/bert/deberta-v3-large`,
+    zh: `${MODEL_GROUP_DIRS.tts}/bert/chinese-roberta-wwm-ext-large`,
 } as const;
 
 export const TTS_NLTK_DIR = `${MODEL_GROUP_DIRS.tts}/nltk_data`;
@@ -549,6 +559,7 @@ export const MODEL_SPECS: ModelSpec[] = [
         'embedder-spin',
         'spin',
         'voice.library.items.embedderSpin',
+        'voice.library.items.embedderSpinDesc',
         378356791,
         '057f12bfda54e2d486d86a52a3beb2a07c96a888bc6ac0c382c12ac18dbd500c',
         1459
@@ -557,6 +568,7 @@ export const MODEL_SPECS: ModelSpec[] = [
         'embedder-spin-v2',
         'spin-v2',
         'voice.library.items.embedderSpinV2',
+        'voice.library.items.embedderSpinV2Desc',
         378356791,
         '9a9ac0be326057b17607a988be497793817f8274e987cf691a1b61192510f823',
         1492
@@ -565,6 +577,7 @@ export const MODEL_SPECS: ModelSpec[] = [
         'embedder-japanese-hubert-base',
         'japanese_hubert_base',
         'voice.library.items.embedderJapaneseHubert',
+        'voice.library.items.embedderJapaneseHubertDesc',
         377554841,
         '6c023ccb71e4c2b5a324c94fc5ebe12403d3081c5f370df229892419996fd113',
         1375
@@ -573,6 +586,7 @@ export const MODEL_SPECS: ModelSpec[] = [
         'embedder-chinese-hubert-base',
         'chinese_hubert_base',
         'voice.library.items.embedderChineseHubert',
+        'voice.library.items.embedderChineseHubertDesc',
         377552987,
         '2fefccd26c2794a583b80f6f7210c721873cb7ebae2c1cde3baf9b27855e24d8',
         1380
@@ -581,18 +595,19 @@ export const MODEL_SPECS: ModelSpec[] = [
         'embedder-korean-hubert-base',
         'korean_hubert_base',
         'voice.library.items.embedderKoreanHubert',
+        'voice.library.items.embedderKoreanHubertDesc',
         377554841,
         '931f6232879f8eadf7dbd9e00e1fa4cac61ad269af89d509b2ed75009b1a02c5',
         1594
     ),
 
-    // --- 読み上げ (エンジン = BERT モデル) ---
+    // --- 読み上げ (言語ごとの言語モデル = BERT) ---
     {
-        id: TTS_ENGINE_ITEMS['jp-extra'],
+        id: TTS_LANGUAGE_MODEL_ITEMS.ja,
         group: 'tts',
         version: '1',
-        nameKey: 'voice.library.items.engineJpExtra',
-        descriptionKey: 'voice.library.items.engineJpExtraDesc',
+        nameKey: 'voice.library.items.languageModelJa',
+        descriptionKey: 'voice.library.items.languageModelJaDesc',
         files: [
             sbv2RawFile(
                 'bert/deberta-v2-large-japanese-char-wwm/config.json',
@@ -640,11 +655,11 @@ export const MODEL_SPECS: ModelSpec[] = [
         },
     },
     {
-        id: TTS_ENGINE_ITEMS.multilingual,
+        id: TTS_LANGUAGE_MODEL_ITEMS.en,
         group: 'tts',
         version: '1',
-        nameKey: 'voice.library.items.engineMultilingual',
-        descriptionKey: 'voice.library.items.engineMultilingualDesc',
+        nameKey: 'voice.library.items.languageModelEn',
+        descriptionKey: 'voice.library.items.languageModelEnDesc',
         files: [
             sbv2RawFile(
                 'bert/deberta-v3-large/config.json',
@@ -694,14 +709,72 @@ export const MODEL_SPECS: ModelSpec[] = [
                 extractZip: true,
             },
         ],
-        requires: [TTS_ENGINE_ITEMS['jp-extra']],
+        requires: [],
         usedBy: ['tts', 'ttsTraining'],
         // NLTK のデータ: averaged_perceptron_tagger は MIT、CMUdict は用途を問わず利用可 (出典の表示を求めている)
         license: { name: 'MIT (CMUdict: free use)', url: 'https://huggingface.co/microsoft/deberta-v3-large' },
         source: { name: 'microsoft/deberta-v3-large', url: 'https://huggingface.co/microsoft/deberta-v3-large' },
         credit: 'The Carnegie Mellon Pronouncing Dictionary (Carnegie Mellon University)',
     },
-    // --- 読み上げのモデルの学習 (NVIDIA GPU を搭載した Windows のみ) ---
+    {
+        id: TTS_LANGUAGE_MODEL_ITEMS.zh,
+        group: 'tts',
+        version: '1',
+        nameKey: 'voice.library.items.languageModelZh',
+        descriptionKey: 'voice.library.items.languageModelZhDesc',
+        files: [
+            sbv2RawFile(
+                'bert/chinese-roberta-wwm-ext-large/added_tokens.json',
+                `${TTS_BERT_DIRS.zh}/added_tokens.json`,
+                3,
+                'ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356'
+            ),
+            sbv2RawFile(
+                'bert/chinese-roberta-wwm-ext-large/config.json',
+                `${TTS_BERT_DIRS.zh}/config.json`,
+                690,
+                '53d086daf0ccdddbeb78f8798f34c685a3c48089fa21ec61300527f083fa2563'
+            ),
+            sbv2RawFile(
+                'bert/chinese-roberta-wwm-ext-large/special_tokens_map.json',
+                `${TTS_BERT_DIRS.zh}/special_tokens_map.json`,
+                113,
+                '88bbdf754dd64c44fff9e61b2c7d4380ded1bdf5c6d386be827ee28d79596cb9'
+            ),
+            sbv2RawFile(
+                'bert/chinese-roberta-wwm-ext-large/tokenizer.json',
+                `${TTS_BERT_DIRS.zh}/tokenizer.json`,
+                438228,
+                'b9a5d82ccce844a850a31c00db93b95f65c66fc622ac3f625dd03154dd23d373'
+            ),
+            sbv2RawFile(
+                'bert/chinese-roberta-wwm-ext-large/tokenizer_config.json',
+                `${TTS_BERT_DIRS.zh}/tokenizer_config.json`,
+                20,
+                '2d42242ad531c9aecff5082dab50027f71cddc439e1869b276bc7cbabdd7596b'
+            ),
+            sbv2RawFile(
+                'bert/chinese-roberta-wwm-ext-large/vocab.txt',
+                `${TTS_BERT_DIRS.zh}/vocab.txt`,
+                109540,
+                '45bbac6b341c319adc98a532532882e91a9cefc0329aa57bac9ae761c27b291c'
+            ),
+            {
+                url: 'https://huggingface.co/hfl/chinese-roberta-wwm-ext-large/resolve/a25cc9e05974bd9687e528edd516f2cfdb3f5db9/pytorch_model.bin',
+                dest: `${TTS_BERT_DIRS.zh}/pytorch_model.bin`,
+                size: 1306484351,
+                sha256: '4ac62d49144d770c5ca9a5d1d3039c4995665a080febe63198189857c6bd11cd',
+            },
+        ],
+        requires: [],
+        usedBy: ['tts', 'ttsTraining'],
+        license: { name: 'Apache-2.0', url: 'https://huggingface.co/hfl/chinese-roberta-wwm-ext-large' },
+        source: {
+            name: 'hfl/chinese-roberta-wwm-ext-large',
+            url: 'https://huggingface.co/hfl/chinese-roberta-wwm-ext-large',
+        },
+    },
+    // --- 読み上げのモデルの学習 (NVIDIA GPU を使える Windows と Linux のみ) ---
     {
         id: 'model:tts:train-jp-extra',
         group: 'tts',
@@ -735,7 +808,7 @@ export const MODEL_SPECS: ModelSpec[] = [
                 dest: `${MODEL_GROUP_DIRS.tts}/slm/wavlm-base-plus/preprocessor_config.json`,
             },
         ],
-        requires: [TTS_ENGINE_ITEMS['jp-extra']],
+        requires: [TTS_LANGUAGE_MODEL_ITEMS.ja],
         usedBy: ['ttsTraining'],
         license: {
             name: 'AGPL-3.0 (WavLM: CC BY-SA 3.0)',
@@ -764,7 +837,7 @@ export const MODEL_SPECS: ModelSpec[] = [
                 DUR_0: '802e99864e072bead2630f5622733620d489175e14f34fe70a09405d7d55f08d',
             }[name],
         })),
-        requires: [TTS_ENGINE_ITEMS.multilingual],
+        requires: [],
         usedBy: ['ttsTraining'],
         // モデルカードにライセンスの記載は無い。Bert-VITS2 2.1 の事前学習モデルを safetensors にしたもの
         license: { name: 'Bert-VITS2 (AGPL-3.0)', url: 'https://github.com/fishaudio/Bert-VITS2' },
@@ -775,19 +848,17 @@ export const MODEL_SPECS: ModelSpec[] = [
         credit: 'Bert-VITS2 2.1 base models (Fish Audio)',
         trainingOnly: 'tts',
     },
-    ...JVNV_PRESETS.map(presetSpec),
+    ...JVNV_MODELS.map(jvnvSpec),
 ];
-
-const SEPARATOR_ITEM_PREFIX = 'model:separator:';
 
 // 分離モデルの項目 ID
 export function separatorItemId(filename: string): string {
-    return `${SEPARATOR_ITEM_PREFIX}${filename}`;
+    return `${SEPARATOR_MODEL_PREFIX}${filename}`;
 }
 
 // 分離モデルの項目 ID からモデルのファイル名を得る (分離モデルの項目でなければ null)
 export function separatorFilename(itemId: string): string | null {
-    return itemId.startsWith(SEPARATOR_ITEM_PREFIX) ? itemId.slice(SEPARATOR_ITEM_PREFIX.length) : null;
+    return itemId.startsWith(SEPARATOR_MODEL_PREFIX) ? itemId.slice(SEPARATOR_MODEL_PREFIX.length) : null;
 }
 
 export const SEPARATOR_MODEL_DIR = MODEL_GROUP_DIRS.separator;

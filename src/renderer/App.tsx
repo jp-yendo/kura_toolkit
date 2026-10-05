@@ -1,5 +1,5 @@
 import React from 'react';
-import { HashRouter, Routes, Route } from 'react-router-dom';
+import { HashRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { Box, CssBaseline, useMediaQuery } from '@mui/material';
 import { ThemeProvider } from '@mui/material/styles';
 import { createAppTheme } from './theme';
@@ -23,6 +23,21 @@ import VoiceLibraryDialog from './components/voice/VoiceLibraryDialog';
 import SettingsLoadErrorDialog from './components/settings/SettingsLoadErrorDialog';
 import { useSettingsStore } from './stores/settingsStore';
 import { showNotice } from './stores/noticeStore';
+import { featureOf, leaveFeature } from './stores/featureWork';
+
+// 別の機能へ移ったときに前の機能の作業を破棄し、機能に入ったときに要らなくなった一時ファイルを消す
+function FeatureWorkLifecycle() {
+    const { pathname } = useLocation();
+    const current = React.useRef<string | null>(null);
+    React.useEffect(() => {
+        const next = featureOf(pathname);
+        if (current.current === next) return;
+        if (current.current !== null) leaveFeature(current.current);
+        current.current = next;
+        void window.kuraToolkit.storage.cleanupWork();
+    }, [pathname]);
+    return null;
+}
 
 export default function App() {
     const { t, i18n } = useTranslation();
@@ -80,6 +95,7 @@ export default function App() {
             {/* color-scheme をテーマに合わせ、ダークでも入力欄や一覧のスクロールバーを暗い配色にする */}
             <CssBaseline enableColorScheme />
             <HashRouter>
+                <FeatureWorkLifecycle />
                 <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
                     <TitleBar info={appInfo ?? undefined} />
                     <Box sx={{ flexGrow: 1, overflow: 'auto', bgcolor: 'background.default' }}>

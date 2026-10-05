@@ -38,19 +38,15 @@ export default {
     languages: {
         ja: '日本語',
         en: '英語',
+        zh: '中国語',
     },
     platform: {
         unsupportedTitle: 'この環境では音声機能を利用できません',
         unsupported: {
-            os: '音声分離・音声変換・読み上げは Windows と macOS で利用できます。',
-            arch: '音声分離・音声変換・読み上げは 64bit 版 Windows (x64) と Apple Silicon の Mac で利用できます。音声機能が使うライブラリが Intel 版 Mac と Arm 版 Windows に対応していないためです。',
+            os: '音声分離・音声変換・読み上げは Windows・macOS・Linux で利用できます。',
+            arch: '音声分離・音声変換・読み上げは 64bit 版 Windows (x64)・Apple Silicon の Mac・64bit 版 Linux (x64) で利用できます。音声機能が使うライブラリが Intel 版 Mac と Arm 版の Windows・Linux に対応していないためです。',
             macosVersion:
                 'macOS 14 (Sonoma) 以降が必要です。音声機能が使うライブラリが macOS 13 以前に対応していないためです。',
-        },
-        keys: {
-            'win32-x64': 'Windows (x64)',
-            'darwin-arm64': 'macOS (Apple Silicon)',
-            unsupported: '対象外の環境',
         },
         cuda: 'NVIDIA GPU ({{name}})',
         mps: 'Apple Silicon の GPU',
@@ -59,7 +55,7 @@ export default {
     readiness: {
         title: 'ダウンロードが必要です',
         message: 'この機能を使うには、次のものをダウンロードしてください。',
-        openLibrary: 'ダウンロード...',
+        openLibrary: 'ダウンロード管理',
     },
     player: {
         play: '再生',
@@ -71,14 +67,9 @@ export default {
     library: {
         title: '音声機能のダウンロード',
         open: 'ダウンロード管理',
-        selectedOnly: '選択中の項目のみ',
-        intro: 'Python 本体・パッケージ一式・モデルは容量が大きいため、ここで選んでダウンロードを始めたときだけ取得します。取得したものは 1 項目ずつ削除できます。',
-        environment: '実行環境',
-        platform: '環境',
-        device: '処理に使う装置',
-        libraryDir: 'ライブラリディレクトリ',
-        modelDir: 'モデルディレクトリ',
-        changeInSettings: '場所はアプリ設定で変更できます',
+        libraryDir: 'ライブラリ',
+        modelDir: 'モデル',
+        changeInSettings: '設定で変更',
         redetect: '再検出',
         vcRuntimeMissing:
             'Microsoft Visual C++ 再頒布可能パッケージが見つかりません。音声機能に必要なため、インストールしてからパッケージ一式をダウンロードしてください。',
@@ -87,10 +78,218 @@ export default {
             'NVIDIA GPU のドライバーが古いため、GPU を使えません。ドライバーを更新すると GPU で処理できるようになります (更新後は「再検出」を押してください)。',
         nonAsciiPath:
             '保存場所に半角英数字以外の文字が含まれているため、正しく動かないことがあります。アプリ設定で半角英数字だけの場所に変更することをおすすめします。',
-        groupRuntime: 'Python 本体とパッケージ一式',
-        groupSeparator: '分離モデル',
-        groupConverter: '音声変換のモデル',
-        groupTts: '読み上げのエンジン・学習用モデル・プリセットの声',
+        requirements: {
+            separationRuntime: '分離の実行環境',
+            separatorModels: '分離モデル',
+            separatorModelsNote:
+                '分離に使うモデルです。1 つ以上必要です (信号処理による方式 (中央定位の打ち消し) だけを使う場合は不要です)。',
+            conversionRuntime: '変換の実行環境と補助モデル',
+            conversionExtras: '追加の機能用',
+            whenFcpe: 'ピッチ抽出方式に FCPE を選ぶ場合に必要',
+            whenSeparateInput:
+                '変換の画面で、入力の音源からボーカルを分離する場合に必要 (分離モデルは「音声分離」のタブで選びます)',
+            importedEmbedders: '取り込んだ声のモデル用',
+            importedEmbeddersNote:
+                '取り込んだ声のモデルが ContentVec 以外の方式で作られている場合に、その方式のモデルが 1 つ必要です。どの方式かは「声のモデル」の一覧に表示されます。変換する声の言語とは関係ありません。アプリで学習した声には不要です。',
+            conversionTrainingRuntime: '学習の実行環境と補助モデル',
+            ttsRuntime: '読み上げの実行環境',
+            ttsLanguageModels: '読み上げる言語の言語モデル',
+            ttsLanguageModelsNote:
+                '読み上げる文章の言語の言語モデルが必要です。日本語・英語・中国語の文章は、それぞれの言語の言語モデルで解析します (声のモデルの形式によらず同じです)。各言語モデルの下には、その言語を読めるすぐに使えるモデルを並べています。',
+            whenJapanese: '日本語を読み上げる場合に必要 (JP-Extra 版・多言語版のどちらの声でも使います)',
+            whenEnglish: '英語を読み上げる場合に必要',
+            whenChinese: '中国語を読み上げる場合に必要',
+            ttsTrainingRuntime: '学習の実行環境',
+            trainingFormat: '学習する形式ごとのモデル',
+            trainingFormatNote: '学習の画面で選ぶ形式 (JP-Extra 版・多言語版) の事前学習モデルが必要です。',
+            whenTrainJpExtra: 'JP-Extra 版で学習する場合に必要',
+            whenTrainMultilingual: '多言語版で学習する場合に必要',
+            whenTrainEnglish: '英語の声を学習する場合に必要',
+            whenTrainChinese: '中国語の声を学習する場合に必要',
+            whenTrainJapanese: '日本語の声を学習する場合に必要',
+            trainingLanguageModels: '学習する言語の言語モデル',
+            trainingLanguageModelsNote: '学習に使う文章の言語の言語モデルが必要です。',
+            readyModelOption: 'すぐに使えるモデル (オプション)',
+        },
+        groupTitle: '{{name}} ({{kind}})',
+        requirementKinds: {
+            all: '必須',
+            anyOf: 'いずれか 1 つ以上',
+            optional: 'オプション',
+        },
+        separatorArch: '方式: {{arch}}',
+        separatorOutputs: '出力: {{outputs}}',
+        separatorRecommendations: '目的別のおすすめ',
+        separatorRecommendationsNote:
+            '分離モデルの利用者コミュニティのガイド (deton24) をもとに audio-separator に同梱されている、検証済みのモデルの組み合わせ (アンサンブル) を目的ごとに並べています。組み合わせの行を選ぶと、その下に並ぶモデルをすべて選びます。分離の画面では、方式の「おすすめ」から選んで使います。',
+        separatorSingleModels: '個別のモデル',
+        separatorSingleModelsNote:
+            'モデルを 1 つずつ選びます。方式には MDX-Net・VR Arch・Demucs と、新しい MDXC (Roformer) があり、MDXC は一般に品質が高い一方で処理が重くなります。分離の種類ごとに、分離の品質が高い順に並べています。',
+        separatorNoMatch: '条件に合うモデルはありません。',
+        separatorEnsemblePartial: '{{installed}} / {{total}} 個取得済み',
+        separatorEnsembleDescriptions: {
+            instrumental_clean: '伴奏にボーカルが残るのを最も抑えます。代わりに、楽器の音が少しやせることがあります。',
+            instrumental_full:
+                '楽器の音をできるだけ欠けずに残します。代わりに、ボーカルの残りやノイズが少し入ることがあります。',
+            instrumental_balanced: '伴奏に残るノイズの少なさと、楽器の音の厚みの釣り合いを取ります。',
+            instrumental_low_resource: 'GPU のメモリが少ない場合や、速さを優先する場合に使います。',
+            vocal_balanced: 'ボーカルの品質が全体として最も高い組み合わせです。',
+            vocal_clean: 'ボーカルに伴奏の音が混ざるのを最も抑えます。代わりに、声の一部が欠けることがあります。',
+            vocal_full:
+                'ハーモニーやコーラスまで含めて、声をできるだけ残します。代わりに、伴奏の音が少し混ざることがあります。',
+            vocal_rvc: '音声変換 (RVC) の学習に使う声を作る場合に向けた組み合わせです。',
+            karaoke: 'ボーカルを、メインボーカルとバックコーラスに分けます。単体のモデルより品質が高くなります。',
+        },
+        separatorPurposes: {
+            vocals: {
+                title: 'ボーカル取り出し',
+                note: '迷った場合は「標準」を選んでください。ほかの組み合わせは、伴奏の混ざりを抑えることと、声を欠けずに残すことのどちらを優先するかが違います。',
+            },
+            accompaniment: {
+                title: '伴奏取り出し',
+                note: '迷った場合は「標準」を選んでください。ほかの組み合わせは、ボーカルの残りを抑えることと、楽器の音を欠けずに残すことのどちらを優先するかが違います。',
+            },
+            both: {
+                title: 'ボーカルと伴奏の両方',
+                note: 'ボーカルと伴奏の両方を、どちらにも偏らずに取り出すモデルです。',
+            },
+            layers: {
+                title: 'メイン・コーラス・伴奏の分割',
+                note: '1 つの組み合わせではできないため、2 段階で分けます。1 段目でボーカルと伴奏に分け、分離の画面で「段階を追加」して、2 段目でボーカルをメインボーカルとバックコーラスに分けます。両方の組み合わせが必要です。',
+            },
+        },
+        separatorPurposeLabels: {
+            standard: '標準',
+            step1: '1 段目: ボーカルと伴奏に分ける',
+            step2: '2 段目: ボーカルをメインボーカルとバックコーラスに分ける',
+        },
+        separatorModelNotes: {
+            vrHp: '伴奏を取り出すことを主にした、VR 方式の高品質版 (HP) のモデルです。',
+            vrHp2: '伴奏を取り出すことを主にした、VR 方式の高品質版の改良版 (HP2) のモデルです。',
+            vrHpVocal: 'ボーカルを取り出すことを主にした、VR 方式の高品質版のモデルです。',
+            vrKaraoke: 'メインボーカルと、それ以外 (バックコーラスと伴奏) に分ける VR 方式のモデルです。',
+            vrSp: '旧世代の VR 方式のモデル (SP) です。名前の数値は扱うサンプリング周波数です。一般に、HP 以降や MDX-Net 以降のモデルの方が高品質です。',
+            vrWind: '木管楽器 (フルート・サックスなど) と、それ以外の音に分けるモデルです。',
+            vrDeEcho: 'エコー (遅れて繰り返し聞こえる反響) を取り除くモデルです。',
+            vrDeEchoAggressive: 'エコーを取り除くモデルのうち、Normal より強く取り除く版です。',
+            vrDeEchoDeReverb: 'エコーと残響をまとめて取り除くモデルです。',
+            vrDeNoise: 'ノイズを取り除くモデルです。',
+            vrDeNoiseLite: 'ノイズを取り除くモデルの軽量版です。',
+            vrBve: 'ボーカルを、メインボーカルとバックコーラスに分けるモデルです (BVE: バックコーラスの抽出)。先にボーカルだけを取り出してから使います。',
+            vrMgmHigh: '高い音域の分離を重視した、旧世代 (v4) の VR 方式のモデルです。',
+            vrMgmLow: '低い音域の分離を重視した、旧世代 (v4) の VR 方式のモデルです。',
+            vrMgmMain: '旧世代 (v4) の VR 方式の標準のモデルです。',
+            vrDeReverb: '残響を取り除く VR 方式のモデルです。',
+            mdxInstHq:
+                '伴奏を取り出すことを主にした、MDX-Net の高品質版 (HQ) のモデルです。数字が大きいほど新しい版です。',
+            mdxVocalEarly: 'ボーカルを取り出すことを主にした、初期の MDX-Net のモデルです。',
+            mdxInstEarly: '伴奏を取り出すことを主にした、初期の MDX-Net のモデルです。',
+            mdxKaraoke: 'メインボーカルと、それ以外 (バックコーラスと伴奏) に分ける MDX-Net のモデルです。',
+            mdxVocFt:
+                'ボーカルを取り出す MDX-Net のモデルを調整した版で、MDX-Net の中ではボーカルの品質が高いモデルです。',
+            mdxKimVocal: 'ボーカルを取り出すことを主にした MDX-Net のモデル (Kim 氏の作) です。2 は 1 の改良版です。',
+            mdxKimInst: '伴奏を取り出すことを主にした MDX-Net のモデル (Kim 氏の作) です。',
+            mdxReverb: '残響と、残響を除いた音に分けるモデルです。',
+            crowd: 'ライブ音源の歓声や拍手を取り除くモデルです。',
+            kuielabVocals:
+                '音楽の分離の競技会 (Music Demixing Challenge) 向けに作られた、ボーカルとそれ以外に分けるモデルです。a と b は別々に学習した版です。',
+            kuielabOther:
+                '音楽の分離の競技会向けに作られた、ボーカル・ドラム・ベース以外の楽器を分けるモデルです。a と b は別々に学習した版です。',
+            kuielabBass:
+                '音楽の分離の競技会向けに作られた、ベースとそれ以外に分けるモデルです。a と b は別々に学習した版です。',
+            kuielabDrums:
+                '音楽の分離の競技会向けに作られた、ドラムとそれ以外に分けるモデルです。a と b は別々に学習した版です。',
+            demucs: 'ボーカル・ドラム・ベース・その他の 4 つに分ける Demucs v4 の標準のモデルです。',
+            demucsFt:
+                'ボーカル・ドラム・ベース・その他の 4 つに分ける Demucs v4 の調整版です。標準のモデルより高品質ですが、処理に約 4 倍の時間がかかります。',
+            demucsMmi: 'ボーカル・ドラム・ベース・その他の 4 つに分ける、1 つ前の世代 (Hybrid Demucs) のモデルです。',
+            demucs6s:
+                'ボーカル・ドラム・ベース・ギター・ピアノ・その他の 6 つに分ける Demucs v4 のモデルです。ピアノの分離は品質が低めです。',
+            mdx23cInstVoc: 'ボーカルと伴奏に分ける MDX23C のモデルです。',
+            viperxBsRoformer:
+                'ボーカルと伴奏に分ける BS-Roformer のモデル (viperx 氏の作) です。Roformer の初期の高品質なモデルです。',
+            viperxMelRoformer: 'ボーカルと伴奏に分ける Mel-Roformer のモデル (viperx 氏の作) です。',
+            drumBass: 'ドラムとベースをまとめて、それ以外の音と分けるモデルです。',
+            unwaInst: '伴奏を取り出すことを主にした Mel-Roformer のモデル (unwa 氏の作) です。V2 は V1 の改良版です。',
+            unwaInstPlus: 'unwa 氏の伴奏向けのモデル (Inst V1) の改良版です。',
+            unwaInstE:
+                'unwa 氏の伴奏向けのモデルのうち、楽器の音の厚みを残すことを重視した版 (E) です。ノイズが残りやすくなります。Plus はその改良版です。',
+            unwaDuality:
+                'ボーカルと伴奏の両方を同じようにきれいに取り出すことを狙ったモデル (unwa 氏の作) です。V2 は V1 の改良版です。',
+            mdx23cDeReverb: '残響を取り除く MDX23C のモデルです。',
+            drumSep:
+                'ドラムを、キック・スネア・タム・ハイハット・ライド・クラッシュの 6 つに分けるモデルです。先にドラムだけを取り出してから使います。',
+            roformerKaraoke:
+                'メインボーカルと、それ以外 (バックコーラスと伴奏) に分ける Roformer のモデルです。作者ごとに調整が異なります。',
+            melDenoise: 'ノイズを取り除く Mel-Roformer のモデルです。',
+            melDenoiseAggressive: 'ノイズを取り除く Mel-Roformer のモデルのうち、より強く取り除く版です。',
+            denoiseDebleed:
+                '伴奏に残ったノイズと、混ざり込んだボーカルの音を取り除くモデルです。伴奏を取り出した後に使います。',
+            bsDeReverb: '残響を取り除く BS-Roformer のモデルです。',
+            kimVocals:
+                'ボーカルを取り出す Mel-Roformer のモデル (Kimberley Jensen 氏の作) です。多くの調整版の元になっています。',
+            kimFt: 'Kim 氏のボーカル向けのモデルを unwa 氏が調整した版です。数字が大きいほど新しい版です。',
+            kimFtBleedless:
+                'Kim 氏のボーカル向けのモデルの調整版 (FT 2) のうち、ボーカルに楽器の音が混ざりにくくした版です。',
+            revive: 'ボーカルを取り出す BS-Roformer のモデル (unwa 氏の作) です。',
+            reviveV2: 'unwa 氏のボーカル向けのモデル (Revive) のうち、ボーカルに楽器の音が混ざりにくくした版です。',
+            reviveV3e:
+                'unwa 氏のボーカル向けのモデル (Revive) のうち、ハーモニーを含めてボーカルをより多く残す版です。',
+            becruilyVocals: 'ボーカルを取り出す Mel-Roformer のモデル (becruily 氏の作) です。',
+            becruilyInst:
+                '伴奏を取り出す Mel-Roformer のモデル (becruily 氏の作) です。伴奏の分離の品質が特に高いモデルです。',
+            vocalFullness: 'ハーモニーを含めて、ボーカルをできるだけ多く残すことを重視したモデル (Aname 氏の作) です。',
+            gaboxBsVocals: 'ボーカルを取り出す BS-Roformer のモデル (Gabox 氏の作) です。',
+            gaboxVocals: 'ボーカルを取り出す Mel-Roformer のモデル (Gabox 氏の作) です。V2 は改良版です。',
+            gaboxVocalsFv:
+                'Gabox 氏のボーカル向けのモデルのうち、ボーカルの厚みを残すことを重視した版 (FV) です。数字が大きいほど新しい版です。',
+            gaboxInst: '伴奏を取り出す Mel-Roformer のモデル (Gabox 氏の作) です。数字が大きいほど新しい版です。',
+            gaboxInstBleedless:
+                'Gabox 氏の伴奏向けのモデルのうち、伴奏にボーカルが残りにくいことを重視した版です。数字が大きいほど新しい版です。',
+            gaboxInstFullness:
+                'Gabox 氏の伴奏向けのモデルのうち、楽器の音の厚みを残すことを重視した版です。ボーカルがわずかに残ることがあります。数字が大きいほど新しい版です。',
+            gaboxInstFullnessNoisy:
+                'Gabox 氏の伴奏向けのモデル (Fullness V4) より、さらに楽器の音を残す版です。ノイズが残りやすくなります。',
+            gaboxInstV: 'Gabox 氏の伴奏向けのモデルの新しい版 (INSTV) です。数字が大きいほど新しい版です。',
+            gaboxInstVN:
+                'Gabox 氏の伴奏向けのモデル (INSTV) のうち、楽器の音の厚みを優先した版 (N) です。ノイズが残りやすくなります。',
+            gaboxInstFv7z: 'Gabox 氏の伴奏向けのモデルのうち、伴奏にボーカルが特に残りにくい版です。',
+            gaboxInstFv: 'Gabox 氏の伴奏向けのモデルの新しい版 (FV) です。',
+            anvuewDeReverb: '残響を取り除く Mel-Roformer のモデル (anvuew 氏の作) です。',
+            anvuewDeReverbLess: '残響を取り除く anvuew 氏のモデルのうち、控えめに取り除く版です。',
+            anvuewDeReverbMono: '残響を取り除く anvuew 氏のモデルのうち、モノラルの音源向けの版です。',
+            sucialDeReverbBig:
+                '残響を取り除く大型の Mel-Roformer のモデル (Sucial 氏の作) です。Super Big はさらに大型の版です。',
+            sucialDeReverbEcho: '残響とエコーをまとめて取り除くモデル (Sucial 氏の作) です。V2 は改良版です。',
+            sucialDeReverbEchoFused: '残響とエコーを取り除く Sucial 氏のモデルを、1 つに統合した版です。',
+            syhft: 'Kim 氏のボーカル向けのモデルを SYH99999 氏が調整した版です。数字が大きいほど新しく、Big は大型の版です。',
+            bigBeta:
+                'ボーカルを取り出す大型の Mel-Roformer のモデル (unwa 氏の作) です。数字が大きいほど新しい版です。',
+            chorusMaleFemale: '合唱を、男声と女声に分けるモデル (Sucial 氏の作) です。',
+            maleFemale: '声を、男性の声と女性の声に分けるモデル (aufr33 氏の作) です。',
+            aspiration:
+                'ボーカルから息の音 (ブレス) を分けるモデル (Sucial 氏の作) です。Less Aggressive は控えめに分ける版です。',
+            bleedSuppressor: '伴奏に残ったボーカルなどの漏れを取り除くモデルです。伴奏を取り出した後に使います。',
+            resurrectionVocals:
+                'ボーカルを取り出す BS-Roformer のモデル (unwa 氏の作) です。ボーカルの品質が高いモデルです。',
+            resurrectionInst:
+                '伴奏を取り出す BS-Roformer のモデル (unwa 氏の作) です。ファイルが小さく、処理が軽めです。',
+            resurrectionInstGabox:
+                'unwa 氏の伴奏向けのモデル (Instrumental Resurrection) を Gabox 氏が調整した版です。',
+            bsRoformerSw:
+                'ボーカル・ドラム・ベース・ギター・ピアノ・その他の 6 つに分ける BS-Roformer のモデル (jarredou 氏の作) です。',
+        },
+        separatorCategoryNotes: {
+            vocals: '歌声と伴奏 (楽器の音) に分けます。歌声を変換する場合や、伴奏だけを使う場合に使います。',
+            multi: 'ボーカル・ドラム・ベース・その他などの楽器のパートごとに分けます。',
+            karaoke:
+                '歌声を、メインボーカルとバックコーラスに分けます。先にボーカルと伴奏に分けてから、ボーカルに使います。',
+            cleanup: '残響・エコー・ノイズなどを取り除きます。取り出したボーカルを整える場合に使います。',
+            other: '男女の声の分割など、上のいずれにも当てはまらない分離です。',
+        },
+        prerequisites: '前提: {{items}} (選ぶと一緒にダウンロードされます)',
+        selectMissing: '不足している項目を選択',
+        missingRequired: '{{feature}}に必要な項目のうち、{{count}} 項目が未取得です。',
         colName: '名前',
         colSize: '容量',
         colStatus: '状態',
@@ -112,12 +311,15 @@ export default {
             failed: '失敗',
             cancelled: '中断',
         },
-        allCategories: 'すべての種類',
-        searchModels: 'モデル名で絞り込み',
+        separatorCategoryCount: '{{name}} ({{count}})',
+        separatorFilterArch: '方式',
+        separatorFilterOutput: '出力',
+        separatorFilterAll: 'すべて',
+        searchModels: 'モデル名・説明で検索',
         installedOnly: '取得済みのみ',
-        separatorListHint: '分離モデルの一覧は、「音声分離のパッケージ一式」をダウンロードした後に取得できます。',
-        listModels: '一覧を取得',
-        refreshList: '一覧を更新',
+        separatorListHint: '「音声分離のパッケージ一式」をダウンロードすると、分離モデルの一覧が表示されます。',
+        separatorListCreating: '分離モデルの一覧を作成しています…',
+        separatorListFailed: '分離モデルの一覧を作成できませんでした: {{message}}',
         selection: '{{count}} 項目 (前提となる項目を含む) / 合計 {{size}}',
         selectionNone: 'ダウンロードまたは削除する項目を選んでください。',
         downloadSelected: '選択した項目をダウンロード',
@@ -137,46 +339,68 @@ export default {
             'ダウンロードしたものは、再度ダウンロードすれば使えるようになります。学習・取り込みした声のモデルはここでは削除されません。',
         removed: '削除しました。',
         removeFailed: '{{count}} 項目を削除できませんでした。',
-        ttsTrainingUnavailable: '読み上げのモデルの学習は NVIDIA GPU を搭載した Windows でのみ行えます。',
+        ttsTrainingUnavailable: '読み上げのモデルの学習は、NVIDIA GPU を使える Windows と Linux でのみ行えます。',
         separatorModelNotFound: 'このモデルのファイルが配布元に見つかりません。',
         items: {
             python: 'Python 3.11 本体',
-            pythonDesc: 'すべての音声機能が使います。',
+            pythonDesc:
+                '音声機能のプログラムを動かす実行環境です。アプリ専用の場所に置かれ、パソコンに入っている Python とは別に動きます。',
             separatorPackages: '音声分離のパッケージ一式',
             separatorPackagesDesc:
-                '音声分離に必要なもの一式です。macOS では、先に Xcode Command Line Tools をインストールしておく必要があります。',
+                '音声分離のプログラム (python-audio-separator) と、動作に必要なライブラリ (PyTorch など) の一式です。macOS では、先に Xcode Command Line Tools をインストールしておく必要があります。',
             converterPackages: '音声変換のパッケージ一式',
-            converterPackagesDesc: '音声変換と、そのモデルの学習に必要なもの一式です。',
+            converterPackagesDesc:
+                '音声変換 (RVC) のプログラム (Applio) と、動作に必要なライブラリ (PyTorch など) の一式です。変換と、変換のモデルの学習に使います。',
             ttsPackages: '読み上げのパッケージ一式',
-            ttsPackagesDesc: '読み上げに必要なもの一式です。',
+            ttsPackagesDesc:
+                '読み上げのプログラム (Style-Bert-VITS2) と、動作に必要なライブラリ (PyTorch など) の一式です。',
             ttsTrainPackages: '読み上げの学習用パッケージ一式',
             ttsTrainPackagesDesc:
-                '読み上げのモデルの学習に必要なもの一式です。NVIDIA GPU を搭載した Windows でのみ使えます。',
+                '読み上げのモデルの学習に追加で必要なプログラムと、声の調子 (スタイル) を計算する話者埋め込みモデルです。NVIDIA GPU を使える Windows と Linux でのみ使えます。',
             rmvpe: 'ピッチ抽出モデル (RMVPE)',
-            rmvpeDesc: '音声変換と学習で音程を推定します (必須)。',
+            rmvpeDesc:
+                '声の高さ (ピッチ) の動きを推定するモデルです。元の声の抑揚を保ったまま別の声にするために、変換と学習で使います。',
             fcpe: 'ピッチ抽出モデル (FCPE)',
-            fcpeDesc: 'ピッチ抽出方式に FCPE を選ぶ場合にだけ必要です。',
-            contentvec: '話者特徴の抽出モデル (ContentVec)',
-            contentvecDesc: '音声変換と学習で使います (必須)。',
+            fcpeDesc: 'RMVPE とは別の方式で声の高さを推定するモデルです。RMVPE より軽く、速く動きます。',
+            contentvec: '音声の特徴抽出モデル (ContentVec)',
+            contentvecDesc:
+                '声から発音の内容を表す特徴を取り出すモデルです。変換では、この特徴を声のモデルで読み直して別の声にします。アプリでの学習は常にこの方式を使い、配布されている声のモデルの多くもこの方式です。',
             rvcPretrained: '学習用の事前学習モデル (40kHz)',
-            rvcPretrainedDesc: '音声変換のモデルの学習に使います。',
-            embedderDesc: '取り込んだモデルがこの方式で作られている場合にだけ必要です。',
-            embedderSpin: '話者特徴の抽出モデル (SPIN)',
-            embedderSpinV2: '話者特徴の抽出モデル (SPIN v2)',
-            embedderJapaneseHubert: '話者特徴の抽出モデル (日本語 HuBERT)',
-            embedderChineseHubert: '話者特徴の抽出モデル (中国語 HuBERT)',
-            embedderKoreanHubert: '話者特徴の抽出モデル (韓国語 HuBERT)',
-            engineJpExtra: '読み上げエンジン (JP-Extra 版)',
-            engineJpExtraDesc: '日本語の読み上げに使います。日本語だけを読み上げる場合はこちらをおすすめします。',
-            engineMultilingual: '読み上げエンジン (多言語版)',
-            engineMultilingualDesc:
-                '英語の読み上げに使います。JP-Extra 版のエンジンも使うため、一緒にダウンロードします。',
+            rvcPretrainedDesc:
+                '大量の声で学習済みのモデルです。変換のモデルの学習をこの状態から始めるため、少ない録音でも短い時間で学習できます。',
+            embedderSpin: '音声の特徴抽出モデル (SPIN)',
+            embedderSpinDesc:
+                'ContentVec と同じ役割のモデルです。話者の違いに左右されにくい特徴を取り出すよう作られています。',
+            embedderSpinV2: '音声の特徴抽出モデル (SPIN v2)',
+            embedderSpinV2Desc: 'SPIN の改良版です。',
+            embedderJapaneseHubert: '音声の特徴抽出モデル (日本語 HuBERT)',
+            embedderJapaneseHubertDesc: '日本語の音声で学習した、ContentVec と同じ役割のモデルです。',
+            embedderChineseHubert: '音声の特徴抽出モデル (中国語 HuBERT)',
+            embedderChineseHubertDesc: '中国語の音声で学習した、ContentVec と同じ役割のモデルです。',
+            embedderKoreanHubert: '音声の特徴抽出モデル (韓国語 HuBERT)',
+            embedderKoreanHubertDesc: '韓国語の音声で学習した、ContentVec と同じ役割のモデルです。',
+            languageModelJa: '日本語の言語モデル (DeBERTa)',
+            languageModelJaDesc:
+                '日本語の文章の意味や文脈から、自然な抑揚を決める言語モデル (DeBERTa) です。日本語の読み上げに使います (JP-Extra 版・多言語版のどちらの声でも使います)。',
+            languageModelEn: '英語の言語モデル (DeBERTa)',
+            languageModelEnDesc:
+                '英語の文章の意味や文脈から、自然な抑揚を決める言語モデル (DeBERTa) です。英語の発音を調べる辞書 (CMUdict) なども含みます。英語の読み上げに使います。',
+            languageModelZh: '中国語の言語モデル (RoBERTa)',
+            languageModelZhDesc:
+                '中国語の文章の意味や文脈から、自然な抑揚を決める言語モデル (chinese-roberta-wwm-ext-large) です。中国語の読み上げに使います。',
             ttsTrainJpExtra: '学習用の事前学習モデル (JP-Extra 版)',
-            ttsTrainJpExtraDesc: 'JP-Extra 版のモデルの学習に使います。',
+            ttsTrainJpExtraDesc:
+                'JP-Extra 版の学習の出発点となる学習済みのモデルと、学習中に音声の自然さを判定するモデル (WavLM) です。',
             ttsTrainMultilingual: '学習用の事前学習モデル (多言語版)',
-            ttsTrainMultilingualDesc: '多言語版のモデルの学習に使います。',
-            presetJpExtraDesc: 'プリセットの声 (JP-Extra 版)。JVNV コーパスから作られたモデルです。',
-            presetMultilingualDesc: 'プリセットの声 (多言語版)。JVNV コーパスから作られたモデルです。',
+            ttsTrainMultilingualDesc: '多言語版の学習の出発点となる学習済みのモデルです。',
+            jvnvFemaleJpExtraDesc:
+                '女性の声 (JP-Extra 版) です。感情を込めて話した日本語の音声 (JVNV コーパス) から作られた声で、そのまま読み上げに使えます。',
+            jvnvMaleJpExtraDesc:
+                '男性の声 (JP-Extra 版) です。感情を込めて話した日本語の音声 (JVNV コーパス) から作られた声で、そのまま読み上げに使えます。',
+            jvnvFemaleMultilingualDesc:
+                '女性の声 (多言語版) です。感情を込めて話した日本語の音声 (JVNV コーパス) から作られた声です。英語・中国語も読めますが、話者が日本語話者のため発音は日本語なまりになります。',
+            jvnvMaleMultilingualDesc:
+                '男性の声 (多言語版) です。感情を込めて話した日本語の音声 (JVNV コーパス) から作られた声です。英語・中国語も読めますが、話者が日本語話者のため発音は日本語なまりになります。',
         },
     },
     update: {
@@ -207,16 +431,24 @@ export default {
             other: 'その他',
         },
         method: '方式',
-        classicMethods: '信号処理による方式',
+        pickModes: {
+            recommended: 'おすすめ',
+            model: 'モデル',
+            ensemble: '組み合わせ',
+            signal: '信号処理',
+        },
+        recommended: 'おすすめ',
+        model: 'モデル',
+        modelSearch: '名前・方式・説明で検索',
+        noMatch: '該当するモデルがありません',
+        noModels: 'この種類の分離に使えるモデルを取得していません。「分離モデルのダウンロード」から取得してください。',
         centerCancel: '中央定位の打ち消し',
-        ensemblePresets: 'アンサンブル (検証済みの組み合わせ)',
-        customEnsemble: '複数のモデルを組み合わせる (アンサンブル)',
-        models: 'モデル',
-        notDownloaded: '未取得',
+        centerCancelDescription:
+            '中央定位の打ち消し: 左右のチャンネルに共通する音 (中央に定位したボーカルなど) を打ち消します。モデルを使わない簡易な方式で、モノラルの音源には使えません。',
         quality: '分離の品質 (大きいほど良い): {{values}}',
         qualityHint: '出力ごとの分離の品質を表す値 (SDR) です。大きいほど、目的の音をきれいに分けられます。',
         ensembleModels: '組み合わせるモデル',
-        modelCount: '{{count}} 個のモデル',
+        ensembleHint: '2 つ以上のモデルを選びます。各モデルの結果を、選んだ組み合わせ方でまとめます。',
         algorithm: '組み合わせ方',
         algorithms: {
             avg_wave: '平均 (波形)',
@@ -252,7 +484,6 @@ export default {
         },
         run: '分離を実行',
         running: '分離中',
-        downloadModel: 'このモデルをダウンロード',
         getModels: '分離モデルのダウンロード',
         candidates: '候補',
         noCandidates:
@@ -286,6 +517,34 @@ export default {
         guitar: 'ギター',
         piano: 'ピアノ',
         instrumental: '伴奏',
+        woodwinds: '木管楽器',
+        'no woodwinds': '木管楽器以外',
+        echo: 'エコー',
+        'no echo': 'エコーを除いた音',
+        reverb: '残響',
+        'no reverb': '残響を除いた音',
+        noreverb: '残響を除いた音',
+        noise: 'ノイズ',
+        'no noise': 'ノイズを除いた音',
+        dry: '取り除いた後の音',
+        'no dry': '取り除いた音',
+        'no other': 'その他以外',
+        'no bass': 'ベース以外',
+        'no drums': 'ドラム以外',
+        crowd: '歓声',
+        'no crowd': '歓声を除いた音',
+        kick: 'キック',
+        snare: 'スネア',
+        toms: 'タム',
+        hh: 'ハイハット',
+        ride: 'ライド',
+        crash: 'クラッシュ',
+        'drum-bass': 'ドラムとベース',
+        'no drum-bass': 'ドラムとベース以外',
+        male: '男声',
+        female: '女声',
+        aspiration: '息の音',
+        bleed: '漏れ',
     },
     tracks: {
         source: '元の音源',
@@ -408,11 +667,11 @@ export default {
     models: {
         import: '取り込み',
         searchHub: 'Hugging Face で探す',
-        getPresets: 'プリセットの声を取得',
+        getReadyModels: 'すぐに使えるモデルを取得',
         intro: {
             converter:
                 '音声変換 (RVC) の声のモデルです。区分の「学習」はこのアプリで作成したもの、「取り込み」は外部で入手したものです。',
-            tts: '読み上げ (Style-Bert-VITS2) の声のモデルです。区分の「プリセット」はダウンロードした声、「取り込み」は外部で入手したもの、「学習」はこのアプリで作成したものです。',
+            tts: '読み上げ (Style-Bert-VITS2) の声のモデルです。区分の「すぐに使えるモデル」はダウンロードしたもの、「取り込み」は外部で入手したもの、「学習」はこのアプリで作成したものです。',
         },
         empty: '声のモデルがありません。',
         name: '名前',
@@ -422,9 +681,9 @@ export default {
         categories: {
             trained: '学習',
             imported: '取り込み',
-            preset: 'プリセット',
+            ready: 'すぐに使えるモデル',
         },
-        presetLabel: '{{name}} ({{engine}})',
+        readyLabel: '{{name}} ({{engine}})',
         rvcInfo: 'RVC {{version}} / {{rate}} Hz / インデックス{{index}} / {{embedder}}',
         indexYes: 'あり',
         indexNo: 'なし',
@@ -433,7 +692,7 @@ export default {
         languagesHint: '多言語版のモデルを使う言語を選んでください。選んだ言語の文章にだけ使えるようになります。',
         rename: '名前を変更',
         editLanguages: '対応する言語を変更',
-        presetRenameNote: '名前を変えても、プリセットという区分はそのままです。',
+        readyRenameNote: '名前を変えても、区分は「すぐに使えるモデル」のままです。',
         duplicateName: '同じ名前のモデルがすでにあります。\n選ぶときに区別できるよう、別の名前をおすすめします。',
         export: '書き出し',
         exporting: '書き出し中',
@@ -443,7 +702,7 @@ export default {
         deleteConfirm: '「{{name}}」を削除しますか？',
         deleteUserData:
             'このモデルは学習または取り込みで作成したもので、ダウンロードし直すことはできません。削除するとゴミ箱へ移動します (ゴミ箱を使えない場合は完全に削除します)。',
-        deletePreset: 'プリセットの声は「ダウンロード管理」から再度取得できます。',
+        deleteReady: 'すぐに使えるモデルは「ダウンロード管理」から再度取得できます。',
     },
     import: {
         title: '声のモデルの取り込み',
@@ -499,11 +758,11 @@ export default {
             'SRT または WebVTT を読み込むか、ここに入力します。区間ごとに読み上げて開始時刻に配置します。',
         language: '言語',
         engine: 'エンジン',
-        getEngines: 'エンジンのダウンロード',
-        engineMissing: '{{language}}に対応する読み上げエンジンがダウンロードされていません。',
+        getLanguageModels: '言語モデルのダウンロード',
+        languageModelMissing: '{{language}}の言語モデルがダウンロードされていません。',
         voice: '声のモデル',
         noVoices:
-            'このエンジンと言語に使える声のモデルがありません。「声のモデル」でプリセットの声を取得するか、モデルを取り込んでください。',
+            'このエンジンと言語に使える声のモデルがありません。「声のモデル」ですぐに使えるモデルを取得するか、モデルを取り込んでください。',
         style: 'スタイル',
         speaker: '話者',
         styleWeight: 'スタイルの強さ',
@@ -595,9 +854,12 @@ export default {
                 "囲んだ語の読みとアクセントを指定します (日本語のアクセント記法)。\nph にカタカナの読みを書き、音が下がる直前の拍の直後に「'」を置きます。「'」が無い場合は平板型です。複数のアクセント句にまたがる場合は「/」で区切ります。\n高低は東京式アクセントの規則で決まります (核が 1 拍目なら 1 拍目だけ高く、それ以外は 1 拍目が低く 2 拍目から核まで高い。平板型は 2 拍目以降が高い)。",
             descriptionEn:
                 '囲んだ語の発音を IPA (国際音声記号) で指定します。語ごとに空白で区切り、「ˈ」「ˌ」で強勢を示します。日本語のアクセント記法は英語の文章では使えません。',
+            descriptionZh:
+                '囲んだ漢字の発音をピンインで指定します。多音字の読み分けなどに使います。1 文字に 1 音節を対応させるため、囲む文字は漢字だけにしてください。声調は指定どおりになり、自動の声調変化 (変調) は行いません。',
             phJa: "カタカナの読み + アクセント記号。例: ハ'シ (箸) / ハシ' (橋) / ハシ (端)",
             phEn: 'IPA の発音。例: təˈmɑːtoʊ',
-            alphabet: '省略可能。日本語は x-kana (アクセント記法)、英語は ipa',
+            phZh: '文字ごとのピンイン + 声調の数字 (1〜4、軽声は 5) を空白で区切ります。ü は v と書きます。例: yin2 hang2 (银行)',
+            alphabet: '省略可能。日本語は x-kana (アクセント記法)、英語は ipa、中国語は x-pinyin (ピンイン)',
         },
         escapeTitle: 'タグと同じ文字列を本文に書く場合',
         escape: '「<break」のように既知のタグ名で始まる文字列を本文として書きたい場合は、「&lt;」(<)・「&gt;」(>)・「&amp;」(&) などの置き換え表記を使ってください。\nそれ以外の「<～>」と全角の「＜」「＞」は本文として扱い、記号の読み上げ設定に従います。',
@@ -619,7 +881,12 @@ export default {
         emptyContent: '「{{tag}}」タグで囲む文字がありません。',
         nestedTagNotAllowed: '「{{tag}}」タグの中にタグ「{{value}}」は書けません。',
         accentNotJapanese: '日本語のアクセント記法は日本語の文章でのみ使えます。',
-        ipaNotEnglish: 'IPA による発音の指定は英語の文章でのみ使えます。日本語ではアクセント記法を使ってください。',
+        ipaNotEnglish: 'IPA による発音の指定は英語の文章でのみ使えます。',
+        pinyinNotChinese: 'ピンインによる発音の指定は中国語の文章でのみ使えます。',
+        pinyinSyllable:
+            '扱えないピンイン「{{value}}」があります。音節と声調の数字 (1〜5) を続けて書いてください (例: zhong1)。',
+        pinyinSurface: 'ピンインで発音を指定する文字は漢字だけにしてください。',
+        pinyinCount: 'ピンインの音節の数 ({{value}}) が漢字の数 ({{expected}}) と一致しません。',
         accentSyntax: 'アクセント記法の誤り「{{value}}」: {{accent}}',
         ipaSymbol: '扱えない発音記号「{{value}}」があります。',
         ipaWordCount: '発音の語数 ({{value}}) が、囲んだ文字の語数 ({{expected}}) と一致しません。',
@@ -634,7 +901,7 @@ export default {
             rate: '「120%」「+20%」またはラベル (25%〜400%)',
             pitch: '「+2st」「+10%」またはラベル (±24 半音)',
             volume: '「+6dB」「-3dB」またはラベル (-40〜+20dB)',
-            alphabet: 'x-kana または ipa',
+            alphabet: 'x-kana・ipa・x-pinyin のいずれか',
             nonEmpty: '空にできません',
         },
         accent: {
@@ -667,6 +934,23 @@ export default {
         denied: 'マイクを使えません。システム設定でこのアプリにマイクの使用を許可してください。',
         error: 'マイクを開始できませんでした: {{detail}}',
     },
+    trainingSets: {
+        label: '学習セット',
+        none: '学習セットがありません',
+        empty: '学習用の音声は、名前を付けた学習セットに保存します。まず学習セットを作成してください。',
+        ttsDetail: '{{language}} / 音声のある文 {{count}} 文 / {{duration}}',
+        rvcDetail: '{{count}} 件 / {{duration}}',
+        create: '新しい学習セット',
+        createAction: '作成',
+        rename: '名前を変更',
+        renameAction: '変更',
+        remove: '学習セットを削除',
+        removeAction: '削除',
+        removeConfirm: '学習セット「{{name}}」を削除します。学習セットはごみ箱に移ります。よろしいですか？',
+        removed: '学習セット「{{name}}」をごみ箱に移しました。',
+        name: '名前',
+        languageFixed: '言語は作成した後に変更できません。',
+    },
     training: {
         stages: {
             prepare: '準備中',
@@ -682,16 +966,13 @@ export default {
         rvcGuide:
             '学習用の音声は、変換したい音声に近い環境 (マイク・部屋・話し方や歌い方) で録音したものを使うと、よいモデルになります。歌声・話し声のどちらでも構いません。',
         addFiles: '音声ファイルを追加',
-        clear: 'すべて外す',
-        clearConfirm:
-            '学習用の音声をすべて外します。録音した音声は削除され、元に戻せません (音声ファイルそのものは削除しません)。よろしいですか？',
-        removeItem: '一覧から外す',
-        deleteRecordingTitle: '録音の削除',
-        deleteRecordingConfirm: '「{{name}}」を削除します。削除した録音は元に戻せません。よろしいですか？',
-        deleteSentenceRecordingConfirm: 'この文の録音を削除します。削除した録音は元に戻せません。よろしいですか？',
-        deleteRecording: '削除',
-        rvcDatasetNote:
-            '追加した音声ファイルは元の場所から直接読み込みます。学習が終わるまで移動・削除しないでください。学習が終わると (中止・失敗を含む) 一覧は空になり、録音した音声は消えます。アプリを終了したときも同様です。',
+        deleteAudioTitle: '音声の削除',
+        deleteAudioConfirm: '「{{name}}」を学習セットから削除します。削除した音声は元に戻せません。よろしいですか？',
+        deleteSentenceAudioConfirm:
+            'この文の音声を学習セットから削除します。削除した音声は元に戻せません。よろしいですか？',
+        deleteAudio: '音声を削除',
+        datasetNote:
+            '録音した音声と指定した音声ファイルは、学習セットの中に保存します (元のファイルは、追加した後に移動・削除して構いません)。学習セットは学習が終わっても残ります。',
         dataset: '学習用の音声 ({{count}} 件 / 合計 {{duration}})',
         datasetEmpty: '録音するか、音声ファイルを追加してください。',
         itemName: '名前',
@@ -707,33 +988,26 @@ export default {
         openModels: '「声のモデル」を開く',
         ttsUnavailableTitle: 'この環境では読み上げのモデルを学習できません',
         ttsUnavailable:
-            '読み上げのモデルの学習は、NVIDIA GPU を搭載した Windows でのみ行えます。そのような Windows で学習したモデルを書き出し、ここで取り込めば利用できます。',
-        corpusSet: '読み上げ文',
-        corpus: {
-            quick: '簡易 (手軽に録音できる文数)',
-            accurate: '精度重視 (時間はかかるが精度が出る)',
-        },
+            '読み上げのモデルの学習は、NVIDIA GPU を使える Windows と Linux でのみ行えます。そのような環境で学習したモデルを書き出し、ここで取り込めば利用できます。',
         ttsGuide:
-            '提示した文章を 1 文ずつ読み上げて録音するか、その 1 文を読み上げた音声ファイルを指定してください。提示した文章は、その音声の書き起こしとしてそのまま使います。複数の文を続けて録ったファイルは、1 文ずつに分けてから指定してください。',
-        ttsDatasetNote:
-            '指定した音声ファイルは元の場所から直接読み込みます。学習が終わるまで移動・削除しないでください。学習が終わると (中止・失敗を含む) すべての文から音声が外れ、録音した音声は消えます。アプリを終了したときも同様です。',
+            '左の一覧から文を選び、その文を読み上げて録音するか、その 1 文を読み上げた音声ファイルを指定してください。どの文から録っても構わず、読みたくない文は飛ばして構いません。提示した文章は、その音声の書き起こしとしてそのまま使います。複数の文を続けて録ったファイルは、1 文ずつに分けてから指定してください。',
         sentenceIndex: '{{index}} / {{total}} 文目 ({{id}})',
         recorded: '音声あり',
         notRecorded: '音声なし',
         rerecord: '録音し直す',
         chooseSentenceFile: 'この文の音声ファイルを指定',
-        removeSentenceAudio: 'この文の音声を外す',
+        removeSentenceAudio: 'この文の音声を削除',
         clipLength: 'この音声は {{duration}} 秒です。学習には {{min}}〜{{max}} 秒程度の音声が適しています。',
         noRecording: 'この文の音声はまだありません',
         previous: '前の文',
         next: '次の文',
         progressSummary: '音声あり {{recorded}} / {{total}} 文 (合計 {{duration}})',
-        needMore: '学習には、少なくとも {{count}} 文の音声が必要です。',
+        sentenceCounts:
+            '学習に必要な音声のある文の数: 最低 {{minimum}} 文、推奨 {{recommended}} 文以上。文の数が多いほど、声や話し方を再現しやすくなります。',
     },
     // ファイルを選ぶダイアログの種類の名前
     fileFilters: {
         audio: '音声・動画ファイル',
-        trainingAudio: '音声ファイル',
         allFiles: 'すべてのファイル',
         rvcModel: 'RVC のモデル',
         ttsModel: 'Style-Bert-VITS2 のモデル',
@@ -755,14 +1029,15 @@ export default {
         VENV_FAILED: 'パッケージ一式の準備に失敗しました。({{detail}})',
         PIP_FAILED: 'パッケージのインストールに失敗しました。通信状況を確認して再試行してください。({{detail}})',
         BUILD_TOOLS_MISSING:
-            'パッケージの組み立てに必要な開発ツールが見つかりません。Windows では Microsoft C++ Build Tools を、macOS では「xcode-select --install」で Command Line Tools をインストールしてから再試行してください。',
+            'パッケージの組み立てに必要な開発ツールが見つかりません。Windows では Microsoft C++ Build Tools を、macOS では「xcode-select --install」で Command Line Tools を、Linux では C/C++ のコンパイラー (build-essential など) をインストールしてから再試行してください。',
         VERIFY_FAILED: 'パッケージ一式を正しくインストールできませんでした。再試行してください。({{detail}})',
         DOWNLOAD_FAILED: 'ダウンロードに失敗しました。通信状況を確認して再試行してください。({{detail}})',
         PREREQUISITE_FAILED: '前提となる項目を取得できなかったため、取得しませんでした。',
-        SEPARATOR_NOT_INSTALLED: '音声分離のパッケージ一式がダウンロードされていません。',
+        SEPARATOR_NOT_INSTALLED:
+            '音声分離のパッケージ一式がダウンロードされていないか、更新が必要です。「ダウンロード管理」から取得してください。',
         MODEL_NOT_INSTALLED: '必要なモデルがダウンロードされていません。',
         SEPARATOR_MODEL_NOT_FOUND: '分離モデルのファイルが配布元に見つかりません。({{detail}})',
-        ENSEMBLE_PRESET_NOT_FOUND: '選んだアンサンブルのプリセットが、分離モデルの一覧にありません。({{detail}})',
+        ENSEMBLE_NOT_FOUND: '選んだ検証済みの組み合わせが、分離モデルの一覧にありません。({{detail}})',
         MODEL_REQUIRED: '必要なモデルがダウンロードされていません。「ダウンロード管理」から取得してください。',
         MODEL_FILE_MISSING:
             'モデルのファイルが見つかりません ({{detail}})。「ダウンロード管理」から取得し直してください。',
@@ -770,7 +1045,7 @@ export default {
         CENTER_CANCEL_MONO: '中央定位の打ち消しはステレオの音源でのみ使えます。',
         NO_AUDIO_STREAM: 'このファイルには音声が含まれていません。',
         RUBBERBAND_UNAVAILABLE:
-            '設定中の ffmpeg には rubberband フィルタ (伴奏の移調・話速の微調整に使用) が含まれていません。rubberband を含む ffmpeg (Windows では winget の Gyan.FFmpeg、macOS では Homebrew の ffmpeg など) を用意し、アプリ設定で ffmpeg を見直してください。',
+            '設定中の ffmpeg には rubberband フィルタ (伴奏の移調・話速の微調整に使用) が含まれていません。rubberband を含む ffmpeg (Windows では winget の Gyan.FFmpeg、macOS では Homebrew の ffmpeg、Linux ではディストリビューションの ffmpeg など) を用意し、アプリ設定で ffmpeg を見直してください。',
         EMBEDDER_MISSING:
             'このモデルが使う話者特徴の抽出モデル ({{detail}}) がダウンロードされていません。「ダウンロード管理」から取得してください。',
         EMBEDDER_UNSUPPORTED: 'このモデルが使う話者特徴の抽出方式 ({{detail}}) には対応していません。',
@@ -787,8 +1062,6 @@ export default {
         IMPORT_EXPIRED: '取り込みの確認が中断されました。最初からやり直してください。',
         IMPORT_UNSAFE_NOT_ALLOWED: '制限なしの読み込みが許可されていません。',
         INVALID_SAFETENSORS: 'モデル本体 (safetensors) を読み込めませんでした。',
-        TTS_ENGINE_NOT_INSTALLED:
-            'このモデルに必要な読み上げエンジン ({{detail}}) がダウンロードされていません。「ダウンロード管理」から取得してください。',
         TTS_NOT_INSTALLED: '読み上げのパッケージ一式がダウンロードされていません。',
         TTS_ENGINE_MISMATCH: '選んだエンジンと声のモデルの形式が一致しません。',
         TTS_LANGUAGE_UNSUPPORTED: 'この声のモデルは選んだ言語に対応していません。',
@@ -797,18 +1070,28 @@ export default {
         VOICE_LANGUAGES_EMPTY: '言語を 1 つ以上選んでください。',
         VOICE_LANGUAGES_FIXED: 'JP-Extra 版のモデルは日本語専用です。',
         INVALID_TTS_MODEL: '読み上げのモデルとして読み込めませんでした。({{detail}})',
-        NLTK_DATA_MISSING: '英語の読み上げに必要なデータがありません。多言語版のエンジンを取得し直してください。',
+        NLTK_DATA_MISSING:
+            '英語の読み上げに必要なデータがありません。「英語の言語モデル (DeBERTa)」を取得し直してください。',
+        PINYIN_ALIGN_FAILED: 'ピンインで発音を指定した文字の位置を合わせられませんでした。指定を見直してください。',
         IPA_WORD_SPLIT: '「{{detail}}」には発音を指定できません。sub タグで読みを指定してください。',
-        TTS_TRAINING_UNAVAILABLE: '読み上げのモデルの学習は NVIDIA GPU を搭載した Windows でのみ行えます。',
+        TTS_TRAINING_UNAVAILABLE: '読み上げのモデルの学習は、NVIDIA GPU を使える Windows と Linux でのみ行えます。',
         TTS_ENGINE_LANGUAGE_MISMATCH: 'この言語はこのエンジンで学習できません。',
         TTS_CONFIRMATION_EXPIRED: 'この確認は無効になりました。もう一度読み上げを実行してください。',
         TRAINING_DATA_TOO_SHORT: '学習用の音声が短すぎます。',
         TRAINING_DATA_TOO_FEW: '音声のある文が少なすぎます。',
-        TRAINING_FILE_UNSUPPORTED:
-            '学習に使えない形式の音声ファイルです。WAV・MP3・FLAC・OGG のファイルを指定してください。({{detail}})',
         TRAINING_FILE_UNREADABLE: 'この学習用の音声ファイルを読み込めませんでした。({{detail}})',
         TRAINING_FILE_MISSING:
-            '学習用の音声ファイルが見つかりません。移動・削除した場合は、その音声を外してから指定し直してください。({{detail}})',
+            '学習セットの音声ファイルが見つかりません。その音声を削除してから、録音し直すか指定し直してください。({{detail}})',
+        TRAINING_SET_NOT_FOUND: '学習セットが見つかりません。',
+        TRAINING_SET_IN_USE: 'この学習セットは学習に使っている間は変更・削除できません。',
+        TRAINING_SET_NAME_EMPTY: '学習セットの名前を入力してください。',
+        TRAINING_SET_LANGUAGE_MISMATCH: '学習セットの言語の指定が正しくありません。',
+        INVALID_TRAINING_SET_ID: '学習セットの指定が正しくありません。',
+        SEPARATOR_LIST_OUTDATED:
+            '分離のパッケージ一式が変わったため、分離モデルの一覧を作り直す必要があります。もう一度お試しください。',
+        UNKNOWN_SENTENCE: '読み上げ文の指定が正しくありません。',
+        INVALID_FEATURE: '機能の指定が正しくありません。({{detail}})',
+        INVALID_LANGUAGE: '言語の指定が正しくありません。({{detail}})',
         TRAINING_FAILED: '学習に失敗しました。({{detail}})',
         TRAINING_STEP_FAILED: '学習の途中で失敗しました。({{detail}})',
         TRAINING_NO_AUDIO: '学習に使える音声がありませんでした (無音や短すぎる音声は使えません)。',

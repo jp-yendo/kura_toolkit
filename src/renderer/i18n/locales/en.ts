@@ -262,14 +262,47 @@ export default {
             model: 'Model directory',
             modelHint: 'Where the models used by the app are stored.',
             work: 'Work directory',
-            workHint: 'Where temporary files are stored during processing.',
+            workHint:
+                'The temporary directory for files used during processing (the operating system temporary directory by default). The app creates folders starting with "kura_toolkit_" in it for each task and removes them when the task ends.',
             isDefault: 'default',
             move: 'Move...',
             change: 'Change...',
             resetDefault: 'Reset to Default Location',
             moreActions: 'More actions',
             moveTitle: 'Move "{{name}}"',
-            moveMessage: 'The contents are moved to the chosen folder. This can take a while depending on their size.',
+            moveMessage:
+                'The contents are moved to the chosen folder. If the folder already has contents, they are merged item by item. This may take a while depending on the size.',
+            checking: 'Checking the destination',
+            merge: {
+                transfer: 'Moved as is: {{count}} items ({{size}})',
+                conflicts:
+                    'The destination already has {{count}} of the same items. Choose whether to overwrite each one. Overwriting deletes the item at the destination before moving; not overwriting keeps the item at the destination and deletes the one being moved.',
+                overwriteAll: 'Overwrite All',
+                keepAll: 'Overwrite None',
+                unit: 'Item',
+                source: 'Moving from',
+                target: 'Destination',
+                modifiedAt: 'Last modified',
+                contentsLabel: 'Files / Total size',
+                contents: '{{count}} / {{size}}',
+                choice: 'Overwrite',
+                targetName: 'Name at the destination: {{name}}',
+                overwrite: 'Yes',
+                keep: 'No',
+                note: 'Last modified is the newest file inside the item (the newer side is shown in bold). After the move, everything left at the previous location is deleted.',
+                kinds: {
+                    download: 'Downloaded model',
+                    componentFiles: 'Model settings of a package set',
+                    voice: 'Voice model ({{feature}})',
+                    trainingSet: 'Training set ({{feature}})',
+                    python: 'Python runtime',
+                    library: 'Library',
+                },
+                features: {
+                    converter: 'Voice Conversion',
+                    tts: 'Text to Speech',
+                },
+            },
             moveRun: 'Move',
             moving: 'Moving "{{name}}"',
             moved: '"{{name}}" was moved.',
@@ -284,9 +317,13 @@ export default {
                 STORAGE_MOVE_NESTED: 'It cannot be moved into its current location or into a folder that contains it.',
                 STORAGE_OVERLAP:
                     'A location that overlaps another storage location (library, model or work directory) cannot be chosen.',
-                STORAGE_TARGET_NOT_EMPTY: 'The chosen folder is not empty. Choose an empty folder. ({{detail}})',
+                STORAGE_TARGET_NOT_EMPTY:
+                    'The chosen folder contains files that do not belong to this storage location. Choose an empty folder or a folder that was used as the same kind of storage location. ({{detail}})',
+                STORAGE_MOVE_UNDECIDED: 'Some items have no overwrite choice. ({{detail}})',
                 STORAGE_IN_USE:
                     'It could not be moved because files in it are in use by another program. The current location is kept. Close that program and try again. ({{detail}})',
+                STORAGE_NO_SPACE:
+                    'There is not enough free space on the destination drive, so nothing was moved. The current location is kept. (Required / free: {{detail}})',
                 STORAGE_LINK_LOOP:
                     'It cannot be moved because a link inside the folder points back to the folder itself. ({{detail}})',
                 WORK_DIR_IN_USE:

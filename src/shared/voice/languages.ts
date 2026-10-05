@@ -1,26 +1,24 @@
-// 言語定義と読み上げエンジンの定義 (main と renderer で共有する)。言語ごとの要素 (その言語を扱える読み上げエンジン、
-// 学習用の読み上げ文、記号の読みの初期値) と、読み上げエンジンごとのダウンロード項目をここにまとめて持つ。
+// 言語定義と読み上げの声の形式の定義 (main と renderer で共有する)。言語ごとの要素 (その言語を読める声の形式、
+// 学習用の読み上げ文、記号の読みの初期値) と、言語ごとのダウンロード項目をここにまとめて持つ。
 // 言語を追加するときはこの定義を足せば各画面に反映される。
 
-export type VoiceLanguage = 'ja' | 'en';
+export type VoiceLanguage = 'ja' | 'en' | 'zh';
 
-// 読み上げエンジン (Style-Bert-VITS2 の 2 形式)
+// 読み上げの声の形式 (Style-Bert-VITS2 の 2 形式。画面では「エンジン」として選ぶ)
 export type TtsEngineId = 'jp-extra' | 'multilingual';
 
-// 読み上げエンジンに対応するダウンロード項目 (エンジンが使う BERT モデル)
-export const TTS_ENGINE_ITEMS: Record<TtsEngineId, string> = {
-    'jp-extra': 'model:tts:bert-ja',
-    multilingual: 'model:tts:bert-en',
+// 読み上げる言語ごとに必要な言語モデル (BERT) のダウンロード項目。どちらの形式の声でも、読む言語のものだけを使う
+export const TTS_LANGUAGE_MODEL_ITEMS: Record<VoiceLanguage, string> = {
+    ja: 'model:tts:bert-ja',
+    en: 'model:tts:bert-en',
+    zh: 'model:tts:bert-zh',
 };
 
-// 読み上げのモデルの学習で初期値に使う事前学習済みモデルのダウンロード項目 (エンジンごと)
+// 読み上げのモデルの学習で初期値に使う事前学習済みモデルのダウンロード項目 (声の形式ごと)
 const TTS_PRETRAINED_ITEMS: Record<TtsEngineId, string> = {
     'jp-extra': 'model:tts:train-jp-extra',
     multilingual: 'model:tts:train-multilingual',
 };
-
-// 学習用の読み上げ文の種類 (簡易用 / 精度重視用)
-export type CorpusSetId = 'quick' | 'accurate';
 
 export type SymbolReading = {
     symbol: string;
@@ -30,9 +28,10 @@ export type SymbolReading = {
 type CorpusDefinition = {
     // third_party/ からの相対パス (/ 区切り)
     file: string;
-    // 簡易用に使う文の条件 (set の値と、先頭からの件数)
-    quick: { set: string; count: number };
 };
+
+// phoneme タグの表記 (日本語はアクセント記法のカナ、英語は IPA、中国語は声調の数字付きのピンイン)
+export type PhonemeAlphabet = 'x-kana' | 'ipa' | 'x-pinyin';
 
 type LanguageDefinition = {
     // 読み上げに使えるエンジン (推奨順)
@@ -41,13 +40,18 @@ type LanguageDefinition = {
     trainingEngines: TtsEngineId[];
     corpus: CorpusDefinition;
     // phoneme タグで使える表記 (alphabet を省略したときもこの表記として扱う)
-    phonemeAlphabet: 'x-kana' | 'ipa';
+    phonemeAlphabet: PhonemeAlphabet;
     // 常に読み上げの区切りとして扱う句読点 (記号の読み上げ設定の対象外)
     punctuation: string[];
     // 記号の読みの初期値。全角と半角は別の項目として持つ
     defaultSymbolReadings: SymbolReading[];
     // 記号の読みの前後に空白を補うか (単語を空白で区切る言語)
     spaceAroundReading: boolean;
+    // 読み上げのモデルの学習に使う、音声のある文の数。最低は録音の合計が約 5 分、推奨は約 15 分になる文数
+    // (読み上げエンジンの FAQ にある「数分程度でも学習できる」「多くても 45 分程度で十分」を元にした目安)。
+    // 1 文の長さは、その言語の読み上げ文の平均 (日本語はモーラ数を毎秒 7.5 モーラ、英語は単語数を毎秒 2.7 語、
+    // 中国語は音節 (漢字) 数を毎秒 4.5 音節で割ったもの) から概算し、10 文単位で切り上げる
+    trainingSentences: { minimum: number; recommended: number };
 };
 
 const JA_SYMBOLS: SymbolReading[] = [
@@ -112,30 +116,82 @@ const EN_SYMBOLS: SymbolReading[] = [
     { symbol: ';', reading: 'semicolon' },
 ];
 
+const ZH_SYMBOLS: SymbolReading[] = [
+    { symbol: '<', reading: '小于' },
+    { symbol: '>', reading: '大于' },
+    { symbol: '=', reading: '等于' },
+    { symbol: '+', reading: '加' },
+    { symbol: '-', reading: '连字符' },
+    { symbol: '*', reading: '星号' },
+    { symbol: '/', reading: '斜杠' },
+    { symbol: '\\', reading: '反斜杠' },
+    { symbol: '%', reading: '百分号' },
+    { symbol: '&', reading: '和' },
+    { symbol: '@', reading: '艾特' },
+    { symbol: '#', reading: '井号' },
+    { symbol: '$', reading: '美元' },
+    { symbol: '~', reading: '波浪号' },
+    { symbol: '^', reading: '脱字符' },
+    { symbol: '_', reading: '下划线' },
+    { symbol: '|', reading: '竖线' },
+    { symbol: '＜', reading: '小于' },
+    { symbol: '＞', reading: '大于' },
+    { symbol: '＝', reading: '等于' },
+    { symbol: '＋', reading: '加' },
+    { symbol: '－', reading: '减' },
+    { symbol: '＊', reading: '星号' },
+    { symbol: '／', reading: '斜杠' },
+    { symbol: '％', reading: '百分号' },
+    { symbol: '＆', reading: '和' },
+    { symbol: '＠', reading: '艾特' },
+    { symbol: '＃', reading: '井号' },
+    { symbol: '＄', reading: '美元' },
+    { symbol: '￥', reading: '元' },
+    { symbol: '～', reading: '到' },
+    { symbol: '→', reading: '右箭头' },
+    { symbol: '←', reading: '左箭头' },
+];
+
 export const LANGUAGE_DEFINITIONS: Record<VoiceLanguage, LanguageDefinition> = {
     ja: {
         // 日本語だけを扱う場合は JP-Extra 版が強く推奨されている
         engines: ['jp-extra', 'multilingual'],
         trainingEngines: ['jp-extra', 'multilingual'],
-        corpus: { file: 'ita-corpus/ja-ita.json', quick: { set: 'emotion', count: 100 } },
+        corpus: { file: 'ita-corpus/ja-ita.json' },
         phonemeAlphabet: 'x-kana',
         punctuation: ['、', '。', '，', '．', ',', '.', '!', '?', '！', '？', '…', '‥'],
         defaultSymbolReadings: JA_SYMBOLS,
         spaceAroundReading: false,
+        // 1 文の平均 約 3.2 秒 (24.0 モーラ)
+        trainingSentences: { minimum: 100, recommended: 290 },
     },
     en: {
         // 英語の読み上げには多言語版が必要
         engines: ['multilingual'],
         trainingEngines: ['multilingual'],
-        corpus: { file: 'cmu-arctic/en-cmu-arctic.json', quick: { set: 'a', count: 100 } },
+        corpus: { file: 'cmu-arctic/en-cmu-arctic.json' },
         phonemeAlphabet: 'ipa',
         punctuation: [',', '.', '!', '?', '…'],
         defaultSymbolReadings: EN_SYMBOLS,
         spaceAroundReading: true,
+        // 1 文の平均 約 3.3 秒 (8.8 語)
+        trainingSentences: { minimum: 100, recommended: 280 },
+    },
+    zh: {
+        // 中国語を読めるのは多言語版の形式だけ (JP-Extra 版は日本語専用)
+        engines: ['multilingual'],
+        trainingEngines: ['multilingual'],
+        corpus: { file: 'common-voice-zh/zh-common-voice.json' },
+        phonemeAlphabet: 'x-pinyin',
+        punctuation: ['，', '。', '！', '？', '、', '；', '：', '…', ',', '.', '!', '?', ';', ':'],
+        defaultSymbolReadings: ZH_SYMBOLS,
+        spaceAroundReading: false,
+        // 1 文の平均 約 5.4 秒 (24.4 音節)
+        trainingSentences: { minimum: 60, recommended: 170 },
     },
 };
 
-export const VOICE_LANGUAGES: VoiceLanguage[] = ['ja', 'en'];
+export const VOICE_LANGUAGES: VoiceLanguage[] = ['ja', 'en', 'zh'];
 
 export function isVoiceLanguage(value: string): value is VoiceLanguage {
     return (VOICE_LANGUAGES as string[]).includes(value);
@@ -146,12 +202,10 @@ export function languagesForEngine(engine: TtsEngineId): VoiceLanguage[] {
     return VOICE_LANGUAGES.filter(language => LANGUAGE_DEFINITIONS[language].engines.includes(engine));
 }
 
-// 読み上げのモデルの学習に必要なダウンロード項目のうち、エンジンと言語によって変わるもの
-// (Python・読み上げと学習のパッケージ一式・日本語の BERT モデルなど、学習に常に必要な項目は含まない)。
-// 多言語版のエンジンの学習と英語の学習には、英語の BERT モデルも使う
+// 読み上げのモデルの学習に必要なダウンロード項目のうち、声の形式と言語によって変わるもの
+// (Python と読み上げ・学習のパッケージ一式は含まない)。学習する言語の言語モデルと、形式の事前学習モデル
 export function ttsTrainingItems(engine: TtsEngineId, language: VoiceLanguage): string[] {
-    const englishBert = engine === 'multilingual' || language === 'en';
-    return [...(englishBert ? [TTS_ENGINE_ITEMS.multilingual] : []), TTS_PRETRAINED_ITEMS[engine]];
+    return [TTS_LANGUAGE_MODEL_ITEMS[language], TTS_PRETRAINED_ITEMS[engine]];
 }
 
 // 記号の読みを文章に適用する。長い記号から順に照合し、句読点は対象外とする

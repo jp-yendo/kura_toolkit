@@ -25,16 +25,16 @@ Kura Toolkit は、音声・声・動画・画像・ファイル整理のユー�
 - 設定 (キー・ピッチ抽出・インデックスの効き具合・音量エンベロープ・子音の保護) を変えた変換結果を候補として聞き比べ
 - 画面は「変換」「声のモデル」「モデルの学習」の 3 つを切り替えて使います。変換する音声を読み込まなくても、声のモデルの管理と学習はいつでも行えます
 - 声のモデルの管理: RVC モデル (.pth / .index) の安全な取り込み、`.kuravoice` ファイルでの書き出しと取り込み、Hugging Face でのモデル検索
-- アプリ内での録音や音声ファイルから、自分の声のモデルを学習 (Windows・macOS)
+- アプリ内での録音や音声ファイルから、自分の声のモデルを学習 (Windows・macOS)。学習用の音声は名前を付けた学習セットに残るため、アプリを起動し直しても続けて録音できます
 
 ### オーディオ: 読み上げ
 
-- 文章や字幕 (SRT / WebVTT) を日本語・英語で読み上げ (Style-Bert-VITS2 を使用。JP-Extra 版と多言語版のエンジン)
-- 制御タグ (SSML のサブセット。入力中に構文チェック) で間・話速・音高・音量・読みを指定。日本語はアクセント記法、英語は IPA で発音を指定可能
+- 文章や字幕 (SRT / WebVTT) を日本語・英語・中国語で読み上げ (Style-Bert-VITS2 を使用。JP-Extra 版と多言語版の声のモデルに対応)
+- 制御タグ (SSML のサブセット。入力中に構文チェック) で間・話速・音高・音量・読みを指定。日本語はアクセント記法、英語は IPA、中国語はピンインで発音を指定可能
 - 字幕の各区間は開始時刻に配置。収まらない区間は、話速を上げる・次の区間と重ねる・後続をずらす・警告のみから選択
 - 音声変換と同じく、「読み上げ」「声のモデル」「モデルの学習」を切り替えて使います
-- プリセットの声 (JVNV コーパスのモデル) のダウンロード、Style-Bert-VITS2 のモデルの取り込み
-- 提示される文を読み上げて録音し、自分の声のモデルを学習 (NVIDIA GPU を搭載した Windows のみ)
+- すぐに使えるモデル (JVNV コーパスのモデル) のダウンロード、Style-Bert-VITS2 のモデルの取り込み
+- 提示される文を読み上げて録音し、自分の声のモデルを学習。好きな順に録音でき、読みたくない文は飛ばせます。録音は名前を付けた学習セットに残ります (NVIDIA GPU を搭載した Windows のみ)
 - 読み上げた音声を音声変換へ受け渡し
 
 ### 音声機能のダウンロード
@@ -42,6 +42,7 @@ Kura Toolkit は、音声・声・動画・画像・ファイル整理のユー�
 音声分離・音声変換・読み上げには Python・パッケージ一式・モデルが必要です (アプリには同梱していません)。
 
 - 各音声機能の画面右上の「ダウンロード管理」から開きます。足りないものがある場合は画面に一覧が表示され、それを選んだ状態でダウンロードを開けます
+- 項目は機能ごとのタブに、「必須」「いずれか 1 つ以上」「オプション」の種別を付けた表に分けて並びます。各項目には、それが何かと、前提となる項目が表示されます。分離モデルは、用途別のおすすめの組み合わせを先頭に示します
 - 容量が大きいため、利用者が項目を選んで開始するまでは何もダウンロードせず、事前に容量を表示します
 - 項目ごとと全体の進捗の表示、中断、再試行ができ、各項目は個別に削除できます
 - アプリの更新で取得し直しが必要になった場合は、起動時に 1 回だけ確認します
@@ -75,7 +76,7 @@ macOS では、デスクトップ・書類・ダウンロードなどのフォ�
 - ディレクトリの探索に使うスレッド数 (1〜100)。初回起動時に論理コア数の半分 (最大 4) が設定されます。
   大きくするとクリーンアップの検索が速くなりますが、HDD やネットワークドライブでは逆に遅くなることがあります
 - ffmpeg / ffprobe の実行ファイルパス (未設定時は PATH から自動検出)
-- 保存場所 (ライブラリ・モデル・作業ディレクトリ)。それぞれ独立して変更でき、ライブラリとモデルのディレクトリは中身を選んだフォルダへ移動します
+- 保存場所 (ライブラリ・モデル・作業ディレクトリ)。それぞれ独立して変更でき、ライブラリとモデルのディレクトリは中身を選んだフォルダへ移動します。別の端末から写したものなど、ライブラリやモデルのディレクトリとして使っていたフォルダも選べ、中身をまとめます (両方にある項目は、最終更新日時・ファイル数・合計サイズを比べて上書きするかを選べます)
 - 設定は `~/.kura_toolkit/settings.json` に保存されます
 
 ### 必要な外部ツール
@@ -84,7 +85,7 @@ macOS では、デスクトップ・書類・ダウンロードなどのフォ�
 
 音声機能には、さらに次のものが必要です。
 
-- 伴奏の移調 (音声変換) と字幕の区間への収め込み (読み上げ) には、rubberband フィルタを含む FFmpeg が必要です (Windows は winget の Gyan.FFmpeg、macOS は Homebrew の `ffmpeg` など)。設定中の FFmpeg に無い場合はアプリが案内します
+- 伴奏の移調 (音声変換) と字幕の区間への収め込み (読み上げ) には、rubberband フィルタを含む FFmpeg が必要です (Windows は winget の Gyan.FFmpeg、macOS は Homebrew の `ffmpeg`、Linux はディストリビューションの `ffmpeg` など)。設定中の FFmpeg に無い場合はアプリが案内します
 - Python・パッケージ・モデルのダウンロードのためのインターネット接続 (合計で数 GB。CUDA 版の PyTorch だけで約 1.9〜2.8GB)
 - Windows: [Microsoft Visual C++ 再頒布可能パッケージ](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist) (x64)
 - macOS: 音声分離のパッケージ一式の導入に Xcode Command Line Tools (`xcode-select --install`)
@@ -95,7 +96,7 @@ macOS では、デスクトップ・書類・ダウンロードなどのフォ�
 - macOS 12 (Monterey) 以降
 - Linux (Debian系/RHEL系)
 
-音声分離・音声変換・読み上げは、Windows 10/11 (x64) と Apple Silicon の macOS 14 以降で利用できます。Windows では NVIDIA GPU (CUDA)、macOS では Apple Silicon の GPU (MPS) を使い、使えない場合は CPU で処理します。読み上げのモデルの学習には NVIDIA GPU を搭載した Windows が必要です (作成したモデルは書き出して Mac に取り込めます)。
+音声分離・音声変換・読み上げは、Windows 10/11 (x64)・Apple Silicon の macOS 14 以降・Linux (x64) で利用できます。Windows と Linux では NVIDIA GPU (CUDA)、macOS では Apple Silicon の GPU (MPS) を使い、使えない場合は CPU で処理します。読み上げのモデルの学習には NVIDIA GPU を使える Windows または Linux が必要です (作成したモデルは書き出して Mac に取り込めます)。
 
 注記: 本プロジェクトは Windows ではコード署名を行っていません。SmartScreen が警告を表示する場合は「詳細情報」→「実行」を選択してください。
 
@@ -231,12 +232,14 @@ FFmpeg はアプリに同梱せず、ユーザー環境にインストールさ�
 | Style-Bert-VITS2 (sync-dev-org 版、style-bert-vits2-mk)              | 読み上げとその学習                | AGPL-3.0 (ユーザー辞書関連は LGPL-3.0)                                                                       | https://github.com/sync-dev-org/Style-Bert-VITS2                  |
 | deberta-v2-large-japanese-char-wwm                                   | 読み上げ (日本語 BERT)            | CC BY-SA 4.0                                                                                                 | https://huggingface.co/ku-nlp/deberta-v2-large-japanese-char-wwm  |
 | deberta-v3-large                                                     | 読み上げ (英語 BERT)              | MIT                                                                                                          | https://huggingface.co/microsoft/deberta-v3-large                 |
+| chinese-roberta-wwm-ext-large                                        | 読み上げ (中国語 BERT)            | Apache-2.0                                                                                                   | https://huggingface.co/hfl/chinese-roberta-wwm-ext-large          |
 | NLTK のデータ: CMUdict、averaged_perceptron_tagger                   | 読み上げ (英語の発音推定)         | CMUdict: 用途を問わず利用可 (Carnegie Mellon University) / tagger: MIT                                       | https://github.com/nltk/nltk_data                                 |
 | Style-Bert-VITS2 JP-Extra の事前学習モデル                           | 読み上げの学習                    | AGPL-3.0                                                                                                     | https://huggingface.co/litagin/Style-Bert-VITS2-2.0-base-JP-Extra |
 | Style-Bert-VITS2 の事前学習モデル (Bert-VITS2 2.1 の事前学習モデル)  | 読み上げの学習                    | モデルカードに記載なし。Bert-VITS2 (AGPL-3.0) 由来                                                           | https://huggingface.co/litagin/Style-Bert-VITS2-1.0-base          |
 | WavLM Base+                                                          | 読み上げの学習 (JP-Extra)         | CC BY-SA 3.0                                                                                                 | https://huggingface.co/microsoft/wavlm-base-plus                  |
 | wespeaker-voxceleb-resnet34-LM                                       | 読み上げの学習 (スタイルベクトル) | CC BY 4.0                                                                                                    | https://huggingface.co/pyannote/wespeaker-voxceleb-resnet34-LM    |
 | pyannote.audio                                                       | 読み上げの学習                    | MIT                                                                                                          | https://github.com/pyannote/pyannote-audio                        |
-| JVNV のプリセットの声                                                | 読み上げのプリセット              | CC BY-SA 4.0 (JVNV コーパスから継承)                                                                         | https://huggingface.co/litagin/style_bert_vits2_jvnv              |
+| JVNV の声のモデル                                                    | 読み上げのすぐに使えるモデル      | CC BY-SA 4.0 (JVNV コーパスから継承)                                                                         | https://huggingface.co/litagin/style_bert_vits2_jvnv              |
 | ITA コーパス (同梱)                                                  | 読み上げの学習用の文章 (日本語)   | パブリックドメイン                                                                                           | https://github.com/mmorise/ita-corpus                             |
 | CMU ARCTIC の読み上げ文 (同梱。JSON に変換)                          | 読み上げの学習用の文章 (英語)     | CMU ARCTIC のライセンス ([third_party/cmu-arctic/LICENSE.txt](third_party/cmu-arctic/LICENSE.txt)) | http://www.festvox.org/cmu_arctic/                                |
+| Common Voice の中国語の文 (同梱。400 文を選択)                       | 読み上げの学習用の文章 (中国語)   | CC0 1.0 ([third_party/common-voice-zh/LICENSE.txt](third_party/common-voice-zh/LICENSE.txt)) | https://github.com/common-voice/common-voice                      |

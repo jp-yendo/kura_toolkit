@@ -25,7 +25,8 @@ const IPC_CHANNELS = {
     STORAGE_GET_INFO: 'storage:getInfo',
     STORAGE_MOVE: 'storage:move',
     STORAGE_SET_WORK_DIR: 'storage:setWorkDir',
-    STORAGE_CHECK_MOVE: 'storage:checkMove',
+    STORAGE_CLEANUP_WORK: 'storage:cleanupWork',
+    STORAGE_PLAN_MOVE: 'storage:planMove',
     FFMPEG_DETECT: 'ffmpeg:detect',
     DIALOG_OPEN_FILES: 'dialog:openFiles',
     DIALOG_OPEN_DIRECTORY: 'dialog:openDirectory',
@@ -54,7 +55,7 @@ const IPC_CHANNELS = {
     VOICE_LIBRARY_CHECK_FEATURE: 'voice:library:checkFeature',
     VOICE_LIBRARY_DOWNLOAD: 'voice:library:download',
     VOICE_LIBRARY_REMOVE: 'voice:library:remove',
-    VOICE_LIBRARY_REFRESH_SEPARATOR: 'voice:library:refreshSeparator',
+    VOICE_LIBRARY_ENSURE_SEPARATOR_LIST: 'voice:library:ensureSeparatorList',
     VOICE_LIBRARY_PROBE_SIZES: 'voice:library:probeSizes',
     VOICE_LIBRARY_PENDING_UPDATES: 'voice:library:pendingUpdates',
     VOICE_LIBRARY_MARK_PROMPTED: 'voice:library:markPrompted',
@@ -64,6 +65,7 @@ const IPC_CHANNELS = {
     VOICE_MEDIA_MIX: 'voice:media:mix',
     VOICE_MEDIA_DISCARD: 'voice:media:discard',
     VOICE_MEDIA_DISCARD_WORK: 'voice:media:discardWork',
+    VOICE_MEDIA_TRANSFER: 'voice:media:transfer',
     VOICE_MEDIA_REF: 'voice:media:ref',
     VOICE_SEPARATION_MODELS: 'voice:separation:models',
     VOICE_SEPARATION_RUN: 'voice:separation:run',
@@ -88,17 +90,15 @@ const IPC_CHANNELS = {
     VOICE_PRESETS_SAVE: 'voice:presets:save',
     VOICE_PRESETS_RENAME: 'voice:presets:rename',
     VOICE_PRESETS_REMOVE: 'voice:presets:remove',
-    VOICE_TRAINING_RVC_DATASET: 'voice:training:rvcDataset',
-    VOICE_TRAINING_RVC_ADD_FILES: 'voice:training:rvcAddFiles',
-    VOICE_TRAINING_RVC_ADD_RECORDING: 'voice:training:rvcAddRecording',
-    VOICE_TRAINING_RVC_REMOVE: 'voice:training:rvcRemove',
-    VOICE_TRAINING_RVC_CLEAR: 'voice:training:rvcClear',
+    VOICE_TRAINING_SETS_LIST: 'voice:trainingSets:list',
+    VOICE_TRAINING_SETS_GET: 'voice:trainingSets:get',
+    VOICE_TRAINING_SETS_CREATE: 'voice:trainingSets:create',
+    VOICE_TRAINING_SETS_RENAME: 'voice:trainingSets:rename',
+    VOICE_TRAINING_SETS_REMOVE: 'voice:trainingSets:remove',
+    VOICE_TRAINING_SETS_ADD_RECORDING: 'voice:trainingSets:addRecording',
+    VOICE_TRAINING_SETS_ADD_FILES: 'voice:trainingSets:addFiles',
+    VOICE_TRAINING_SETS_REMOVE_AUDIO: 'voice:trainingSets:removeAudio',
     VOICE_TRAINING_RVC_START: 'voice:training:rvcStart',
-    VOICE_TRAINING_TTS_DRAFT: 'voice:training:ttsDraft',
-    VOICE_TRAINING_TTS_SAVE_RECORDING: 'voice:training:ttsSaveRecording',
-    VOICE_TRAINING_TTS_SET_FILE: 'voice:training:ttsSetFile',
-    VOICE_TRAINING_TTS_REMOVE: 'voice:training:ttsRemove',
-    VOICE_TRAINING_TTS_CLEAR: 'voice:training:ttsClear',
     VOICE_TRAINING_TTS_START: 'voice:training:ttsStart',
     VOICE_EXPORT_RUN: 'voice:export:run',
     VOICE_EXPORT_EXISTING: 'voice:export:existing',
@@ -146,9 +146,11 @@ const api: IpcApi = {
     },
     storage: {
         getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.STORAGE_GET_INFO),
-        move: (jobId, kind, targetDir) => ipcRenderer.invoke(IPC_CHANNELS.STORAGE_MOVE, jobId, kind, targetDir),
+        move: (jobId, kind, targetDir, decisions) =>
+            ipcRenderer.invoke(IPC_CHANNELS.STORAGE_MOVE, jobId, kind, targetDir, decisions),
         setWorkDir: dir => ipcRenderer.invoke(IPC_CHANNELS.STORAGE_SET_WORK_DIR, dir),
-        checkMove: (kind, targetDir) => ipcRenderer.invoke(IPC_CHANNELS.STORAGE_CHECK_MOVE, kind, targetDir),
+        cleanupWork: () => ipcRenderer.invoke(IPC_CHANNELS.STORAGE_CLEANUP_WORK),
+        planMove: (kind, targetDir) => ipcRenderer.invoke(IPC_CHANNELS.STORAGE_PLAN_MOVE, kind, targetDir),
     },
     ffmpeg: {
         async detect() {
@@ -246,7 +248,7 @@ const api: IpcApi = {
             checkFeature: (feature, extra) => invoke(IPC_CHANNELS.VOICE_LIBRARY_CHECK_FEATURE, feature, extra),
             download: (jobId, ids) => invoke(IPC_CHANNELS.VOICE_LIBRARY_DOWNLOAD, jobId, ids),
             remove: (ids, options) => invoke(IPC_CHANNELS.VOICE_LIBRARY_REMOVE, ids, options),
-            refreshSeparatorModels: () => invoke(IPC_CHANNELS.VOICE_LIBRARY_REFRESH_SEPARATOR),
+            ensureSeparatorModelList: () => invoke(IPC_CHANNELS.VOICE_LIBRARY_ENSURE_SEPARATOR_LIST),
             probeSeparatorSizes: () => invoke(IPC_CHANNELS.VOICE_LIBRARY_PROBE_SIZES),
             getPendingUpdates: () => invoke(IPC_CHANNELS.VOICE_LIBRARY_PENDING_UPDATES),
             markUpdatePrompted: () => invoke(IPC_CHANNELS.VOICE_LIBRARY_MARK_PROMPTED),
@@ -258,12 +260,14 @@ const api: IpcApi = {
                 invoke(IPC_CHANNELS.VOICE_MEDIA_PREPARE, jobId, workKey, sourcePath),
             mix: (jobId, workKey, paths, channels) =>
                 invoke(IPC_CHANNELS.VOICE_MEDIA_MIX, jobId, workKey, paths, channels),
-            discard: paths => invoke(IPC_CHANNELS.VOICE_MEDIA_DISCARD, paths),
+            discard: (workKey, paths) => invoke(IPC_CHANNELS.VOICE_MEDIA_DISCARD, workKey, paths),
+            transfer: (fromWorkKey, toWorkKey, paths) =>
+                invoke(IPC_CHANNELS.VOICE_MEDIA_TRANSFER, fromWorkKey, toWorkKey, paths),
             discardWork: workKey => invoke(IPC_CHANNELS.VOICE_MEDIA_DISCARD_WORK, workKey),
-            ref: path => invoke(IPC_CHANNELS.VOICE_MEDIA_REF, path),
+            ref: (workKey, path) => invoke(IPC_CHANNELS.VOICE_MEDIA_REF, workKey, path),
         },
         separation: {
-            listModels: refresh => invoke(IPC_CHANNELS.VOICE_SEPARATION_MODELS, refresh),
+            listModels: () => invoke(IPC_CHANNELS.VOICE_SEPARATION_MODELS),
             run: (jobId, request) => invoke(IPC_CHANNELS.VOICE_SEPARATION_RUN, jobId, request),
         },
         conversion: {
@@ -296,25 +300,27 @@ const api: IpcApi = {
             rename: (kind, id, name) => invoke(IPC_CHANNELS.VOICE_PRESETS_RENAME, kind, id, name),
             remove: (kind, id) => invoke(IPC_CHANNELS.VOICE_PRESETS_REMOVE, kind, id),
         },
+        trainingSets: {
+            list: feature => invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_LIST, feature),
+            get: (feature, id) => invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_GET, feature, id),
+            create: (feature, name, language) =>
+                invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_CREATE, feature, name, language),
+            rename: (feature, id, name) => invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_RENAME, feature, id, name),
+            remove: (feature, id) => invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_REMOVE, feature, id),
+            addRecording: (feature, id, wav, target) =>
+                invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_ADD_RECORDING, feature, id, wav, target),
+            addFiles: (jobId, feature, id, paths, sentenceId) =>
+                invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_ADD_FILES, jobId, feature, id, paths, sentenceId),
+            removeAudio: (feature, id, audioId) =>
+                invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_REMOVE_AUDIO, feature, id, audioId),
+        },
         training: {
-            rvcDataset: () => invoke(IPC_CHANNELS.VOICE_TRAINING_RVC_DATASET),
-            rvcAddFiles: (jobId, paths) => invoke(IPC_CHANNELS.VOICE_TRAINING_RVC_ADD_FILES, jobId, paths),
-            rvcAddRecording: (wav, name) => invoke(IPC_CHANNELS.VOICE_TRAINING_RVC_ADD_RECORDING, wav, name),
-            rvcRemove: id => invoke(IPC_CHANNELS.VOICE_TRAINING_RVC_REMOVE, id),
-            rvcClear: () => invoke(IPC_CHANNELS.VOICE_TRAINING_RVC_CLEAR),
-            rvcStart: (jobId, name) => invoke(IPC_CHANNELS.VOICE_TRAINING_RVC_START, jobId, name),
-            ttsDraft: (language, set) => invoke(IPC_CHANNELS.VOICE_TRAINING_TTS_DRAFT, language, set),
-            ttsSaveRecording: (language, set, sentenceId, wav) =>
-                invoke(IPC_CHANNELS.VOICE_TRAINING_TTS_SAVE_RECORDING, language, set, sentenceId, wav),
-            ttsSetFile: (jobId, language, set, sentenceId, path) =>
-                invoke(IPC_CHANNELS.VOICE_TRAINING_TTS_SET_FILE, jobId, language, set, sentenceId, path),
-            ttsRemove: (language, set, sentenceId) =>
-                invoke(IPC_CHANNELS.VOICE_TRAINING_TTS_REMOVE, language, set, sentenceId),
-            ttsClear: (language, set) => invoke(IPC_CHANNELS.VOICE_TRAINING_TTS_CLEAR, language, set),
+            rvcStart: (jobId, setId, name) => invoke(IPC_CHANNELS.VOICE_TRAINING_RVC_START, jobId, setId, name),
             ttsStart: (jobId, options) => invoke(IPC_CHANNELS.VOICE_TRAINING_TTS_START, jobId, options),
         },
         export: {
-            run: (jobId, items, settings) => invoke(IPC_CHANNELS.VOICE_EXPORT_RUN, jobId, items, settings),
+            run: (jobId, workKey, items, settings) =>
+                invoke(IPC_CHANNELS.VOICE_EXPORT_RUN, jobId, workKey, items, settings),
             existing: paths => invoke(IPC_CHANNELS.VOICE_EXPORT_EXISTING, paths),
         },
     },

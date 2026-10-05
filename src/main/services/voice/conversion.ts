@@ -10,7 +10,7 @@ import { getWorker } from './python-worker';
 import { RVC_EMBEDDER_ITEMS } from './spec';
 import { withGpu } from './gpu-lock';
 import { rvcModelFiles } from './voice-models';
-import { isInsideWorkRoot, newId, produceFile, removeTemp, sessionDir, withJobTemp } from '../work-dir';
+import { discardLater, isInsideWork, keepWorkFile, newId, produceFile, sessionDir, withJobTemp } from '../work-dir';
 import type {
     ConversionCandidate,
     ConversionRunRequest,
@@ -42,7 +42,10 @@ function accompanimentShift(workKey: string, accompaniment: string, pitch: numbe
 async function shiftedAccompaniment(workKey: string, accompaniment: string, pitch: number, jobId: string) {
     const output = accompanimentShift(workKey, accompaniment, pitch);
     if (!output) return accompaniment;
-    if (fs.existsSync(output)) return output;
+    if (fs.existsSync(output)) {
+        keepWorkFile(output);
+        return output;
+    }
     await produceFile(output, target => pitchShift(accompaniment, target, pitch, jobId));
     await removeOtherShifts(output);
     return output;
@@ -57,15 +60,17 @@ async function removeOtherShifts(keep: string): Promise<void> {
     for (const name of fs.readdirSync(dir)) {
         if (name === keepName || !name.startsWith(prefix) || !name.endsWith('.wav')) continue;
         if (!Number.isFinite(Number(name.slice(prefix.length, -'.wav'.length)))) continue;
-        await removeTemp(path.join(dir, name));
+        discardLater(path.join(dir, name));
     }
 }
 
 export async function runConversion(jobId: string, request: ConversionRunRequest): Promise<ConversionCandidate> {
     startJob(jobId);
     try {
-        if (!isInsideWorkRoot(request.vocals)) throw new Error('INVALID_PATH');
-        if (request.accompaniment && !isInsideWorkRoot(request.accompaniment)) throw new Error('INVALID_PATH');
+        if (!isInsideWork(request.workKey, request.vocals)) throw new Error('INVALID_PATH');
+        if (request.accompaniment && !isInsideWork(request.workKey, request.accompaniment)) {
+            throw new Error('INVALID_PATH');
+        }
         const model = rvcModelFiles(request.voiceId);
         const embedder = model.rvc.embedder;
         const embedderItem = RVC_EMBEDDER_ITEMS[embedder];
@@ -84,7 +89,7 @@ export async function runConversion(jobId: string, request: ConversionRunRequest
             return await convertInto(jobId, request, model, id, dir, sampleRate, channels);
         } catch (error) {
             // 失敗・キャンセルした場合は作りかけの候補を消す
-            await removeTemp(dir);
+            discardLater(dir);
             throw error;
         }
     } finally {
@@ -191,8 +196,10 @@ async function convertInto(
 export async function renderMix(jobId: string, request: MixRenderRequest): Promise<MediaRef> {
     startJob(jobId);
     try {
-        if (!isInsideWorkRoot(request.vocals)) throw new Error('INVALID_PATH');
-        if (request.accompaniment && !isInsideWorkRoot(request.accompaniment)) throw new Error('INVALID_PATH');
+        if (!isInsideWork(request.workKey, request.vocals)) throw new Error('INVALID_PATH');
+        if (request.accompaniment && !isInsideWork(request.workKey, request.accompaniment)) {
+            throw new Error('INVALID_PATH');
+        }
         // 同じ組み合わせの試聴用の音が既にあれば、移調も合成もせずにそれを使う
         const accompaniment = request.accompaniment
             ? (accompanimentShift(request.workKey, request.accompaniment, request.pitch) ?? request.accompaniment)
@@ -203,7 +210,8 @@ export async function renderMix(jobId: string, request: MixRenderRequest): Promi
             .digest('hex')
             .slice(0, 16);
         const output = path.join(sessionDir(request.workKey, 'mix'), `${key}.wav`);
-        if (!fs.existsSync(output)) {
+        if (fs.existsSync(output)) keepWorkFile(output);
+        else {
             const vocalsInfo = await probeAudio(request.vocals, jobId);
             let sampleRate = vocalsInfo.sampleRate;
             let channels = vocalsInfo.channels;

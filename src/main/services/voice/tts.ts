@@ -8,11 +8,16 @@ import { mediaRef } from './media';
 import { modelPaths } from './paths';
 import { getWorker } from './python-worker';
 import { withGpu } from './gpu-lock';
-import { TTS_BERT_DIRS, TTS_ENGINE_ITEMS } from './spec';
+import { TTS_BERT_DIRS } from './spec';
 import { getVoice, ttsModelFiles } from './voice-models';
-import { newId, removeTemp, sessionDir } from '../work-dir';
+import { newId, discardLater, sessionDir } from '../work-dir';
 import { parseControlTags, type SpeechRun, type TagFix, type TagIssue } from '../../../shared/voice/control-tags';
-import { applySymbolReadings, type VoiceLanguage } from '../../../shared/voice/languages';
+import {
+    applySymbolReadings,
+    LANGUAGE_DEFINITIONS,
+    TTS_LANGUAGE_MODEL_ITEMS,
+    type VoiceLanguage,
+} from '../../../shared/voice/languages';
 import { parseSubtitles, type SubtitleCue } from '../../../shared/voice/subtitles';
 import type {
     SpeedupConfirmation,
@@ -30,7 +35,8 @@ const SPEEDUP_CONFIRM_THRESHOLD = 1.3;
 type SpeechPart =
     | { text: string }
     | { surface: string; kataTone: [string, number][]; reading: string }
-    | { surface: string; words: string[][] };
+    | { surface: string; words: string[][] }
+    | { surface: string; pinyin: [string, number][] };
 
 type Piece =
     | { kind: 'speech'; parts: SpeechPart[]; rate: number; pitch: number; volume: number }
@@ -66,7 +72,8 @@ function buildSegments(
             pieces.push({ kind: 'speech', parts: [part], ...prosody });
         }
     };
-    const joiner = language === 'en' ? ' ' : '';
+    // 改行をまたいだ単語がつながらないよう、単語を空白で区切る言語では改行を空白にする
+    const joiner = LANGUAGE_DEFINITIONS[language].spaceAroundReading ? ' ' : '';
     for (const run of runs) {
         if (run.kind === 'break') {
             current().push({ kind: 'silence', ms: run.ms });
@@ -90,6 +97,8 @@ function buildSegments(
         }
         if (run.alphabet === 'x-kana') {
             addPart({ surface: run.surface, kataTone: run.kataTone, reading: run.reading }, run.prosody);
+        } else if (run.alphabet === 'x-pinyin') {
+            addPart({ surface: run.surface.trim(), pinyin: run.pinyin }, run.prosody);
         } else {
             addPart({ surface: run.surface, words: run.words }, run.prosody);
         }
@@ -118,7 +127,7 @@ export function cancelTtsConfirmation(token: string): void {
     const pending = pendingTimelines.get(token);
     if (!pending) return;
     pendingTimelines.delete(token);
-    void removeTemp(pending.dir);
+    discardLater(pending.dir);
 }
 
 // 確認を済ませた再実行で、確認を求めたときの合成結果を受け取る。確認 ID に対応する結果が無い場合と、
@@ -128,7 +137,7 @@ async function takePendingTimeline(token: string, key: string): Promise<PendingT
     if (!pending) throw new Error('TTS_CONFIRMATION_EXPIRED');
     pendingTimelines.delete(token);
     if (pending.key !== key) {
-        await removeTemp(pending.dir);
+        discardLater(pending.dir);
         throw new Error('TTS_CONFIRMATION_EXPIRED');
     }
     return pending;
@@ -150,13 +159,14 @@ function resolveModel(request: TtsRunRequest): ResolvedModel {
     if (meta.engine !== request.engine) throw new Error('TTS_ENGINE_MISMATCH');
     if (!meta.languages.includes(request.language)) throw new Error('TTS_LANGUAGE_UNSUPPORTED');
     if (request.engine === 'jp-extra' && request.language !== 'ja') throw new Error('TTS_LANGUAGE_UNSUPPORTED');
-    const requiredItem = request.language === 'ja' ? TTS_ENGINE_ITEMS['jp-extra'] : TTS_ENGINE_ITEMS.multilingual;
-    if (!isItemInstalled(requiredItem)) throw new Error(`TTS_ENGINE_NOT_INSTALLED: ${request.engine}`);
+    // 読み上げには、読み上げる言語の BERT モデルだけを使う (声の形式によらない)
+    const requiredItem = TTS_LANGUAGE_MODEL_ITEMS[request.language];
+    if (!isItemInstalled(requiredItem)) throw new Error(`MODEL_REQUIRED: ${requiredItem}`);
     const files = ttsModelFiles(voice);
     return {
         ...files,
         sampleRate: readSampleRate(files.config),
-        voiceName: voice.info.name || voice.info.presetName || '',
+        voiceName: voice.info.name || voice.info.distributedName || '',
     };
 }
 
@@ -193,6 +203,7 @@ async function synthesize(
                 berts: {
                     ja: models.file(TTS_BERT_DIRS.ja),
                     en: models.file(TTS_BERT_DIRS.en),
+                    zh: models.file(TTS_BERT_DIRS.zh),
                 },
                 model: { weights: model.weights, config: model.config, style: model.style },
                 params: request.params,
@@ -248,7 +259,7 @@ export async function runTts(jobId: string, request: TtsRunRequest): Promise<Tts
             keep = result.status !== 'invalid';
             return result;
         } finally {
-            if (!keep) await removeTemp(dir);
+            if (!keep) discardLater(dir);
         }
     } finally {
         finishJob(jobId);
@@ -283,7 +294,7 @@ async function synthesizeInto(
             if (index < results.length - 1) cursor += request.params.paragraphPause;
         });
         await assemble(jobId, model, placements, output, cursor);
-        await removeTemp(path.join(dir, 'parts'));
+        discardLater(path.join(dir, 'parts'));
         progress(100);
         return {
             status: 'done',
@@ -338,7 +349,7 @@ async function runTimeline(
         return await placeTimeline(jobId, request, key, model, id, dir, output, progress, cues, segments, pending);
     } finally {
         // 確認を求めたときの合成結果は、続きの処理が終われば成否を問わず不要になる
-        if (pending) await removeTemp(pending.dir);
+        if (pending) discardLater(pending.dir);
     }
 }
 
@@ -435,7 +446,7 @@ async function placeTimeline(
         end = Math.max(end, cue.end + offset, start + result.duration);
     });
     await assemble(jobId, model, placements, output, end);
-    for (const sub of ['first', 'fast']) await removeTemp(path.join(dir, sub));
+    for (const sub of ['first', 'fast']) discardLater(path.join(dir, sub));
     progress(100);
     return {
         status: 'done',

@@ -1,7 +1,7 @@
 // 音声分離・音声変換・読み上げの共有型 (main / preload / renderer)。
 // Node / DOM に依存させない。
 
-import type { SymbolReading, TtsEngineId, VoiceLanguage, CorpusSetId } from './languages';
+import type { SymbolReading, TtsEngineId, VoiceLanguage } from './languages';
 import type { TagFix, TagIssue } from './control-tags';
 
 // ---------------------------------------------------------------------------
@@ -68,7 +68,7 @@ export type ExportResult = {
 // 実行環境とライブラリ (ダウンロード・削除)
 // ---------------------------------------------------------------------------
 
-export type VoicePlatformKey = 'win32-x64' | 'darwin-arm64' | 'unsupported';
+export type VoicePlatformKey = 'win32-x64' | 'darwin-arm64' | 'linux-x64' | 'unsupported';
 
 // PyTorch の CUDA 版の種類 (GPU の世代とドライバーで決める)
 export type CudaFlavor = 'cu130' | 'cu128' | 'cu126';
@@ -90,7 +90,7 @@ export type VoicePlatformInfo = {
     gpu: GpuInfo;
     // Windows で Microsoft Visual C++ 再頒布可能パッケージが見つからない
     vcRuntimeMissing: boolean;
-    // 読み上げのモデルの学習ができる環境か (NVIDIA GPU を搭載した Windows のみ)
+    // 読み上げのモデルの学習ができる環境か (NVIDIA GPU を使える Windows と Linux のみ)
     ttsTrainingAvailable: boolean;
     libraryDir: string;
     modelDir: string;
@@ -130,18 +130,32 @@ export type LibraryItem = {
     // この環境で取得できるか
     available: boolean;
     unavailableReasonKey?: string;
+    // すぐに使えるモデル (読み上げ) が読める言語
+    readsLanguages?: VoiceLanguage[];
     separator?: {
         category: SeparationCategory;
-        arch: SeparationArch | 'Ensemble';
+        arch: SeparationArch;
         stems: string[];
+        // 出力ごとの分離性能 (SDR)。分からない場合は空
+        sdr: Record<string, number | null>;
     };
+};
+
+// 分離モデルの検証済みの組み合わせ (アンサンブル)。ダウンロードの画面で用途別のおすすめとして示す
+export type SeparatorEnsembleInfo = {
+    id: string;
+    name: string;
+    category: SeparationCategory;
+    // 組み合わせるモデルの項目 ID
+    models: string[];
 };
 
 export type LibraryStatus = {
     platform: VoicePlatformInfo;
     items: LibraryItem[];
-    // 分離モデルの一覧を取得済みか (分離のパッケージ一式の導入後に取得できる)
+    // 分離モデルの一覧があるか (分離のパッケージ一式の導入後に作る)
     separatorModelsListed: boolean;
+    separatorEnsembles: SeparatorEnsembleInfo[];
 };
 
 type LibraryProgressState = 'waiting' | 'downloading' | 'installing' | 'done' | 'failed' | 'cancelled';
@@ -199,11 +213,10 @@ export type SeparationModel = {
     installed: boolean;
 };
 
-export type EnsemblePreset = {
+export type VerifiedEnsemble = {
     itemId: string;
     id: string;
     name: string;
-    description: string;
     models: string[];
     algorithm: string;
     category: SeparationCategory;
@@ -226,7 +239,7 @@ export type EnsembleAlgorithm = (typeof ENSEMBLE_ALGORITHMS)[number];
 
 export type SeparationModelList = {
     models: SeparationModel[];
-    presets: EnsemblePreset[];
+    ensembles: VerifiedEnsemble[];
 };
 
 type MdxParams = {
@@ -275,7 +288,7 @@ export type SeparationParams = {
 
 export type SeparationMethod =
     | { kind: 'model'; filename: string }
-    | { kind: 'ensemblePreset'; presetId: string }
+    | { kind: 'verifiedEnsemble'; ensembleId: string }
     | { kind: 'ensemble'; filenames: string[]; algorithm: EnsembleAlgorithm }
     // ステレオの左右差で中央の音を打ち消す従来手法 (ffmpeg)
     | { kind: 'centerCancel' };
@@ -406,7 +419,7 @@ export type SeparationPresetParams = {
 // 声のモデル
 // ---------------------------------------------------------------------------
 
-export type VoiceModelCategory = 'trained' | 'imported' | 'preset';
+export type VoiceModelCategory = 'trained' | 'imported' | 'ready';
 
 export type RvcModelMeta = {
     version: string;
@@ -433,9 +446,9 @@ export type VoiceModelInfo = {
     name: string;
     category: VoiceModelCategory;
     createdAt: number;
-    // プリセットの元になったダウンロード項目と、配布時の名前 (name が空の間はこれから表示名を作る)
-    presetItemId?: string;
-    presetName?: string;
+    // すぐに使えるモデルの元になったダウンロード項目と、配布時の名前 (name が空の間はこれから表示名を作る)
+    readyItemId?: string;
+    distributedName?: string;
     rvc?: RvcModelMeta;
     tts?: TtsModelMeta;
 };
@@ -548,29 +561,44 @@ export type TtsRunResult =
 // 学習
 // ---------------------------------------------------------------------------
 
-// 学習用の音声として指定できる形式。指定したファイルは変換せずに元の場所から直接読むため、
-// 学習の処理 (Applio の前処理・読み上げの前処理) がそのまま読める形式に限る
-export const TRAINING_AUDIO_EXTENSIONS = ['wav', 'mp3', 'flac', 'ogg'];
-
-export type DatasetItem = {
+// 学習セット (学習用の音声に名前を付けて残したもの)。声のモデルの機能ごとに持つ。
+// 読み上げの学習セットは言語を 1 つ持ち、その言語の読み上げ文の文ごとに音声を 1 つ持てる
+export type TrainingSetSummary = {
     id: string;
+    feature: VoiceModelFeature;
     name: string;
+    // 読み上げの学習セットの言語 (音声変換の学習セットには無い)
+    language?: VoiceLanguage;
+    // 音声の数と合計の長さ
+    audioCount: number;
     durationSec: number;
-    // アプリ内で録音したもの (一覧から外すと消え、元に戻せない)
-    recorded: boolean;
+    createdAt: number;
+    updatedAt: number;
+};
+
+// 学習セットの音声。録音も指定したファイルも、学習セットの中に同じ形式の WAV として保存したもの
+export type TrainingAudio = {
+    id: string;
+    // 表示名 (録音は録音した日時、ファイルは元のファイル名)
+    name: string;
+    source: 'recording' | 'file';
+    // 読み上げの学習セットで、この音声を読み上げた文の ID
+    sentenceId?: string;
+    durationSec: number;
     media: MediaRef;
 };
 
-type TtsTrainingSentence = {
+// 読み上げの学習用の文 (言語の読み上げ文)
+export type TrainingSentence = {
     id: string;
     text: string;
-    recording: DatasetItem | null;
 };
 
-export type TtsTrainingDraft = {
-    language: VoiceLanguage;
-    corpusSet: CorpusSetId;
-    sentences: TtsTrainingSentence[];
+export type TrainingSetDetail = {
+    summary: TrainingSetSummary;
+    audios: TrainingAudio[];
+    // 読み上げの学習セットの言語の読み上げ文 (音声変換の学習セットでは空)
+    sentences: TrainingSentence[];
 };
 
 export type TrainingProgress = {

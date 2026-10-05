@@ -8,6 +8,7 @@ import { cancelAllJobs, setJobWindow } from './services/job-manager';
 import { registerMediaProtocol, registerMediaSchemePrivileges } from './services/voice/media-protocol';
 import { removeLeftoverWorkFiles } from './services/work-dir';
 import { removeVoiceStagingLeftovers } from './services/voice/voice-models';
+import { removeTrainingSetLeftovers } from './services/voice/training-sets';
 import { setGpuSwitchHandler } from './services/voice/gpu-lock';
 import { stopAllWorkers, unloadOtherWorkers } from './services/voice/python-worker';
 
@@ -94,9 +95,10 @@ app.whenReady().then(async () => {
     // 初回起動時だけ、探索のスレッド数の既定値を決めて保存する
     initializeSearchThreads();
 
-    // 前回の起動が残した一時ファイルと、作りかけのまま残った声のモデルを裏で消す (起動は待たせない)
+    // 前回の起動が残した一時ファイルと、作りかけのまま残った声のモデル・学習セットの音声を裏で消す (起動は待たせない)
     removeLeftoverWorkFiles();
     removeVoiceStagingLeftovers();
+    removeTrainingSetLeftovers();
     // 音声機能: プレビュー再生用のスキームを登録する
     registerMediaProtocol();
     // GPU を別のコンポーネントへ渡す前に、他の常駐プロセスが持つモデルを手放させる

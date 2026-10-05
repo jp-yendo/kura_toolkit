@@ -304,6 +304,7 @@ def patch_sbv2_model_paths() -> None:
     pretrained = os.environ["KURA_SBV2_PRETRAINED"]
     DEFAULT_BERT_MODEL_PATHS[Languages.JP] = models / "bert" / "deberta-v2-large-japanese-char-wwm"
     DEFAULT_BERT_MODEL_PATHS[Languages.EN] = models / "bert" / "deberta-v3-large"
+    DEFAULT_BERT_MODEL_PATHS[Languages.ZH] = models / "bert" / "chinese-roberta-wwm-ext-large"
 
     original = sbv2_safetensors.load_safetensors
     initial = {"G_0.safetensors", "D_0.safetensors", "DUR_0.safetensors", "WD_0.safetensors"}

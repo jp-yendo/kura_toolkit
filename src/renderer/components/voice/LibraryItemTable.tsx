@@ -1,4 +1,6 @@
+import React from 'react';
 import {
+    Box,
     Checkbox,
     Chip,
     IconButton,
@@ -13,29 +15,73 @@ import {
 } from '@mui/material';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import SubdirectoryArrowRightIcon from '@mui/icons-material/SubdirectoryArrowRight';
 import { useTranslation } from 'react-i18next';
 import Panel from '../common/Panel';
-import { itemLabel } from './libraryItems';
-import { formatBytes } from './voiceFormat';
+import { itemLabel, type RequirementRow } from './libraryItems';
+import { SEPARATOR_ARCH_LABELS, separatorNoteKey, separatorOutputs } from './separatorModelNotes';
+import { formatBytes, stemName } from './voiceFormat';
 import type { LibraryItem, LibraryProgress } from '@shared/voice/types';
 
-const STATUS_COLORS: Record<LibraryItem['status'], 'default' | 'success' | 'warning' | 'error'> = {
+export const STATUS_COLORS: Record<LibraryItem['status'], 'default' | 'success' | 'warning' | 'error'> = {
     missing: 'default',
     installed: 'success',
     outdated: 'warning',
     broken: 'error',
 };
 
-type RowProps = {
+const captionSx = { display: 'block', lineHeight: 1.5 } as const;
+
+// 分離モデルの概要 (何をするモデルか・方式・出力・分離の品質)
+function SeparatorDetails({
+    item,
+    separator,
+}: {
     item: LibraryItem;
+    separator: NonNullable<LibraryItem['separator']>;
+}) {
+    const { t } = useTranslation();
+    const separatorText = t('voice.common.listSeparator');
+    const note = separatorNoteKey(item);
+    const outputs = separatorOutputs(item)
+        .map(stem => stemName(t, stem))
+        .join(separatorText);
+    const quality = Object.entries(separator.sdr)
+        .filter(([, value]) => value !== null)
+        .map(([stem, value]) => `${stemName(t, stem)} ${Number(value).toFixed(1)}`)
+        .join(' / ');
+    return (
+        <>
+            {note && (
+                <Typography variant='caption' color='text.secondary' sx={captionSx}>
+                    {t(note)}
+                </Typography>
+            )}
+            <Typography variant='caption' color='text.secondary' sx={captionSx}>
+                {t('voice.library.separatorArch', { arch: SEPARATOR_ARCH_LABELS[separator.arch] })}
+                {outputs && ` / ${t('voice.library.separatorOutputs', { outputs })}`}
+            </Typography>
+            {quality && (
+                <Typography variant='caption' color='text.secondary' sx={captionSx}>
+                    {t('voice.separation.quality', { values: quality })}
+                </Typography>
+            )}
+        </>
+    );
+}
+
+type RowProps = {
+    row: RequirementRow;
     checked: boolean;
-    onToggle(): void;
-    onRemove(): void;
+    toggle(id: string): void;
+    onRemove(ids: string[]): void;
     progress?: LibraryProgress;
 };
 
-function ItemRow({ item, checked, onToggle, onRemove, progress }: RowProps) {
+// 1 行。選択を切り替えても、変わった行だけを描き直す (分離モデルは 100 以上並ぶため)
+export const ItemRow = React.memo(function ItemRow({ row, checked, toggle, onRemove, progress }: RowProps) {
     const { t } = useTranslation();
+    const { item, depth, conditionKey, prerequisites } = row;
     const removable = item.status !== 'missing';
     return (
         <TableRow hover>
@@ -44,27 +90,39 @@ function ItemRow({ item, checked, onToggle, onRemove, progress }: RowProps) {
                     size='small'
                     checked={checked}
                     disabled={!item.available}
-                    onChange={onToggle}
+                    onChange={() => toggle(item.id)}
                     slotProps={{ input: { 'aria-label': itemLabel(t, item) } }}
                 />
             </TableCell>
-            <TableCell sx={{ minWidth: 0 }}>
-                <Typography variant='body2' sx={{ fontWeight: 600 }}>
-                    {itemLabel(t, item)}
-                </Typography>
+            <TableCell sx={{ minWidth: 0, pl: 1 + depth * 3 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    {depth > 0 && <SubdirectoryArrowRightIcon sx={{ fontSize: 16, color: 'text.secondary' }} />}
+                    <Typography variant='body2' sx={{ fontWeight: 600 }}>
+                        {itemLabel(t, item)}
+                    </Typography>
+                </Box>
+                {conditionKey && (
+                    <Typography variant='caption' color='primary' sx={captionSx}>
+                        {t(conditionKey)}
+                    </Typography>
+                )}
                 {item.descriptionKey && (
-                    <Typography variant='caption' color='text.secondary' sx={{ display: 'block', lineHeight: 1.5 }}>
+                    <Typography variant='caption' color='text.secondary' sx={captionSx}>
                         {t(item.descriptionKey)}
                     </Typography>
                 )}
-                {item.separator && (
-                    <Typography variant='caption' color='text.secondary' sx={{ display: 'block' }}>
-                        {item.separator.arch}
-                        {item.separator.stems.length > 0 ? ` / ${item.separator.stems.join(', ')}` : ''}
+                {item.separator && <SeparatorDetails item={item} separator={item.separator} />}
+                {prerequisites.length > 0 && (
+                    <Typography variant='caption' color='text.secondary' sx={captionSx}>
+                        {t('voice.library.prerequisites', {
+                            items: prerequisites
+                                .map(entry => itemLabel(t, entry))
+                                .join(t('voice.common.listSeparator')),
+                        })}
                     </Typography>
                 )}
                 {!item.available && item.unavailableReasonKey && (
-                    <Typography variant='caption' color='warning.main' sx={{ display: 'block' }}>
+                    <Typography variant='caption' color='warning.main' sx={captionSx}>
                         {t(item.unavailableReasonKey)}
                     </Typography>
                 )}
@@ -74,21 +132,21 @@ function ItemRow({ item, checked, onToggle, onRemove, progress }: RowProps) {
                     </Typography>
                 )}
             </TableCell>
-            <TableCell sx={{ whiteSpace: 'nowrap', width: 130 }} align='right'>
+            <TableCell sx={{ whiteSpace: 'nowrap' }} align='right'>
                 <Typography variant='body2'>
                     {item.sizeEstimated && item.sizeBytes
                         ? t('voice.library.approx', { size: formatBytes(item.sizeBytes) })
                         : formatBytes(item.sizeBytes)}
                 </Typography>
             </TableCell>
-            <TableCell sx={{ whiteSpace: 'nowrap', width: 120 }}>
+            <TableCell sx={{ whiteSpace: 'nowrap' }}>
                 <Chip
                     size='small'
                     color={STATUS_COLORS[item.status]}
                     label={t(`voice.library.status.${item.status}`)}
                 />
             </TableCell>
-            <TableCell sx={{ width: 190 }}>
+            <TableCell sx={{ wordBreak: 'break-word' }}>
                 {item.license && (
                     <Typography variant='caption' sx={{ display: 'block' }}>
                         {item.license.url ? (
@@ -122,10 +180,14 @@ function ItemRow({ item, checked, onToggle, onRemove, progress }: RowProps) {
                     </Typography>
                 )}
             </TableCell>
-            <TableCell padding='checkbox' sx={{ width: 48 }}>
+            <TableCell padding='checkbox'>
                 {removable ? (
                     <Tooltip title={t('voice.library.delete')}>
-                        <IconButton size='small' aria-label={t('voice.library.delete')} onClick={onRemove}>
+                        <IconButton
+                            size='small'
+                            aria-label={t('voice.library.delete')}
+                            onClick={() => onRemove([item.id])}
+                        >
                             <DeleteOutlineIcon fontSize='small' />
                         </IconButton>
                     </Tooltip>
@@ -133,23 +195,23 @@ function ItemRow({ item, checked, onToggle, onRemove, progress }: RowProps) {
             </TableCell>
         </TableRow>
     );
-}
+});
 
-type TableProps = {
-    items: LibraryItem[];
-    selected: Set<string>;
-    toggle(id: string): void;
-    onRemove(ids: string[]): void;
-    progress: Record<string, LibraryProgress>;
-    maxHeight?: number;
-};
-
-// ダウンロード項目の一覧 (選択・状態・ライセンスと配布元・個別の削除)
-export default function LibraryItemTable({ items, selected, toggle, onRemove, progress, maxHeight }: TableProps) {
+// ダウンロードの画面の表の枠 (列の構成と幅をすべての表で揃える)
+export function LibraryTableShell({ children }: { children: React.ReactNode }) {
     const { t } = useTranslation();
     return (
-        <Panel disablePadding sx={{ overflow: 'auto', maxHeight }}>
-            <Table size='small' stickyHeader={maxHeight !== undefined}>
+        <Panel disablePadding sx={{ overflowX: 'auto' }}>
+            <Table size='small' sx={{ tableLayout: 'fixed' }}>
+                {/* 表ごとに列幅が変わらないよう、名前以外の列の幅を固定する */}
+                <colgroup>
+                    <col style={{ width: 52 }} />
+                    <col />
+                    <col style={{ width: 130 }} />
+                    <col style={{ width: 120 }} />
+                    <col style={{ width: 210 }} />
+                    <col style={{ width: 52 }} />
+                </colgroup>
                 <TableHead>
                     <TableRow>
                         <TableCell padding='checkbox' />
@@ -160,19 +222,34 @@ export default function LibraryItemTable({ items, selected, toggle, onRemove, pr
                         <TableCell padding='checkbox' />
                     </TableRow>
                 </TableHead>
-                <TableBody>
-                    {items.map(item => (
-                        <ItemRow
-                            key={item.id}
-                            item={item}
-                            checked={selected.has(item.id)}
-                            onToggle={() => toggle(item.id)}
-                            onRemove={() => onRemove([item.id])}
-                            progress={progress[item.id]}
-                        />
-                    ))}
-                </TableBody>
+                <TableBody>{children}</TableBody>
             </Table>
         </Panel>
+    );
+}
+
+type TableProps = {
+    rows: RequirementRow[];
+    selected: Set<string>;
+    toggle(id: string): void;
+    onRemove(ids: string[]): void;
+    progress: Record<string, LibraryProgress>;
+};
+
+// ダウンロード項目の一覧 (階層・選択・状態・ライセンスと配布元・個別の削除)
+export default function LibraryItemTable({ rows, selected, toggle, onRemove, progress }: TableProps) {
+    return (
+        <LibraryTableShell>
+            {rows.map(row => (
+                <ItemRow
+                    key={row.key}
+                    row={row}
+                    checked={selected.has(row.item.id)}
+                    toggle={toggle}
+                    onRemove={onRemove}
+                    progress={progress[row.item.id]}
+                />
+            ))}
+        </LibraryTableShell>
     );
 }

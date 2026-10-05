@@ -18,8 +18,56 @@ type TagDoc = {
     examples: TagExample[];
 };
 
+// 言語ごとの例 (挿入する文字列なので翻訳はしない)
+type LanguageSamples = {
+    faster: string;
+    higher: string;
+    quieter: string;
+    sub: TagExample;
+    phonemeDescriptionKey: string;
+    phKey: string;
+    phoneme: TagExample[];
+};
+
+const SAMPLES: Record<VoiceLanguage, LanguageSamples> = {
+    ja: {
+        faster: 'ここを速く',
+        higher: 'ここを高く',
+        quieter: 'ここを小さく',
+        sub: { before: '<sub alias="ダブリューエイチオー">', after: '</sub>', placeholder: 'WHO' },
+        phonemeDescriptionKey: 'voice.tags.phoneme.descriptionJa',
+        phKey: 'voice.tags.phoneme.phJa',
+        phoneme: [
+            { before: `<phoneme ph="ハ'シ">`, after: '</phoneme>', placeholder: '箸' },
+            { before: `<phoneme ph="ハシ'">`, after: '</phoneme>', placeholder: '橋' },
+            { before: `<phoneme ph="キョ'ウワ/イ'イ/テンキ">`, after: '</phoneme>', placeholder: '今日はいい天気' },
+        ],
+    },
+    en: {
+        faster: 'faster here',
+        higher: 'higher here',
+        quieter: 'quieter here',
+        sub: { before: '<sub alias="World Health Organization">', after: '</sub>', placeholder: 'WHO' },
+        phonemeDescriptionKey: 'voice.tags.phoneme.descriptionEn',
+        phKey: 'voice.tags.phoneme.phEn',
+        phoneme: [{ before: '<phoneme alphabet="ipa" ph="təˈmɑːtoʊ">', after: '</phoneme>', placeholder: 'tomato' }],
+    },
+    zh: {
+        faster: '这里加快',
+        higher: '这里提高',
+        quieter: '这里变小',
+        sub: { before: '<sub alias="世界卫生组织">', after: '</sub>', placeholder: 'WHO' },
+        phonemeDescriptionKey: 'voice.tags.phoneme.descriptionZh',
+        phKey: 'voice.tags.phoneme.phZh',
+        phoneme: [
+            { before: '<phoneme alphabet="x-pinyin" ph="yin2 hang2">', after: '</phoneme>', placeholder: '银行' },
+            { before: '<phoneme alphabet="x-pinyin" ph="chong2 xin1">', after: '</phoneme>', placeholder: '重新' },
+        ],
+    },
+};
+
 function tagDocs(language: VoiceLanguage): TagDoc[] {
-    const ja = language === 'ja';
+    const samples = SAMPLES[language];
     return [
         {
             tag: 'break',
@@ -39,51 +87,25 @@ function tagDocs(language: VoiceLanguage): TagDoc[] {
                 { name: 'volume', formatKey: 'voice.tags.prosody.volume' },
             ],
             examples: [
-                {
-                    before: '<prosody rate="120%">',
-                    after: '</prosody>',
-                    placeholder: ja ? 'ここを速く' : 'faster here',
-                },
-                {
-                    before: '<prosody pitch="+2st">',
-                    after: '</prosody>',
-                    placeholder: ja ? 'ここを高く' : 'higher here',
-                },
-                {
-                    before: '<prosody volume="-6dB">',
-                    after: '</prosody>',
-                    placeholder: ja ? 'ここを小さく' : 'quieter here',
-                },
+                { before: '<prosody rate="120%">', after: '</prosody>', placeholder: samples.faster },
+                { before: '<prosody pitch="+2st">', after: '</prosody>', placeholder: samples.higher },
+                { before: '<prosody volume="-6dB">', after: '</prosody>', placeholder: samples.quieter },
             ],
         },
         {
             tag: 'sub',
             descriptionKey: 'voice.tags.sub.description',
             attributes: [{ name: 'alias', formatKey: 'voice.tags.sub.alias' }],
-            examples: [
-                ja
-                    ? { before: '<sub alias="ダブリューエイチオー">', after: '</sub>', placeholder: 'WHO' }
-                    : { before: '<sub alias="World Health Organization">', after: '</sub>', placeholder: 'WHO' },
-            ],
+            examples: [samples.sub],
         },
         {
             tag: 'phoneme',
-            descriptionKey: ja ? 'voice.tags.phoneme.descriptionJa' : 'voice.tags.phoneme.descriptionEn',
+            descriptionKey: samples.phonemeDescriptionKey,
             attributes: [
-                { name: 'ph', formatKey: ja ? 'voice.tags.phoneme.phJa' : 'voice.tags.phoneme.phEn' },
+                { name: 'ph', formatKey: samples.phKey },
                 { name: 'alphabet', formatKey: 'voice.tags.phoneme.alphabet' },
             ],
-            examples: ja
-                ? [
-                      { before: `<phoneme ph="ハ'シ">`, after: '</phoneme>', placeholder: '箸' },
-                      { before: `<phoneme ph="ハシ'">`, after: '</phoneme>', placeholder: '橋' },
-                      {
-                          before: `<phoneme ph="キョ'ウワ/イ'イ/テンキ">`,
-                          after: '</phoneme>',
-                          placeholder: '今日はいい天気',
-                      },
-                  ]
-                : [{ before: '<phoneme alphabet="ipa" ph="təˈmɑːtoʊ">', after: '</phoneme>', placeholder: 'tomato' }],
+            examples: samples.phoneme,
         },
     ];
 }

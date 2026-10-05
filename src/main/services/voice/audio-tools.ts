@@ -54,6 +54,34 @@ export async function decodeToWav(input: string, output: string, options: Decode
     return { ...info, channels };
 }
 
+// 学習用の音声の形式 (アプリ内の録音と同じ、16bit・モノラルの WAV。サンプリング周波数は元のまま) にする
+export async function encodeTrainingWav(input: string, output: string, jobId?: string): Promise<void> {
+    await produceFile(output, target =>
+        runFfmpeg(
+            [
+                '-hide_banner',
+                '-nostdin',
+                '-y',
+                '-i',
+                input,
+                '-map',
+                '0:a:0',
+                '-vn',
+                '-sn',
+                '-dn',
+                '-ac',
+                '1',
+                '-c:a',
+                'pcm_s16le',
+                '-f',
+                'wav',
+                target,
+            ],
+            { jobId }
+        )
+    );
+}
+
 // チャンネル数をそろえる (分離結果を元の音源のチャンネル構成に戻すときなど)
 export async function convertChannels(input: string, output: string, channels: number, jobId?: string): Promise<void> {
     await runFfmpeg(

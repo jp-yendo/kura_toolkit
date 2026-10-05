@@ -8,7 +8,7 @@ import LibraryMusicIcon from '@mui/icons-material/LibraryMusic';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { openVoiceLibrary } from '../../stores/voiceLibraryStore';
-import type { LibraryItemGroup } from '@shared/voice/types';
+import type { VoiceFeatureId } from '@shared/voice/types';
 
 type VoiceFeatureKey = 'separation' | 'conversion' | 'tts';
 
@@ -29,11 +29,11 @@ const SECTIONS: Partial<Record<VoiceFeatureKey, Section[]>> = {
     ],
 };
 
-// ダウンロードを開いたときに表示する区分
-const LIBRARY_GROUPS: Record<VoiceFeatureKey, LibraryItemGroup> = {
-    separation: 'separator',
-    conversion: 'converter',
-    tts: 'tts',
+// ダウンロードを開いたときに表示する機能 (学習の画面では学習の機能)
+const LIBRARY_FEATURES: Record<VoiceFeatureKey, { feature: VoiceFeatureId; training?: VoiceFeatureId }> = {
+    separation: { feature: 'separation' },
+    conversion: { feature: 'conversion', training: 'conversionTraining' },
+    tts: { feature: 'tts', training: 'ttsTraining' },
 };
 
 type Props = {
@@ -47,6 +47,9 @@ export default function VoiceFeatureHeader({ feature }: Props) {
     const navigate = useNavigate();
     const sections = SECTIONS[feature];
     const current = sections?.find(section => section.route === location.pathname)?.route ?? false;
+    const libraryFeature =
+        (current && current.endsWith('/training') ? LIBRARY_FEATURES[feature].training : undefined) ??
+        LIBRARY_FEATURES[feature].feature;
 
     return (
         <Stack
@@ -86,7 +89,7 @@ export default function VoiceFeatureHeader({ feature }: Props) {
             <Button
                 size='small'
                 startIcon={<DownloadIcon />}
-                onClick={() => openVoiceLibrary({ focus: LIBRARY_GROUPS[feature] })}
+                onClick={() => openVoiceLibrary({ focus: libraryFeature })}
                 sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}
             >
                 {t('voice.library.open')}

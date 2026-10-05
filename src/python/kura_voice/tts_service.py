@@ -50,7 +50,7 @@ def _prepare() -> None:
 def _language(code: str) -> Any:
     from style_bert_vits2.constants import Languages
 
-    languages = {"ja": Languages.JP, "en": Languages.EN}
+    languages = {"ja": Languages.JP, "en": Languages.EN, "zh": Languages.ZH}
     if code not in languages:
         raise KuraError("TTS_LANGUAGE_UNSUPPORTED", code)
     return languages[code]
@@ -120,6 +120,52 @@ def _japanese_given(parts: List[dict], use_jp_extra: bool) -> Tuple[str, List[st
     return "".join(surface_text), phones, tones, "".join(reading_text)
 
 
+def _chinese_given(parts: List[dict]) -> Tuple[str, List[str], List[int]]:
+    """Phones and tones for a piece containing pinyin overrides.
+
+    The whole text is converted as usual, then the phones and tones of the overridden characters are
+    replaced. Every syllable maps to two phones, so the length (and the alignment with the text) stays
+    the same. The overridden characters are Han characters only, which normalization keeps as they
+    are, so their position in the normalized text is the normalized length of the parts before them.
+    """
+    from style_bert_vits2.constants import Languages
+    from style_bert_vits2.nlp import clean_text
+    from style_bert_vits2.nlp.chinese import g2p as chinese_g2p
+    from style_bert_vits2.nlp.chinese.normalizer import normalize_text
+
+    # The syllable -> phones table of the library (a module-level name starting with "__")
+    syllable_phones: Dict[str, str] = getattr(chinese_g2p, "__PINYIN_TO_SYMBOL_MAP")
+    text = "".join(part["text"] if "text" in part else part["surface"] for part in parts)
+    normalized, phones, tones, word2ph = clean_text(text, Languages.ZH)[:4]
+    # position in the normalized text -> (character, syllable, tone)
+    overrides: Dict[int, Tuple[str, str, int]] = {}
+    offset = 0
+    for part in parts:
+        if "pinyin" in part:
+            characters = part["surface"].strip()
+            for index, (syllable, tone) in enumerate(part["pinyin"]):
+                overrides[offset + index] = (characters[index], str(syllable), int(tone))
+            offset += len(part["pinyin"])
+        else:
+            offset += len(normalize_text(part["text"]))
+    if offset != len(normalized):
+        raise KuraError("PINYIN_ALIGN_FAILED")
+    phones = list(phones)
+    tones = list(tones)
+    for index, (character, syllable, tone) in overrides.items():
+        # normalization replaces a few characters (嗯 -> 恩 and the like); compare in the same form
+        if normalized[index] != normalize_text(character):
+            raise KuraError("PINYIN_ALIGN_FAILED")
+        # word2ph has one extra entry for the boundary phone at the start
+        start = sum(word2ph[: index + 1])
+        given = syllable_phones[syllable].split(" ")
+        if len(given) != word2ph[index + 1]:
+            raise KuraError("PINYIN_ALIGN_FAILED")
+        phones[start : start + len(given)] = given
+        tones[start : start + len(given)] = [tone] * len(given)
+    return text, phones, tones
+
+
 def _english_overrides(parts: List[dict]) -> Tuple[str, Dict[str, list]]:
     """Plain text plus pronunciation overrides injected into the English dictionary."""
     from style_bert_vits2.constants import Languages
@@ -173,6 +219,9 @@ def _synthesize_piece(piece: dict, params: dict, model: Any) -> Any:
         except InvalidPhoneError:
             # The surface text could not be aligned with the given reading; use the reading itself.
             _rate, audio = model.infer(text=reading, given_phone=phones, given_tone=tones, **kwargs)
+    elif language == "zh" and any("pinyin" in part for part in parts):
+        text, phones, tones = _chinese_given(parts)
+        _rate, audio = model.infer(text=text, given_phone=phones, given_tone=tones, **kwargs)
     elif language == "en" and any("words" in part for part in parts):
         from style_bert_vits2.nlp.english import g2p as english_g2p
 

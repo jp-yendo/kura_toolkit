@@ -56,6 +56,8 @@ export function modelPaths() {
         group,
         // 利用者が学習・取り込みした声のモデル
         voices: (feature: VoiceModelFeature) => path.join(group(feature), 'voices'),
+        // 利用者が作った学習セット (声のモデルとは分ける)
+        trainingSets: (feature: VoiceModelFeature) => path.join(group(feature), 'training-sets'),
         // モデルディレクトリからの相対パス (/ 区切り) を絶対パスにする
         file: (relative: string) => path.join(root, ...relative.split('/')),
     };

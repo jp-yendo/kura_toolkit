@@ -8,7 +8,8 @@
 
 import { accentReading, accentToKataTone, parseAccentNotation, type AccentErrorCode } from './accent';
 import { parseIpa } from './ipa';
-import { LANGUAGE_DEFINITIONS, type VoiceLanguage } from './languages';
+import { LANGUAGE_DEFINITIONS, type PhonemeAlphabet, type VoiceLanguage } from './languages';
+import { isHanOnly, parsePinyin } from './pinyin';
 
 type ControlTagName = 'break' | 'prosody' | 'sub' | 'phoneme';
 
@@ -109,6 +110,16 @@ export type SpeechRun =
           prosody: ProsodyState;
           start: number;
           end: number;
+      }
+    | {
+          kind: 'phoneme';
+          alphabet: 'x-pinyin';
+          surface: string;
+          // 文字ごとの (音節, 声調)。声調は 1〜4、軽声は 5
+          pinyin: [string, number][];
+          prosody: ProsodyState;
+          start: number;
+          end: number;
       };
 
 export type TagErrorCode =
@@ -129,6 +140,10 @@ export type TagErrorCode =
     | 'nestedTagNotAllowed'
     | 'accentNotJapanese'
     | 'ipaNotEnglish'
+    | 'pinyinNotChinese'
+    | 'pinyinSyllable'
+    | 'pinyinSurface'
+    | 'pinyinCount'
     | 'accentSyntax'
     | 'ipaSymbol'
     | 'ipaWordCount'
@@ -140,6 +155,13 @@ export type TagErrorCode =
     | 'subtitleEmpty';
 
 // 値の書式の種類 (エラー表示で期待する書式を示すため)
+// phoneme タグの表記ごとに、その表記を使える言語以外で使った場合の誤り
+const ALPHABET_LANGUAGE_ERRORS: Record<PhonemeAlphabet, TagErrorCode> = {
+    'x-kana': 'accentNotJapanese',
+    ipa: 'ipaNotEnglish',
+    'x-pinyin': 'pinyinNotChinese',
+};
+
 type ValueFormat = 'time' | 'strength' | 'rate' | 'pitch' | 'volume' | 'alphabet' | 'nonEmpty';
 
 export type TagIssue = {
@@ -593,9 +615,7 @@ export function parseControlTags(text: string, options: ParseOptions): ControlTa
             const alphabetAttribute = attributes.find(a => a.name.toLowerCase() === 'alphabet');
             const alphabetOffset = alphabetAttribute ? alphabetAttribute.valueOffset : tagOffset;
             if (alphabet !== languageAlphabet) {
-                issue(alphabet === 'x-kana' ? 'accentNotJapanese' : 'ipaNotEnglish', alphabetOffset, alphabet.length, {
-                    tag,
-                });
+                issue(ALPHABET_LANGUAGE_ERRORS[alphabet as PhonemeAlphabet], alphabetOffset, alphabet.length, { tag });
                 valid = false;
             } else {
                 result.alphabet = alphabet;
@@ -618,7 +638,7 @@ export function parseControlTags(text: string, options: ParseOptions): ControlTa
             case 'prosody.volume':
                 return parseVolume(value) === null ? 'volume' : null;
             case 'phoneme.alphabet':
-                return value === 'x-kana' || value === 'ipa' ? null : 'alphabet';
+                return Object.hasOwn(ALPHABET_LANGUAGE_ERRORS, value) ? null : 'alphabet';
             case 'sub.alias':
             case 'phoneme.ph':
                 return value.trim().length === 0 ? 'nonEmpty' : null;
@@ -706,6 +726,41 @@ export function parseControlTags(text: string, options: ParseOptions): ControlTa
                 surface,
                 kataTone: accentToKataTone(parsed.phrases),
                 reading: accentReading(ph.trim()),
+                prosody: element.prosody,
+                start: element.start,
+                end,
+            });
+            return;
+        }
+        if (element.attributes.alphabet === 'x-pinyin') {
+            const pinyin = parsePinyin(ph);
+            if (!pinyin.ok) {
+                issue('pinyinSyllable', element.phOffset + pinyin.offset, pinyin.length, {
+                    tag: 'phoneme',
+                    value: pinyin.text,
+                });
+                return;
+            }
+            // 1 文字が 1 音節に対応するため、発音を指定する文字は漢字だけとし、音節の数を文字数とそろえる
+            const characters = surface.trim();
+            if (!isHanOnly(characters)) {
+                issue('pinyinSurface', element.contentStart, Math.max(1, surface.length), { tag: 'phoneme' });
+                return;
+            }
+            const count = [...characters].length;
+            if (pinyin.syllables.length !== count) {
+                issue('pinyinCount', element.phOffset, Math.max(1, ph.length), {
+                    tag: 'phoneme',
+                    value: String(pinyin.syllables.length),
+                    expected: String(count),
+                });
+                return;
+            }
+            runs.push({
+                kind: 'phoneme',
+                alphabet: 'x-pinyin',
+                surface,
+                pinyin: pinyin.syllables,
                 prosody: element.prosody,
                 start: element.start,
                 end,

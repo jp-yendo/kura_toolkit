@@ -1,4 +1,4 @@
-import type { AudioExportSettings } from './voice/types';
+import type { AudioExportSettings, VoiceModelFeature } from './voice/types';
 import type { SymbolReading, VoiceLanguage } from './voice/languages';
 
 // プラットフォーム識別子
@@ -348,6 +348,39 @@ export type StorageInfo = {
 };
 
 // 保存場所 (ライブラリ・モデルディレクトリ) の移動結果
+// 保存場所の移動で比べる、まとまり (単位) の中身。ファイル数・合計サイズ・最終更新日時 (中のファイルで最も新しいもの)
+export type StorageUnitStats = {
+    fileCount: number;
+    sizeBytes: number;
+    modifiedAt: number | null;
+};
+
+// 移動元と移動先の両方にあるまとまり (上書きするかを利用者が選ぶもの)
+export type StorageUnitConflict = {
+    key: string;
+    // download: ダウンロードしたモデル / componentFiles: パッケージ一式に付属するモデル設定 / voice: 声のモデル /
+    // trainingSet: 学習セット / python: Python 本体 / library: ライブラリ (仮想環境の単位)
+    kind: 'download' | 'componentFiles' | 'voice' | 'trainingSet' | 'python' | 'library';
+    // ダウンロード項目の ID (表示名に使う。ダウンロードしたもの・ライブラリ)
+    itemIds?: string[];
+    // 利用者が付けた名前 (声のモデル・学習セット)。移動先のものは名前が変わっていることがある
+    name?: string;
+    targetName?: string;
+    feature?: VoiceModelFeature;
+    source: StorageUnitStats;
+    target: StorageUnitStats;
+};
+
+export type StorageMovePlan = {
+    conflicts: StorageUnitConflict[];
+    // 移動元にだけあり、そのまま移すまとまりの数と合計サイズ (どのまとまりにも属さず移すファイルも大きさに含む)
+    transferCount: number;
+    transferBytes: number;
+};
+
+// 両方にあるまとまりごとの選択 (overwrite: 移動先を削除してから移す / keep: 移動先を使い、移動元は削除する)
+export type StorageMoveDecisions = Record<string, 'overwrite' | 'keep'>;
+
 export type StorageMoveResult = {
     cancelled: boolean;
     // 移動後の動作確認に失敗し、作り直し (パッケージの再ダウンロード) が必要になった項目

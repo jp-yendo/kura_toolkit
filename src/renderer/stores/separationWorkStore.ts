@@ -54,9 +54,9 @@ function newStage(inputKey: string, category: SeparationCategory): SepStage {
     };
 }
 
-function createSeparationWorkStore(prefix: string) {
+function createSeparationWorkStore() {
     return create<SeparationWorkState>((set, get) => ({
-        workKey: newWorkKey(prefix),
+        workKey: newWorkKey(),
         source: null,
         sourceName: '',
         stages: [],
@@ -67,7 +67,7 @@ function createSeparationWorkStore(prefix: string) {
         },
         reset() {
             set({
-                workKey: newWorkKey(prefix),
+                workKey: newWorkKey(),
                 source: null,
                 sourceName: '',
                 stages: [],
@@ -128,7 +128,7 @@ function createSeparationWorkStore(prefix: string) {
     }));
 }
 
-export const useSeparationWorkStore = createSeparationWorkStore('separation');
-export const useConversionSeparationStore = createSeparationWorkStore('conversion');
+export const useSeparationWorkStore = createSeparationWorkStore();
+export const useConversionSeparationStore = createSeparationWorkStore();
 
 export type SeparationWorkStore = typeof useSeparationWorkStore;

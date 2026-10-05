@@ -29,6 +29,4 @@ MODIFICATIONS (made by Kura Toolkit):
   - The prompt list was converted from the original Scheme-style data file
     (cmuarctic.data) into JSON (en-cmu-arctic.json) holding the utterance
     id, the set (a / b) and the prompt text. The prompt text is unchanged.
-  - Kura Toolkit presents a selection of the prompts: the first 100 prompts
-    of set A as the "quick" sentence set, and all 1,132 prompts as the
-    "accurate" sentence set.
+  - Kura Toolkit presents all 1,132 prompts.
