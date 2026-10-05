@@ -347,7 +347,7 @@ export default {
                 '音声機能のプログラムを動かす実行環境です。アプリ専用の場所に置かれ、パソコンに入っている Python とは別に動きます。',
             separatorPackages: '音声分離のパッケージ一式',
             separatorPackagesDesc:
-                '音声分離のプログラム (python-audio-separator) と、動作に必要なライブラリ (PyTorch など) の一式です。macOS では、先に Xcode Command Line Tools をインストールしておく必要があります。',
+                '音声分離のプログラム (python-audio-separator) と、動作に必要なライブラリ (PyTorch など) の一式です。macOS では Xcode Command Line Tools を、Linux では C/C++ のコンパイラー (build-essential など) を、先にインストールしておく必要があります。',
             converterPackages: '音声変換のパッケージ一式',
             converterPackagesDesc:
                 '音声変換 (RVC) のプログラム (Applio) と、動作に必要なライブラリ (PyTorch など) の一式です。変換と、変換のモデルの学習に使います。',
@@ -1089,6 +1089,7 @@ export default {
         INVALID_TRAINING_SET_ID: '学習セットの指定が正しくありません。',
         SEPARATOR_LIST_OUTDATED:
             '分離のパッケージ一式が変わったため、分離モデルの一覧を作り直す必要があります。もう一度お試しください。',
+        MEDIA_IN_USE: '音声がほかの処理で使用中のため、渡せませんでした。少し待ってから、もう一度お試しください。',
         UNKNOWN_SENTENCE: '読み上げ文の指定が正しくありません。',
         INVALID_FEATURE: '機能の指定が正しくありません。({{detail}})',
         INVALID_LANGUAGE: '言語の指定が正しくありません。({{detail}})',

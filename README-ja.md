@@ -89,6 +89,7 @@ macOS では、デスクトップ・書類・ダウンロードなどのフォ�
 - Python・パッケージ・モデルのダウンロードのためのインターネット接続 (合計で数 GB。CUDA 版の PyTorch だけで約 1.9〜2.8GB)
 - Windows: [Microsoft Visual C++ 再頒布可能パッケージ](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist) (x64)
 - macOS: 音声分離のパッケージ一式の導入に Xcode Command Line Tools (`xcode-select --install`)
+- Linux: 音声分離のパッケージ一式の導入に C/C++ のコンパイラー (`build-essential` など)
 
 ## 2. 対応OS
 

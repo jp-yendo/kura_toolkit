@@ -89,6 +89,7 @@ The voice features have these additional requirements:
 - An Internet connection to download Python, the packages and the models (several GB in total; the CUDA build of PyTorch alone is about 1.9-2.8 GB)
 - Windows: the [Microsoft Visual C++ Redistributable](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist) (x64)
 - macOS: the Xcode Command Line Tools (`xcode-select --install`) to install the Audio Separation package set
+- Linux: a C/C++ compiler (such as `build-essential`) to install the Audio Separation package set
 
 ## 2. Supported OS
 

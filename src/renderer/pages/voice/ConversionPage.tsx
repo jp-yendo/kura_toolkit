@@ -178,14 +178,14 @@ export default function ConversionPage() {
             return;
         }
         let cancelled = false;
-        const mixed = vocals.length > 1;
-        const request = mixed
-            ? window.kuraToolkit.voice.media.mix(crypto.randomUUID(), workKey, vocals, channels)
-            : window.kuraToolkit.voice.media.ref(workKey, vocals[0]);
-        let media: MediaRef | null = null;
+        const request =
+            vocals.length > 1
+                ? window.kuraToolkit.voice.media.mix(crypto.randomUUID(), workKey, vocals, channels)
+                : window.kuraToolkit.voice.media.ref(workKey, vocals[0]);
+        // 重ねた音は同じ組み合わせなら同じファイルで、変換の入力や分離の再生にも使うため、ここでは消さない
+        // (機能の作業を破棄するときに消える)
         request
             .then(result => {
-                media = result;
                 if (!cancelled) setVocalsMedia(result);
             })
             .catch(error => {
@@ -193,12 +193,6 @@ export default function ConversionPage() {
             });
         return () => {
             cancelled = true;
-            // ボーカルの組み合わせが変わったら、前の組み合わせを重ねた音は要らなくなるため消す
-            void request
-                .then(() => {
-                    if (mixed && media) void window.kuraToolkit.voice.media.discard(workKey, [media.path]);
-                })
-                .catch(() => undefined);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps -- ボーカルの組み合わせ (vocalsKey) が変わったときだけ読み直す
     }, [vocalsKey]);

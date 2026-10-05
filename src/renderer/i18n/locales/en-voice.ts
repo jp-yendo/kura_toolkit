@@ -352,7 +352,7 @@ export default {
                 'The runtime that runs the voice feature programs. It is kept in a location of its own and runs separately from any Python installed on your computer.',
             separatorPackages: 'Audio Separation package set',
             separatorPackagesDesc:
-                'The Audio Separation program (python-audio-separator) and the libraries it needs (PyTorch and others). On macOS, the Xcode Command Line Tools must be installed first.',
+                'The Audio Separation program (python-audio-separator) and the libraries it needs (PyTorch and others). The Xcode Command Line Tools on macOS, or a C/C++ compiler (such as build-essential) on Linux, must be installed first.',
             converterPackages: 'Voice Conversion package set',
             converterPackagesDesc:
                 'The Voice Conversion (RVC) program (Applio) and the libraries it needs (PyTorch and others). Used for conversion and for training its models.',
@@ -1106,6 +1106,7 @@ export default {
         INVALID_TRAINING_SET_ID: 'The training set is not valid.',
         SEPARATOR_LIST_OUTDATED:
             'The Audio Separation package set changed, so the list of separation models must be created again. Please try again.',
+        MEDIA_IN_USE: 'The audio is in use by another process and could not be sent. Wait a moment and try again.',
         UNKNOWN_SENTENCE: 'The sentence is not valid.',
         INVALID_FEATURE: 'The feature is not valid. ({{detail}})',
         INVALID_LANGUAGE: 'The language is not valid. ({{detail}})',

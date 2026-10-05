@@ -212,7 +212,7 @@ export default function TrainingSetBar({ feature, state, defaultLanguage = 'ja',
                             value={nameDialog.name}
                             onChange={event => setNameDialog(previous => ({ ...previous, name: event.target.value }))}
                             onKeyDown={event => {
-                                if (event.key === 'Enter') void submitName();
+                                if (event.key === 'Enter' && !event.nativeEvent.isComposing) void submitName();
                             }}
                         />
                         {feature === 'tts' && nameDialog.mode === 'create' && (

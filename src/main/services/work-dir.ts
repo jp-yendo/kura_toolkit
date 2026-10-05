@@ -27,6 +27,10 @@ const DISCARD_SUFFIX = '.kura-discard-';
 
 // クリーンアップの一覧 (次にまとめて消すもの)
 const cleanupList = new Set<string>();
+// 使い続けるもの (作り直している途中・使い回しているもの)。名前を変えられずに一覧に積んだものと同じ名前でも消さない
+const keptPaths = new Set<string>();
+// 作っている途中の結果 (同じ結果を同時に作らないよう、作り終えるまで待たせる)
+const producing = new Map<string, Promise<void>>();
 // 実行中のクリーンアップ (作業ディレクトリを変える前に、消し終わるのを待つため)
 const runningCleanups = new Set<Promise<void>>();
 
@@ -124,19 +128,23 @@ export function removeSession(workKey: string): void {
 // 重ならないようにするため)。名前を変えられない場合 (無い・掴まれている) は、そのままの名前で積む
 export function discardLater(target: string): void {
     const resolved = path.resolve(target);
+    keptPaths.delete(resolved);
     const renamed = `${resolved}${DISCARD_SUFFIX}${newId()}`;
     try {
         fs.renameSync(resolved, renamed);
         cleanupList.add(renamed);
-    } catch {
-        cleanupList.add(resolved);
+    } catch (error) {
+        // 既に無いものは積まない (同じ名前で後から作るものを、次のクリーンアップで消さないため)
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') cleanupList.add(resolved);
     }
 }
 
-// 一覧に積んだものを、使い続けるものとして一覧から外す (名前を変えられずに積んだものを、同じ名前で作り直した・
-// 使い回す場合。一覧に残すと、次のクリーンアップで使っているものを消してしまうため)
+// 使い続けるものとして、クリーンアップで消さないようにする (名前を変えられずに一覧に積んだものを、同じ名前で
+// 作り直す・使い回す場合。始まっているクリーンアップも、消す直前に確かめて消さない)
 export function keepWorkFile(target: string): void {
-    cleanupList.delete(path.resolve(target));
+    const resolved = path.resolve(target);
+    cleanupList.delete(resolved);
+    keptPaths.add(resolved);
 }
 
 // クリーンアップの一覧にあるものを消し始める。消せなかったものはエラーにせず一覧から外し、次の起動時の片付けに任せる。
@@ -147,6 +155,7 @@ export function runCleanup(): Promise<void> {
     if (targets.length === 0) return Promise.resolve();
     const run = (async () => {
         for (const target of targets) {
+            if (keptPaths.has(target)) continue;
             try {
                 await fs.promises.rm(target, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
             } catch (error) {
@@ -164,20 +173,54 @@ function isInside(child: string, parent: string): boolean {
     return relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
 }
 
+// パスが作業ディレクトリのこのアプリのフォルダの中にあるか
+function isInWorkDir(target: string): boolean {
+    const dir = getWorkDir();
+    const resolved = path.resolve(target);
+    if (!isInside(resolved, dir)) return false;
+    return path.relative(dir, resolved).split(path.sep)[0].startsWith(FOLDER_PREFIX);
+}
+
 // 結果のファイルを作る。別の名前に書いてから正式な名前にし、失敗・キャンセルしたら書きかけを消す
 // (同じ結果を使い回すもの (あれば作り直さないもの) が、書きかけを完成したものと取り違えないため)。
-// 一時的な名前は拡張子を保つ (ffmpeg が出力の形式を拡張子で決めるため)
+// 一時的な名前は拡張子を保つ (ffmpeg が出力の形式を拡張子で決めるため)。
+// 書きかけは、作業ディレクトリの中ならクリーンアップの一覧に積み、外 (書き出し先・モデルディレクトリなど) なら
+// その場で消す (作業ディレクトリの外は起動時の片付けの対象ではないため)
 export async function produceFile(output: string, produce: (target: string) => Promise<unknown>): Promise<void> {
     const extension = path.extname(output);
     const partial = `${output.slice(0, output.length - extension.length)}.kura-tmp${extension}`;
+    keepWorkFile(output);
+    keepWorkFile(partial);
     try {
         await produce(partial);
         await fs.promises.rename(partial, output);
-        keepWorkFile(output);
     } catch (error) {
-        discardLater(partial);
+        if (isInWorkDir(partial)) {
+            discardLater(partial);
+        } else {
+            await fs.promises
+                .rm(partial, { force: true, maxRetries: 10, retryDelay: 200 })
+                .catch(removeError => console.warn(`failed to remove ${partial}`, removeError));
+        }
         throw error;
+    } finally {
+        keptPaths.delete(path.resolve(partial));
     }
+}
+
+// 同じ結果を使い回すもの (重ねた音・移調した伴奏・合成結果) を用意する。あれば使い回し、無ければ作る。
+// 同じものを同時に頼まれた場合は、先に始めた方を待って使う (同じ書きかけに 2 つの処理が書かないようにするため)
+export async function produceShared(output: string, produce: (target: string) => Promise<unknown>): Promise<void> {
+    const resolved = path.resolve(output);
+    const running = producing.get(resolved);
+    if (running) return running;
+    if (fs.existsSync(resolved)) {
+        keepWorkFile(resolved);
+        return;
+    }
+    const task = produceFile(resolved, produce).finally(() => producing.delete(resolved));
+    producing.set(resolved, task);
+    return task;
 }
 
 export function newId(): string {

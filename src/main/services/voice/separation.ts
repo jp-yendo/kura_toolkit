@@ -12,16 +12,8 @@ import { getWorker } from './python-worker';
 import { ensureSeparatorModelList, readSeparatorModelList, separatorModelInstalled } from './separator-models';
 import { separatorItemId } from './spec';
 import { withGpu } from './gpu-lock';
-import {
-    discardLater,
-    isInsideWork,
-    keepWorkFile,
-    newId,
-    produceFile,
-    removeSession,
-    sessionDir,
-    sessionPath,
-} from '../work-dir';
+import { isFileBusyError } from '../../utils/rename-retry';
+import { discardLater, isInsideWork, newId, produceShared, removeSession, sessionDir, sessionPath } from '../work-dir';
 import type {
     VerifiedEnsemble,
     MediaRef,
@@ -239,8 +231,7 @@ export async function mixStems(jobId: string, workKey: string, paths: string[], 
             .digest('hex')
             .slice(0, 16);
         const output = path.join(sessionDir(workKey, 'mixes'), `${key}.wav`);
-        if (fs.existsSync(output)) keepWorkFile(output);
-        else await produceFile(output, target => mixFiles(paths, target, channels, jobId));
+        await produceShared(output, target => mixFiles(paths, target, channels, jobId));
         return await mediaRef(output);
     } finally {
         finishJob(jobId);
@@ -264,14 +255,26 @@ export async function transferMedia(fromWorkKey: string, toWorkKey: string, path
     for (const item of paths) {
         if (!isInsideWork(fromWorkKey, item)) throw new Error('INVALID_PATH');
     }
+    // 途中で失敗したら、移したものを元へ戻す (送り元の画面が、移す前の音声をそのまま使い続けられるようにするため)
     const moved = new Map<string, string>();
-    for (const item of new Set(paths.map(entry => path.resolve(entry)))) {
-        const dest = path.join(sessionDir(toWorkKey, 'received'), `${newId()}${path.extname(item)}`);
-        await fs.promises.rename(item, dest);
-        forgetMedia(item);
-        moved.set(item, dest);
+    try {
+        for (const item of new Set(paths.map(entry => path.resolve(entry)))) {
+            const dest = path.join(sessionDir(toWorkKey, 'received'), `${newId()}${path.extname(item)}`);
+            await fs.promises.rename(item, dest);
+            moved.set(item, dest);
+        }
+        const refs = await Promise.all(paths.map(entry => mediaRef(moved.get(path.resolve(entry)) as string)));
+        for (const item of moved.keys()) forgetMedia(item);
+        return refs;
+    } catch (error) {
+        for (const [item, dest] of moved) {
+            await fs.promises
+                .rename(dest, item)
+                .catch(rollbackError => console.warn(`failed to move ${dest} back to ${item}`, rollbackError));
+        }
+        if (isFileBusyError(error)) throw new Error(`MEDIA_IN_USE: ${(error as NodeJS.ErrnoException).path ?? ''}`);
+        throw error;
     }
-    return Promise.all(paths.map(entry => mediaRef(moved.get(path.resolve(entry)) as string)));
 }
 
 export function discardWork(workKey: string): void {

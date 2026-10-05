@@ -10,7 +10,7 @@ import { getWorker } from './python-worker';
 import { RVC_EMBEDDER_ITEMS } from './spec';
 import { withGpu } from './gpu-lock';
 import { rvcModelFiles } from './voice-models';
-import { discardLater, isInsideWork, keepWorkFile, newId, produceFile, sessionDir, withJobTemp } from '../work-dir';
+import { discardLater, isInsideWork, newId, produceShared, sessionDir, withJobTemp } from '../work-dir';
 import type {
     ConversionCandidate,
     ConversionRunRequest,
@@ -42,11 +42,7 @@ function accompanimentShift(workKey: string, accompaniment: string, pitch: numbe
 async function shiftedAccompaniment(workKey: string, accompaniment: string, pitch: number, jobId: string) {
     const output = accompanimentShift(workKey, accompaniment, pitch);
     if (!output) return accompaniment;
-    if (fs.existsSync(output)) {
-        keepWorkFile(output);
-        return output;
-    }
-    await produceFile(output, target => pitchShift(accompaniment, target, pitch, jobId));
+    await produceShared(output, target => pitchShift(accompaniment, target, pitch, jobId));
     await removeOtherShifts(output);
     return output;
 }
@@ -210,8 +206,7 @@ export async function renderMix(jobId: string, request: MixRenderRequest): Promi
             .digest('hex')
             .slice(0, 16);
         const output = path.join(sessionDir(request.workKey, 'mix'), `${key}.wav`);
-        if (fs.existsSync(output)) keepWorkFile(output);
-        else {
+        await produceShared(output, async target => {
             const vocalsInfo = await probeAudio(request.vocals, jobId);
             let sampleRate = vocalsInfo.sampleRate;
             let channels = vocalsInfo.channels;
@@ -226,28 +221,26 @@ export async function renderMix(jobId: string, request: MixRenderRequest): Promi
                 sampleRate = info.sampleRate;
                 channels = Math.max(channels, info.channels);
             }
-            await produceFile(output, target =>
-                getWorker('converter').request(
-                    'mix',
-                    {
-                        vocals: request.vocals,
-                        accompaniment,
-                        output: target,
-                        sampleRate,
-                        channels,
-                        params: request.params,
+            await getWorker('converter').request(
+                'mix',
+                {
+                    vocals: request.vocals,
+                    accompaniment,
+                    output: target,
+                    sampleRate,
+                    channels,
+                    params: request.params,
+                },
+                {
+                    jobId,
+                    onEvent: event => {
+                        if (event.kind === 'progress' && typeof event.fraction === 'number') {
+                            emitJobEvent({ jobId, kind: 'progress', percent: event.fraction * 100 });
+                        }
                     },
-                    {
-                        jobId,
-                        onEvent: event => {
-                            if (event.kind === 'progress' && typeof event.fraction === 'number') {
-                                emitJobEvent({ jobId, kind: 'progress', percent: event.fraction * 100 });
-                            }
-                        },
-                    }
-                )
+                }
             );
-        }
+        });
         return await mediaRef(output);
     } finally {
         finishJob(jobId);

@@ -108,7 +108,7 @@ export function ensureSeparatorModelList(): Promise<ModelListCache> {
 
 // パッケージ一式の Python から一覧を取得して保存する。取得している間に一覧を読み直させた場合
 // (パッケージ一式の削除・導入、ライブラリの移動) は、古い結果を保存も記録もしない
-export async function refreshSeparatorModelList(): Promise<ModelListCache> {
+async function refreshSeparatorModelList(): Promise<ModelListCache> {
     const started = generation;
     const worker = getWorker('separator');
     const result = await worker.request<{ models: SeparatorModelEntry[]; ensembles: SeparatorEnsembleEntry[] }>(

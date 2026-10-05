@@ -21,10 +21,10 @@ import { buildPythonEnv } from './python-env';
 import { runProcess, WINDOWS_DLL_NOT_FOUND } from './process-runner';
 import { stopAllWorkersAndWait } from './python-worker';
 import {
+    ensureSeparatorModelList,
     forgetSeparatorModelList,
     probeSeparatorSizes,
     readSeparatorModelList,
-    refreshSeparatorModelList,
     resolveSeparatorModelFiles,
     separatorModelByItemId,
     separatorModelInstalled,
@@ -62,7 +62,7 @@ import type {
 } from '../../../shared/voice/types';
 import type { StorageMoveDecisions, StorageMovePlan, StorageMoveResult } from '../../../shared/types';
 import { checkMergeTarget, mergeStorage, planStorageMove, removeStorageRoot } from './storage-merge';
-import { hasBusyTrainingSets } from './training-sets';
+import { whileStorageMoving } from './training-sets';
 
 // 音声機能が使う Python 本体・パッケージ一式・モデルの状態の判定、ダウンロード、削除と、
 // それらを収める保存場所 (ライブラリ・モデルディレクトリ) の移動。
@@ -464,8 +464,9 @@ async function installItem(item: LibraryItem, platform: VoicePlatformInfo, conte
         await installComponent(component, platform, estimateComponentBytes(component, platform), context);
         if (component.id === 'separator') {
             // 分離モデルの一覧は導入したパッケージから取得する (取得できなければこの項目を失敗とする)
+            // (一覧を開いている画面からの同時の作成と、問い合わせを 1 回にまとめる)
             forgetSeparatorModelList();
-            await refreshSeparatorModelList();
+            await ensureSeparatorModelList();
             void probeSeparatorSizes().catch(error => console.warn('failed to look up separation model sizes', error));
         }
         return;
@@ -635,13 +636,15 @@ async function removeItemsNow(ids: string[], options: { removePython?: boolean }
 // 記録の home (Python 本体の実行ファイルのあるフォルダ) から、仮想環境を作ったときのライブラリディレクトリを求めて
 // 置き換える (別の場所や別の端末から写したライブラリも、この端末の場所を指すようにするため)。
 // Windows はドライブ名の大文字小文字が違う表記で記録されることがあるため、大文字小文字を区別せずに置き換える
-function relocateVenv(component: VoiceComponentId, newRoot: string): void {
+// 書き換えられない (記録が無い・記録の場所がこのアプリの配置ではない) 場合は false を返す (作り直しの対象にする。
+// 元の場所の Python を指したままだと、確かめた時点では動いても、元の場所を消した後に動かなくなるため)
+function relocateVenv(component: VoiceComponentId, newRoot: string): boolean {
     const cfg = path.join(libraryPaths(newRoot).env(component), 'pyvenv.cfg');
-    if (!fs.existsSync(cfg)) return;
+    if (!fs.existsSync(cfg)) return false;
     const text = fs.readFileSync(cfg, 'utf-8');
     const home = /^home\s*=\s*(.+)$/m.exec(text)?.[1].trim();
     const homeRelative = process.platform === 'win32' ? 'python' : path.join('python', 'bin');
-    if (!home || !home.toLowerCase().endsWith(`${path.sep}${homeRelative}`.toLowerCase())) return;
+    if (!home || !home.toLowerCase().endsWith(`${path.sep}${homeRelative}`.toLowerCase())) return false;
     const fromRoot = home.slice(0, home.length - homeRelative.length - 1);
     const pattern = new RegExp(fromRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
     // 置き換え後の文字列は関数で渡す (場所に $ が含まれていても置換パターンとして解釈させないため)
@@ -650,6 +653,7 @@ function relocateVenv(component: VoiceComponentId, newRoot: string): void {
         text.replace(pattern, () => newRoot),
         'utf-8'
     );
+    return true;
 }
 
 // 移動先 (libraryRoot) の仮想環境が動くかを確かめる。Python が起動して失敗した場合だけ動かない (false) とし、
@@ -680,12 +684,12 @@ export async function moveStorage(
     startJob(jobId);
     try {
         checkLibraryIdle(jobId);
-        // 学習セットへの音声の追加 (録音の保存はジョブではない) の途中で移すと、追加したものが古い場所に残るため断る
-        if (hasBusyTrainingSets()) throw new Error('LIBRARY_BUSY');
         const newRoot = moveTarget(kind, targetDir);
         // 既定の場所へ移した場合は設定を空にする (既定の場所に従わせる)
         const setting = isSamePath(newRoot, defaultStorageDir(kind)) ? '' : newRoot;
-        return await withLibraryLock(() => moveNow(jobId, kind, newRoot, setting, decisions));
+        // 学習セットへの音声の追加 (録音の保存はジョブではない) の途中や、移動中に学習セットを変えると、
+        // 古い場所に書かれて移動から漏れるため、移動の前後で学習セットの操作を断る
+        return await whileStorageMoving(() => withLibraryLock(() => moveNow(jobId, kind, newRoot, setting, decisions)));
     } finally {
         finishJob(jobId);
     }
@@ -732,13 +736,13 @@ async function relocateVenvs(newRoot: string): Promise<string[]> {
     const rebuildRequired: string[] = [];
     const specs = COMPONENT_SPECS.filter(spec => manifest.components[spec.id] && spec.id !== 'tts-train');
     // 記録の書き換えは、確認で失敗しても残りの仮想環境が元の場所を指したまま残らないよう、先にすべて行う
-    for (const spec of specs) relocateVenv(spec.env, newRoot);
+    const relocated = new Map(specs.map(spec => [spec.id, relocateVenv(spec.env, newRoot)]));
     // 確認そのものができなかった場合 (VC_RUNTIME_MISSING など) も、残りの仮想環境を確かめてから知らせる
     let verifyError: unknown = null;
     for (const spec of specs) {
         let works: boolean;
         try {
-            works = await verifyVenv(spec.env, newRoot);
+            works = relocated.get(spec.id) === true && (await verifyVenv(spec.env, newRoot));
         } catch (error) {
             verifyError ??= error;
             continue;

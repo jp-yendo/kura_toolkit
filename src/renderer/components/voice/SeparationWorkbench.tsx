@@ -132,11 +132,17 @@ export default function SeparationWorkbench({ store, disabled }: Props) {
     const [removeStageConfirm, setRemoveStageConfirm] = React.useState({ open: false, name: '' });
     const { job, run, cancel } = useJobRunner();
 
+    // 一覧の読み込みの順番 (後から頼んだ読み込みの結果だけを使う)
+    const modelsRequestRef = React.useRef(0);
     const loadModels = React.useCallback(async () => {
+        const request = ++modelsRequestRef.current;
         try {
-            setModels(await window.kuraToolkit.voice.separation.listModels());
+            const list = await window.kuraToolkit.voice.separation.listModels();
+            if (request !== modelsRequestRef.current) return;
+            setModels(list);
             setModelError(null);
         } catch (error) {
+            if (request !== modelsRequestRef.current) return;
             // 前の一覧のまま、使えなくなったモデルを示さないよう空にする
             setModels(null);
             setModelError(voiceErrorMessage(t, error));
@@ -161,13 +167,11 @@ export default function SeparationWorkbench({ store, disabled }: Props) {
         setPlay({ kind: 'original' });
     }, [activeStage]);
 
-    // 重ねた音を置き換える。使わなくなった前の音は消す
+    // 重ねた音を置き換える。重ねた音は同じ組み合わせなら同じファイルで、この作業のほかの所 (変換の画面のボーカルなど)
+    // でも使うことがあるため、ここでは消さない (機能の作業を破棄するときに消える)
     const replaceOverlay = (next: Overlay | null) => {
-        const previous = overlayRef.current;
         overlayRef.current = next;
         setOverlay(next);
-        if (previous && previous.media.path !== next?.media.path)
-            void window.kuraToolkit.voice.media.discard(workKey, [previous.media.path]);
     };
 
     // --- 再生対象 (複数の出力を選んだ場合は重ねた音を作る) ---
@@ -195,17 +199,14 @@ export default function SeparationWorkbench({ store, disabled }: Props) {
                 sourceChannels
             )
             .then(media => {
-                if (!cancelled) {
-                    pendingMixRef.current = null;
-                    replaceOverlay({ key: mixKey, media });
-                    return;
-                }
-                // 作っている間に選択が変わった場合は使わないので消す。同じ組み合わせは同じファイルになるため、
-                // 表示中の音や、作っている途中の組み合わせの音と同じ場合は残す
-                if (media.path !== overlayRef.current?.media.path && mixKey !== pendingMixRef.current)
-                    void window.kuraToolkit.voice.media.discard(workKey, [media.path]);
+                if (cancelled) return;
+                pendingMixRef.current = null;
+                replaceOverlay({ key: mixKey, media });
             })
-            .catch(error => showNotice('error', voiceErrorMessage(t, error)));
+            .catch(error => {
+                // 画面を離れた後 (作業を破棄した後) の失敗は知らせない
+                if (!cancelled) showNotice('error', voiceErrorMessage(t, error));
+            });
         return () => {
             cancelled = true;
         };
@@ -227,8 +228,8 @@ export default function SeparationWorkbench({ store, disabled }: Props) {
             category: t(`voice.separation.categories.${item.category}`),
         });
 
-    // 候補を破棄する (出力のファイルと、それを使った重ねた音を消す)。
-    // 変換の画面へ渡した出力は、変換の画面が使い終わってから消す
+    // 候補を破棄する (出力のファイルを消す)。重ねた音は同じ組み合わせで使い回すため、機能の作業を破棄するまで残す。
+    // 変換の画面へ渡した出力は、渡した時点で変換の画面の作業へ移してあるため消えない
     const discardCandidates = (candidates: SeparationCandidate[]) => {
         const paths = candidates.flatMap(candidate => candidate.stems.map(stem => stem.media.path));
         if (paths.length === 0) return;
@@ -242,27 +243,19 @@ export default function SeparationWorkbench({ store, disabled }: Props) {
         const input = inputTrack.paths.length === 1 ? inputTrack.paths[0] : null;
         try {
             const candidate = await run(t('voice.separation.running'), async jobId => {
-                // 複数の音を重ねたトラック (伴奏に戻したコーラスなど) は、先に 1 つにしてから分離する。
-                // 重ねた音は分離が終われば要らないため消す (同じ組み合わせを重ねた再生に使っている場合は残す)
-                const mixed =
-                    input === null
-                        ? (await window.kuraToolkit.voice.media.mix(jobId, workKey, inputTrack.paths, source.channels))
-                              .path
-                        : null;
-                try {
-                    return await window.kuraToolkit.voice.separation.run(jobId, {
-                        workKey,
-                        input: input ?? (mixed as string),
-                        channels: source.channels,
-                        method,
-                        params,
-                        category,
-                    });
-                } finally {
-                    if (mixed && mixed !== overlayRef.current?.media.path) {
-                        void window.kuraToolkit.voice.media.discard(workKey, [mixed]);
-                    }
-                }
+                // 複数の音を重ねたトラック (伴奏に戻したコーラスなど) は、先に 1 つにしてから分離する
+                // (重ねた音は同じ組み合わせなら同じファイルで、再生などにも使うため、機能の作業を破棄するときに消える)
+                const inputPath =
+                    input ??
+                    (await window.kuraToolkit.voice.media.mix(jobId, workKey, inputTrack.paths, source.channels)).path;
+                return window.kuraToolkit.voice.separation.run(jobId, {
+                    workKey,
+                    input: inputPath,
+                    channels: source.channels,
+                    method,
+                    params,
+                    category,
+                });
             });
             addCandidate(activeStage, candidate);
             setPlay({ kind: 'candidate', candidateId: candidate.id, stems: [candidate.stems[0]?.name ?? ''] });

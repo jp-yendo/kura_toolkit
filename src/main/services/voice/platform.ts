@@ -35,11 +35,12 @@ let gpuCache: GpuInfo | null = null;
 // GPU の世代とドライバーから、使える PyTorch の CUDA 版を決める。
 // - CUDA 13.0 版: ドライバー 580 以上かつ Turing (7.5) 以降
 // - CUDA 12.8 版: ドライバー 570 以上かつ Volta (7.0) 以降 (Blackwell を含む)
-// - CUDA 12.6 版: Blackwell より前の世代 (古い GPU とドライバーにも対応)
+// - CUDA 12.6 版: Blackwell より前の世代 (古い GPU とドライバーにも対応。ドライバーは Windows で 528、Linux で 525 以上)
 function selectCudaFlavor(computeCapability: number, driverMajor: number): CudaFlavor | null {
     if (driverMajor >= 580 && computeCapability >= 7.5) return 'cu130';
     if (driverMajor >= 570 && computeCapability >= 7.0) return 'cu128';
-    if (computeCapability < 10 && driverMajor >= 528) return 'cu126';
+    const cu126Driver = process.platform === 'linux' ? 525 : 528;
+    if (computeCapability < 10 && driverMajor >= cu126Driver) return 'cu126';
     return null;
 }
 

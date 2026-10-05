@@ -769,7 +769,7 @@ export default function TtsPage() {
                                                     onClick={event => {
                                                         event.stopPropagation();
                                                         tts.removeCandidate(candidate.id);
-                                                        // 変換の画面へ渡した候補は、変換の画面が使い終わってから消す
+                                                        // 変換の画面へ渡した候補は、渡した時点で変換の画面の作業へ移してあるため消えない
                                                         void window.kuraToolkit.voice.media.discard(tts.workKey, [
                                                             candidate.media.path,
                                                         ]);

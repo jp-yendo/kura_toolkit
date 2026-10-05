@@ -36,14 +36,25 @@ type Unit = Omit<StorageUnitConflict, 'source' | 'target'> & {
 
 // 移動先に置ける、それぞれの保存場所の直下の名前 (これ以外のものがある移動先は、ほかのファイルと混ぜないために選べない)
 const KNOWN_TOP_LEVEL: Record<MovableStorage, string[]> = {
-    model: ['manifest.json', 'audio'],
-    library: ['manifest.json', 'python', 'python.tar.gz', 'pip-cache', 'audio-separator', 'applio', 'style-bert-vits2'],
+    model: ['manifest.json', 'manifest.json.tmp', 'audio'],
+    library: [
+        'manifest.json',
+        'manifest.json.tmp',
+        'python',
+        'python.tar.gz',
+        'python.tar.gz.part',
+        'python.staging',
+        'pip-cache',
+        'audio-separator',
+        'applio',
+        'style-bert-vits2',
+    ],
 };
 
-// 移さずに移動元と一緒に消すもの (取得の再試行のためだけに残しているもの)
+// 移さずに移動元と一緒に消すもの (取得の再試行のためだけに残しているもの・書きかけで残ったもの)
 const NOT_TRANSFERRED: Record<MovableStorage, string[]> = {
-    model: [],
-    library: ['pip-cache', 'python.tar.gz'],
+    model: ['manifest.json.tmp'],
+    library: ['pip-cache', 'python.tar.gz', 'python.tar.gz.part', 'python.staging', 'manifest.json.tmp'],
 };
 
 // 別のドライブへの移動で、先にコピーする一時フォルダの名前の接頭辞
@@ -173,23 +184,33 @@ function recordName(file: string, id: string): string {
     }
 }
 
-// 取得記録で、複数のモデルが共有するファイル (相対パス)
-function sharedFilesOf(manifest: ModelManifestFile): Set<string> {
-    const count = new Map<string, number>();
-    for (const entry of Object.values(manifest.models)) {
-        for (const file of new Set(entry.files.map(safeRelative).filter((item): item is string => item !== null))) {
-            count.set(file, (count.get(file) ?? 0) + 1);
+// 取得記録で、別々の項目が参照するファイル (相対パス)。両方の場所の記録をまとめて数える
+// (移動元のモデル X と移動先のモデル Y が同じ設定ファイルを使う場合も、共有のファイルとして扱うため)
+function sharedFilesOf(manifests: ModelManifestFile[]): Set<string> {
+    const owners = new Map<string, Set<string>>();
+    for (const manifest of manifests) {
+        for (const [id, entry] of Object.entries(manifest.models)) {
+            for (const file of entry.files.map(safeRelative)) {
+                if (file === null) continue;
+                const set = owners.get(file) ?? new Set<string>();
+                set.add(id);
+                owners.set(file, set);
+            }
         }
     }
-    return new Set([...count].filter(([, n]) => n > 1).map(([file]) => file));
+    return new Set([...owners].filter(([, ids]) => ids.size > 1).map(([file]) => file));
+}
+
+// 取得記録のファイル。展開して消す zip (NLTK のデータなど) は、展開したフォルダ (zip と同じ名前) も含める
+function recordedPaths(files: string[]): string[] {
+    const paths = files.map(safeRelative).filter((file): file is string => file !== null);
+    return paths.flatMap(file => (file.toLowerCase().endsWith('.zip') ? [file, file.slice(0, -'.zip'.length)] : [file]));
 }
 
 function modelUnits(root: string, shared: Set<string>): Unit[] {
     const units: Unit[] = [];
     for (const [id, entry] of Object.entries(readModelManifest(root).models)) {
-        const paths = [...new Set(entry.files.map(safeRelative))].filter(
-            (file): file is string => file !== null && !shared.has(file)
-        );
+        const paths = [...new Set(recordedPaths(entry.files))].filter(file => !shared.has(file));
         units.push({ key: id, kind: 'download', itemIds: [id], paths });
     }
     // 分離のパッケージ一式と一緒に取得し、モデルディレクトリに置くモデル設定
@@ -250,7 +271,7 @@ function libraryUnits(root: string): Unit[] {
 function sharedFiles(kind: MovableStorage, oldRoot: string, newRoot: string): Set<string> {
     if (kind !== 'model') return new Set();
     const roots = [oldRoot, newRoot].filter(root => fs.existsSync(root));
-    return new Set(roots.flatMap(root => [...sharedFilesOf(readModelManifest(root))]));
+    return sharedFilesOf(roots.map(readModelManifest));
 }
 
 function unitsOf(kind: MovableStorage, root: string, shared: Set<string>): Unit[] {
@@ -264,7 +285,16 @@ type WalkOptions = {
     // 辿る場所の中を指すシンボリックリンクを、リンクのまま渡す (Linux の仮想環境の lib64 -> lib など。
     // リンク先を辿ると、同じ中身を 2 回数えたり写したりするため)
     onInternalLink?: (relative: string, full: string, link: string) => Promise<void>;
+    // すべてのシンボリックリンクを辿らずに、リンクそのものとして渡す (移すものを集めるとき。外を指すリンクを辿って、
+    // 保存場所の外のファイルを移さないため)
+    onAnyLink?: (relative: string) => Promise<void>;
 };
+
+// 相対パスが base の中を指すか (「..foo」のような名前を外側と取り違えない。別のドライブは外側)
+function insideOf(base: string, target: string): boolean {
+    const relative = path.relative(base, target);
+    return relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+}
 
 // ディレクトリの中を辿り、ファイルとディレクトリを root からの相対パスで渡す (ディレクトリは中より先に渡す)。
 // シンボリックリンクは、onInternalLink を渡した場合の中を指すものを除き、リンク先 (ファイルの中身・ディレクトリの中)
@@ -282,14 +312,25 @@ async function walkTree(
             const full = path.join(root, childRelative);
             let real: string;
             if (entry.isSymbolicLink()) {
+                if (options.onAnyLink) {
+                    await options.onAnyLink(childRelative);
+                    continue;
+                }
                 const link = await fs.promises.readlink(full);
                 const resolved = path.resolve(path.dirname(full), link);
-                const insideRoot = !path.isAbsolute(link) && !path.relative(root, resolved).startsWith('..');
+                const insideRoot = !path.isAbsolute(link) && insideOf(root, resolved);
                 if (options.onInternalLink && insideRoot) {
                     await options.onInternalLink(childRelative, full, link);
                     continue;
                 }
-                if (!(await fs.promises.stat(full)).isDirectory()) {
+                // 指す先が無いリンク (壊れたリンク) は読み飛ばす
+                let target: fs.Stats;
+                try {
+                    target = await fs.promises.stat(full);
+                } catch {
+                    continue;
+                }
+                if (!target.isDirectory()) {
                     await onFile(childRelative, full);
                     continue;
                 }
@@ -362,7 +403,7 @@ async function collectOthers(kind: MovableStorage, oldRoot: string, newRoot: str
         if (special.some(item => within(relative, item)) || claimed.some(item => within(relative, item))) return;
         if (!fs.existsSync(path.join(newRoot, relative))) others.push(relative);
     };
-    await walkTree(oldRoot, consider, undefined, { onInternalLink: consider });
+    await walkTree(oldRoot, consider, undefined, { onAnyLink: consider });
     return others;
 }
 
@@ -494,16 +535,22 @@ async function sameVolume(oldRoot: string, newRoot: string): Promise<boolean> {
     const name = `${PROBE_PREFIX}${crypto.randomBytes(6).toString('hex')}`;
     const probe = path.join(oldRoot, name);
     const moved = path.join(newRoot, name);
-    await fs.promises.writeFile(probe, '');
+    try {
+        await fs.promises.writeFile(probe, '');
+    } catch {
+        // 移動元に書けない (読み取り専用など) 場合は、名前の変更では移せないため、コピーで移す
+        return false;
+    }
     try {
         await fs.promises.rename(probe, moved);
-        await fs.promises.rm(moved, { force: true });
-        return true;
     } catch (error) {
-        await fs.promises.rm(probe, { force: true });
+        await fs.promises.rm(probe, { force: true }).catch(() => undefined);
         if ((error as NodeJS.ErrnoException).code === 'EXDEV') return false;
         throw error;
     }
+    // 消せなかった試しのファイルは、次の移動の始めに消える (一時フォルダと同じ接頭辞のため)
+    await fs.promises.rm(moved, { force: true }).catch(() => undefined);
+    return true;
 }
 
 const PROGRESS_INTERVAL_MS = 300;
@@ -671,21 +718,32 @@ async function mergeNow(
         return { cancelled: true };
     }
 
-    // 置き換え (ここからは中断しない): 上書きする単位は、移動先の単位を削除してから移す
-    for (const unit of overwrite) {
-        const targetPaths = new Set([...(plan.targetUnits.get(unit.key)?.paths ?? []), ...unit.paths]);
-        for (const relative of targetPaths) {
-            await fs.promises.rm(path.join(newRoot, relative), { recursive: true, force: true });
-        }
-    }
+    // 置き換え (ここからは中断しない): 上書きする単位は、移動先の単位を削除してから移す。
     // 移し終えたものは、途中で失敗したら元へ戻す (元の場所を使い続けられるようにする。上書きを選んで削除した
     // 移動先の単位は戻らない)
     const done: string[] = [];
     try {
+        for (const unit of overwrite) {
+            const targetPaths = new Set([...(plan.targetUnits.get(unit.key)?.paths ?? []), ...unit.paths]);
+            for (const relative of targetPaths) {
+                try {
+                    await fs.promises.rm(path.join(newRoot, relative), {
+                        recursive: true,
+                        force: true,
+                        maxRetries: 10,
+                        retryDelay: 200,
+                    });
+                } catch (error) {
+                    if (isFileBusyError(error)) throw new Error(`STORAGE_IN_USE: ${path.join(newRoot, relative)}`);
+                    throw error;
+                }
+            }
+        }
         for (const relative of movedPaths) {
             await renameStorage(path.join(from, relative), path.join(newRoot, relative));
             done.push(relative);
         }
+        writeRecords(records, newRoot, moved);
     } catch (error) {
         for (const relative of done.reverse()) {
             try {
@@ -698,7 +756,6 @@ async function mergeNow(
         throw error;
     }
     if (staging) await removeStaging(staging);
-    writeRecords(records, newRoot, moved);
     return { cancelled: false };
 }
 

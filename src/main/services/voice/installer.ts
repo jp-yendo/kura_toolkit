@@ -235,6 +235,13 @@ async function ensureVenv(env: VoiceComponentId): Promise<void> {
     });
     if (result.code !== 0) throw new Error(`VENV_FAILED: ${result.tail.join('\n')}`);
     if (process.platform !== 'win32') await copyLibpython(lib.env(env));
+    // Linux の venv は --copies でも lib64 を lib へのシンボリックリンクとして作る。使われない (パッケージは lib に入る) うえ、
+    // 保存場所の移動でリンク先の中身を写すと lib が二重になるため消す
+    if (process.platform === 'linux') {
+        const lib64 = path.join(lib.env(env), 'lib64');
+        const stat = await fs.promises.lstat(lib64).catch(() => null);
+        if (stat?.isSymbolicLink()) await fs.promises.unlink(lib64);
+    }
 }
 
 // macOS と Linux の Python 本体の実行ファイルは、隣の lib/ にある libpython を相対パス
@@ -329,7 +336,11 @@ async function runPip(
     if (result.code === WINDOWS_DLL_NOT_FOUND) throw new Error('VC_RUNTIME_MISSING');
     if (result.code !== 0) {
         const text = result.tail.join('\n');
-        if (/error: Microsoft Visual C\+\+|xcrun: error|command 'clang' failed|unable to execute 'gcc'/i.test(text)) {
+        if (
+            /error: Microsoft Visual C\+\+|xcrun: error|command '[^']*(?:gcc|cc|clang)' failed|unable to execute '[^']*(?:gcc|cc|clang)'/i.test(
+                text
+            )
+        ) {
             throw new Error(`BUILD_TOOLS_MISSING: ${text}`);
         }
         throw new Error(`PIP_FAILED: ${text}`);

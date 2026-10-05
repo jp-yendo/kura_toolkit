@@ -63,8 +63,25 @@ function activityOf(feature: VoiceModelFeature, id: string): SetActivity {
 }
 
 // 学習・削除・音声の追加のいずれかを行っている学習セットがあるか (保存場所の移動を断るため)
-export function hasBusyTrainingSets(): boolean {
+function hasBusyTrainingSets(): boolean {
     return [...activities.values()].some(activity => activity.training || activity.removing || activity.adding > 0);
+}
+
+// 保存場所の移動中は、学習セットを作る・変える・使うことを断る (古い場所に書かれて移動から漏れないようにするため)
+let storageMoves = 0;
+
+export async function whileStorageMoving<T>(fn: () => Promise<T>): Promise<T> {
+    if (hasBusyTrainingSets()) throw new Error('LIBRARY_BUSY');
+    storageMoves += 1;
+    try {
+        return await fn();
+    } finally {
+        storageMoves -= 1;
+    }
+}
+
+function checkNotMoving(): void {
+    if (storageMoves > 0) throw new Error('LIBRARY_BUSY');
 }
 
 // 音声の追加中は、学習と削除を始めさせない
@@ -114,12 +131,14 @@ function writeSet(data: StoredSet): void {
 
 // 学習中・削除中なら断る (音声を変えさせない)
 function checkNotInUse(feature: VoiceModelFeature, id: string): void {
+    checkNotMoving();
     const activity = activities.get(setKey(feature, id));
     if (activity?.training || activity?.removing) throw new Error('TRAINING_SET_IN_USE');
 }
 
 // 学習・削除を始める前に、ほかの処理 (学習・削除・音声の追加) をしていないかを確かめる
 function checkIdle(feature: VoiceModelFeature, id: string): void {
+    checkNotMoving();
     const activity = activities.get(setKey(feature, id));
     if (activity && (activity.training || activity.removing || activity.adding > 0)) {
         throw new Error('TRAINING_SET_IN_USE');
@@ -206,6 +225,7 @@ export function createTrainingSet(
 ): TrainingSetSummary {
     // 読み上げの学習セットは言語を 1 つ持ち、音声変換の学習セットは言語を持たない
     if ((feature === 'tts') !== (language !== undefined)) throw new Error('TRAINING_SET_LANGUAGE_MISMATCH');
+    checkNotMoving();
     const now = Date.now();
     const data: StoredSet = {
         id: crypto.randomUUID(),
@@ -221,7 +241,10 @@ export function createTrainingSet(
     return toSummary(data);
 }
 
+// 名前は学習中も変えられる。削除中は断る (ごみ箱へ移した後に記録を書いて、フォルダを作り直さないため)
 export function renameTrainingSet(feature: VoiceModelFeature, id: string, name: string): TrainingSetSummary {
+    checkNotMoving();
+    if (activities.get(setKey(feature, id))?.removing) throw new Error('TRAINING_SET_IN_USE');
     const data = readSet(feature, id);
     const next = { ...data, name: checkName(name), updatedAt: Date.now() };
     writeSet(next);
@@ -308,8 +331,15 @@ async function registerAudio(
         fs.rmSync(file, { force: true });
         throw error;
     }
+    let replaced: StoredAudio[];
+    try {
+        replaced = addToSet(current, audio);
+    } catch (error) {
+        fs.rmSync(file, { force: true });
+        throw error;
+    }
     // 記録に加えた後は、新しい音声を消さない (置き換えた前の音声だけを消す)
-    removeAudioFiles(data.feature, data.id, addToSet(current, audio));
+    removeAudioFiles(data.feature, data.id, replaced);
     return toAudio(current, audio);
 }
 
