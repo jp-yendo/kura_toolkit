@@ -10,10 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - Audio Separation, Voice Conversion and Text to Speech (Japanese, English and Chinese) on Windows
-  (x64), macOS (Apple Silicon) and Linux (x64)
+  (x64), macOS 14 or later (Apple Silicon) and Linux (x64)
 - Voice model management and model training for Voice Conversion and Text to Speech
 - Downloads for the Python runtime, package sets and models used by the voice features
-- App Settings: storage locations for libraries, models, the cache and the work directory
+- App Settings: storage locations for libraries, models, the cache and the work directory, and how long
+  unused cache files are kept
 
 ### Changed
 

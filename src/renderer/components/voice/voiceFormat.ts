@@ -1,6 +1,7 @@
 import type { TFunction } from 'i18next';
 import i18n from '../../i18n/config';
 import type { VoiceModelInfo } from '@shared/voice/types';
+import { voiceDisplayName } from '@shared/voice/voice-name';
 
 // 音声機能の画面で共通に使う表示用の整形
 
@@ -31,10 +32,7 @@ export function formatDuration(seconds: number): string {
 
 // 声のモデルの表示名
 export function voiceLabel(voice: VoiceModelInfo): string {
-    if (voice.name) return voice.name;
-    // 名前を付けていないダウンロードしたモデルは、配布時の名前で表示する (ほかのモデルと同じく名前だけを示す)
-    if (voice.distributedName) return voice.distributedName.replace(/-jp$/, '');
-    return voice.id;
+    return voiceDisplayName(voice);
 }
 
 // 同じ表示名のモデルがあるか (選択欄で区別できなくなるため、名前の入力時に注意を出すのに使う)

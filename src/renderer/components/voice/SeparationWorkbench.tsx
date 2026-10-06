@@ -215,7 +215,8 @@ export default function SeparationWorkbench({ store, disabled }: Props) {
 
     if (!source || !stage) return null;
     const category = stage.category;
-    const { method, archs: methodArchs } = resolveMethod(selection, category, models);
+    const stereo = source.channels >= 2;
+    const { method, archs: methodArchs } = resolveMethod(selection, category, models, stereo);
     const busy = disabled || job !== null;
     const canEditStage = stage.candidates.length === 0;
     const lastIndex = stages.length - 1;
@@ -480,6 +481,7 @@ export default function SeparationWorkbench({ store, disabled }: Props) {
                         <SeparationMethodPicker
                             category={category}
                             models={models}
+                            stereo={stereo}
                             value={selection}
                             onChange={setSelection}
                             disabled={busy}

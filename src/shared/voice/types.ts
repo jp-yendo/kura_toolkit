@@ -1,7 +1,7 @@
 // 音声分離・音声変換・読み上げの共有型 (main / preload / renderer)。
 // Node / DOM に依存させない。
 
-import type { SymbolReading, TtsEngineId, VoiceLanguage } from './languages';
+import type { SymbolReading, TtsModelType, VoiceLanguage } from './languages';
 import type { TagFix, TagIssue } from './control-tags';
 
 // ---------------------------------------------------------------------------
@@ -449,7 +449,7 @@ export type RvcModelMeta = {
 };
 
 export type TtsModelMeta = {
-    engine: TtsEngineId;
+    modelType: TtsModelType;
     languages: VoiceLanguage[];
     styles: string[];
     speakers: string[];
@@ -542,7 +542,7 @@ export type TimedLine = {
 
 export type TtsRunRequest = {
     workKey: string;
-    engine: TtsEngineId;
+    modelType: TtsModelType;
     language: VoiceLanguage;
     voiceId: string;
     params: TtsParams;
@@ -570,13 +570,13 @@ export type TtsAudio = {
     id: string;
     voiceId: string;
     voiceName: string;
-    engine: TtsEngineId;
+    modelType: TtsModelType;
     language: VoiceLanguage;
     params: TtsParams;
     media: MediaRef;
     // 話速を調整した区間 (タイムライン)
     adjusted: { index: number; factor: number }[];
-    // 区間に収まらなかった区間 (警告のみ・重ねる場合)
+    // 区間に収まらなかった区間 (警告のみの場合。「重ねる」は置き方が同じで知らせない)
     overflows: { index: number; overflowSec: number }[];
     createdAt: number;
 };
@@ -632,7 +632,7 @@ export type TrainingSetDetail = {
 
 export type TrainingStage = 'prepare' | 'preprocess' | 'extract' | 'train' | 'index' | 'finalize';
 
-// 音声機能の処理の段階 (voice.phases.<id> の文言で示す)
+// 音声機能の処理の段階 (jobPhases.<id> の文言で示す)
 export type VoicePhaseId =
     | 'prepare'
     | 'decodeInput'

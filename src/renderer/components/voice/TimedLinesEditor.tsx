@@ -83,6 +83,8 @@ export default function TimedLinesEditor({
                     slotProps={{
                         htmlInput: {
                             'aria-label': t(`voice.tts.timed.${field}`),
+                            // 誤りの一覧からこの欄へ移るための目印
+                            'data-time-field': `${row.id}:${field}`,
                             spellCheck: false,
                             sx: { fontFamily: 'Consolas, Menlo, monospace', fontSize: 13, py: 0.75 },
                         },

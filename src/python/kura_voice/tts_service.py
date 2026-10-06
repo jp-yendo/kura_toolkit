@@ -44,6 +44,7 @@ def _prepare() -> None:
         raise KuraError("NLTK_DATA_MISSING")
 
     nltk.download = blocked
+    runtime.patch_nltk_zip_lookup()
     _prepared = True
 
 
@@ -166,33 +167,142 @@ def _chinese_given(parts: List[dict]) -> Tuple[str, List[str], List[int]]:
     return text, phones, tones
 
 
-def _english_overrides(parts: List[dict]) -> Tuple[str, Dict[str, list]]:
-    """Plain text plus pronunciation overrides injected into the English dictionary."""
-    from style_bert_vits2.constants import Languages
-    from style_bert_vits2.nlp import bert_models
+def _english_overrides(parts: List[dict]) -> Tuple[str, Dict[int, Tuple[list, int]]]:
+    """Plain text plus the pronunciations given for words, by the position of the word.
 
-    tokenizer = bert_models.load_tokenizer(Languages.EN)
-    overrides: Dict[str, list] = {}
-    texts = []
+    The position is the index in the library's word list (style_bert_vits2.nlp.english.g2p.__text_to_words) of the
+    normalised text, which is what the library's g2p walks through. Only the wrapped words get the given
+    pronunciation; the same word elsewhere is read as usual. Each target also carries the number of tokens of the
+    wrapped word: the library joins a following "-" or "'" and what comes after it to the same word ("GAN-based",
+    "Kura's"), and those tokens are read as usual.
+    """
+    from style_bert_vits2.nlp.english import g2p as english_g2p
+    from style_bert_vits2.nlp.english.normalizer import normalize_text
+
+    text_to_words = getattr(english_g2p, "__text_to_words")
+    targets: Dict[int, Tuple[list, int]] = {}
+    text = ""
+    after_override = False
     for part in parts:
         if "words" not in part:
-            texts.append(part["text"])
+            # A word right after a wrapped word stays a separate word
+            if after_override and part["text"][:1].isalnum():
+                text += " "
+            text += part["text"]
+            after_override = False
             continue
-        surface_words = part["surface"].split()
-        for word, phones in zip(surface_words, part["words"]):
-            pieces = [piece for piece in tokenizer.tokenize(word) if piece not in ("\u2581",)]
-            if len(pieces) != 1:
-                raise KuraError("IPA_WORD_SPLIT", word)
-            overrides[pieces[0].lstrip("\u2581").upper()] = [list(phones)]
-        texts.append(part["surface"])
-    return " ".join(text.strip() for text in texts if text.strip()), overrides
+        surface = part["surface"]
+        if text and not text[-1].isspace():
+            text += " "
+        surface_words = text_to_words(normalize_text(surface))
+        count = len(surface_words)
+        if count != len(part["words"]):
+            raise KuraError("IPA_WORD_SPLIT", surface)
+        # Count the words before the wrapped ones together with them, so that spaces before them are tokenised the
+        # same way as in the whole text (a run of spaces makes an empty word)
+        first = len(text_to_words(normalize_text(text + surface))) - count
+        for offset, phones in enumerate(part["words"]):
+            targets[first + offset] = ([list(phones)], len(surface_words[offset]))
+        text += surface
+        after_override = True
+    return text.strip(), targets
+
+
+# Endings of contractions after a word given by IPA ("'s" depends on the last sound of the word)
+_CONTRACTIONS = {"'ll": ["L"], "'re": ["R"], "'ve": ["V"], "'d": ["D"], "'m": ["M"]}
+_SIBILANTS = {"S", "Z", "SH", "ZH", "CH", "JH"}
+_VOICELESS = {"P", "T", "K", "F", "TH"}
+
+
+def _english_contraction(text: str, last: str) -> Optional[list]:
+    lower = text.lower()
+    if lower == "'s":
+        sound = "".join(ch for ch in last if not ch.isdigit())
+        if sound in _SIBILANTS:
+            return ["IH0", "Z"]
+        return ["S"] if sound in _VOICELESS else ["Z"]
+    return _CONTRACTIONS.get(lower)
+
+
+def _english_g2p_with(targets: Dict[int, Tuple[list, int]]) -> Any:
+    """The library's English g2p (style_bert_vits2.nlp.english.g2p.g2p, style-bert-vits2-mk 2.8.8) with the given
+    pronunciations for the words at the given positions. Everything else follows the library's code unchanged."""
+    from style_bert_vits2.nlp.english import g2p as module
+    from style_bert_vits2.nlp.symbols import PUNCTUATIONS
+
+    text_to_words = getattr(module, "__text_to_words")
+    refine_syllables = getattr(module, "__refine_syllables")
+    refine_ph = getattr(module, "__refine_ph")
+    post_replace_ph = getattr(module, "__post_replace_ph")
+    distribute_phone = getattr(module, "__distribute_phone")
+
+    def g2p(text: str) -> Tuple[list, list, list]:
+        phones: list = []
+        tones: list = []
+        phone_len: list = []
+        words = text_to_words(text)
+        for index, word in enumerate(words):
+            temp_phones: list = []
+            temp_tones: list = []
+            rest = word
+            if index in targets:
+                syllables, tokens = targets[index]
+                phns, tns = refine_syllables(syllables)
+                temp_phones += [post_replace_ph(item) for item in phns]
+                temp_tones += tns
+                # The tokens joined after the wrapped word ("-based", "'s") are read as usual
+                rest = word[tokens:]
+                # A contraction right after the wrapped word ("'s", "'ll") is read as the ending of that word
+                ending = _english_contraction("".join(rest), syllables[-1][-1] if syllables[-1] else "")
+                if ending is not None:
+                    phns, tns = refine_syllables([ending])
+                    temp_phones += [post_replace_ph(item) for item in phns]
+                    temp_tones += tns
+                    rest = []
+            if len(rest) > 1 and "'" in rest:
+                rest = ["".join(rest)]
+            for w in rest:
+                if w in PUNCTUATIONS:
+                    temp_phones.append(w)
+                    temp_tones.append(0)
+                    continue
+                if w.upper() in module.eng_dict:
+                    phns, tns = refine_syllables(module.eng_dict[w.upper()])
+                    temp_phones += [post_replace_ph(item) for item in phns]
+                    temp_tones += tns
+                else:
+                    phone_list = list(filter(lambda item: item != " ", module._g2p(w)))
+                    phns, tns = [], []
+                    for ph in phone_list:
+                        if ph in module.ARPA:
+                            ph, tn = refine_ph(ph)
+                            phns.append(ph)
+                            tns.append(tn)
+                        else:
+                            phns.append(ph)
+                            tns.append(0)
+                    temp_phones += [post_replace_ph(item) for item in phns]
+                    temp_tones += tns
+            phones += temp_phones
+            tones += temp_tones
+            phone_len.append(len(temp_phones))
+
+        word2ph: list = []
+        for token, length in zip(words, phone_len):
+            word2ph += distribute_phone(length, len(token))
+        phones = ["_"] + phones + ["_"]
+        tones = [0] + tones + [0]
+        word2ph = [1] + word2ph + [1]
+        return phones, tones, word2ph
+
+    return g2p
 
 
 def _synthesize_piece(piece: dict, params: dict, model: Any) -> Any:
     import numpy as np
 
     language = params["language"]
-    use_jp_extra = params["engine"] == "jp-extra"
+    use_jp_extra = params["modelType"] == "jp-extra"
     base = params["params"]
     rate = float(base["speed"]) * float(piece["rate"])
     pitch_scale = float(base["pitchScale"]) * (2 ** (float(piece["pitch"]) / 12))
@@ -207,7 +317,7 @@ def _synthesize_piece(piece: dict, params: dict, model: Any) -> Any:
         pitch_scale=pitch_scale,
         intonation_scale=float(base["intonationScale"]),
     )
-    # Styles come only from the model; when the model has none, the engine's own handling applies.
+    # Styles come only from the model; when the model has none, the library's own handling applies.
     if base.get("style"):
         kwargs.update(style=str(base["style"]), style_weight=float(base["styleWeight"]))
     parts = piece["parts"]
@@ -226,28 +336,19 @@ def _synthesize_piece(piece: dict, params: dict, model: Any) -> Any:
     elif language == "en" and any("words" in part for part in parts):
         from style_bert_vits2.nlp.english import g2p as english_g2p
 
-        text, overrides = _english_overrides(parts)
-        saved = {word: english_g2p.eng_dict.get(word) for word in overrides}
-        english_g2p.eng_dict.update(overrides)
+        # The library's text cleaning imports english.g2p.g2p each time, so it uses this one while synthesizing
+        text, targets = _english_overrides(parts)
+        original = english_g2p.g2p
+        english_g2p.g2p = _english_g2p_with(targets)
         try:
             _rate, audio = model.infer(text=text, **kwargs)
         finally:
-            for word, value in saved.items():
-                if value is None:
-                    english_g2p.eng_dict.pop(word, None)
-                else:
-                    english_g2p.eng_dict[word] = value
+            english_g2p.g2p = original
     else:
         text = "".join(part["text"] for part in parts)
         _rate, audio = model.infer(text=text, **kwargs)
     samples = audio.astype(np.float32) / 32768.0
     return samples * _db_to_gain(float(piece["volume"])) * OUTPUT_GAIN
-
-    ramp = (0.5 - 0.5 * np.cos(np.linspace(0.0, np.pi, length, dtype=np.float32))).astype(np.float32)
-    samples = samples.copy()
-    samples[:length] *= ramp
-    samples[-length:] *= ramp[::-1]
-    return samples
 
 
 def _speakable(piece: dict) -> bool:
@@ -263,19 +364,80 @@ def _speakable(piece: dict) -> bool:
 _SILENCE_BLOCK_SECONDS = 10
 
 
-def _write_segment(segment: dict, params: dict, model: Any, sample_rate: int, path: str) -> int:
-    """Write one segment to a WAV file piece by piece and return its length in frames.
+def _piece_text(piece: dict) -> str:
+    return "".join(part["text"] if "text" in part else part["surface"] for part in piece["parts"])
+
+
+def _check_bert_length(language: str, segments: List[dict]) -> None:
+    """Stop before synthesis when a segment is longer than the language's BERT model can take.
+
+    The library passes the text of a piece to the BERT model in one go without cutting it. Models with absolute
+    positions (the Chinese RoBERTa) cannot take more tokens than their position table, so such a segment fails
+    inside the library on any device; it is reported as too long instead (the user splits it). The DeBERTa models
+    (Japanese, English) use relative positions and have no such limit: a long segment only needs more memory and
+    time (when the GPU runs out of memory, it is made on the CPU).
+    """
+    from style_bert_vits2.nlp import bert_models
+
+    lang = _language(language)
+    config = bert_models.load_model(lang).config
+    if getattr(config, "relative_attention", False) and not getattr(config, "position_biased_input", True):
+        return
+    limit = int(getattr(config, "max_position_embeddings", 0) or 0)
+    if limit <= 0:
+        return
+    tokenizer = bert_models.load_tokenizer(lang)
+    normalize = _bert_text_normalizer(language)
+    for segment in segments:
+        for piece in segment["pieces"]:
+            if piece["kind"] != "speech" or not _speakable(piece):
+                continue
+            # Counted on the text the library passes to the model (normalised, e.g. numbers written in Chinese)
+            if len(tokenizer(normalize(_piece_text(piece)))["input_ids"]) > limit:
+                raise KuraError("TTS_SEGMENT_TOO_LONG", str(segment["id"]))
+
+
+def _bert_text_normalizer(language: str) -> Any:
+    """The normalisation the library applies to a piece's text before passing it to the BERT model (clean_text)."""
+    if language == "zh":
+        from style_bert_vits2.nlp.chinese.normalizer import normalize_text
+
+        return normalize_text
+    if language == "en":
+        from style_bert_vits2.nlp.english.normalizer import normalize_text
+
+        return normalize_text
+    from style_bert_vits2.nlp.japanese.normalizer import normalize_text
+
+    return normalize_text
+
+
+def _write_segment(segment: dict, params: dict, model: Any, sample_rate: int, path: str) -> Tuple[int, List[dict]]:
+    """Write one segment to a WAV file piece by piece and return its length in frames and where its parts are.
 
     Each piece is written as soon as it is made, so the pieces of a segment are never held in memory
-    together.
+    together. The parts ({"kind": "speech" | "silence", "start", "frames"}) let the caller fit a segment into a
+    shorter time by stretching the speech only, keeping the pauses as they are.
     """
     import numpy as np
     import soundfile
 
     frames = 0
+    parts: List[dict] = []
+
+    def mark(kind: str, start: int, count: int) -> None:
+        if count <= 0:
+            return
+        # Consecutive parts of the same kind are one part
+        if parts and parts[-1]["kind"] == kind:
+            parts[-1]["frames"] += count
+        else:
+            parts.append({"kind": kind, "start": start, "frames": count})
+
     with soundfile.SoundFile(path, "w", samplerate=sample_rate, channels=1, subtype="FLOAT") as out:
         for piece in segment["pieces"]:
             if piece["kind"] == "silence":
+                start = frames
                 remaining = int(sample_rate * float(piece["ms"]) / 1000.0)
                 block = sample_rate * _SILENCE_BLOCK_SECONDS
                 while remaining > 0:
@@ -283,11 +445,13 @@ def _write_segment(segment: dict, params: dict, model: Any, sample_rate: int, pa
                     out.write(np.zeros(count, dtype=np.float32))
                     remaining -= count
                     frames += count
+                mark("silence", start, frames - start)
             elif _speakable(piece):
                 samples = _synthesize_piece(piece, params, model).astype(np.float32)
                 out.write(samples)
+                mark("speech", frames, len(samples))
                 frames += len(samples)
-    return frames
+    return frames, parts
 
 
 def rpc_synthesize(params: dict, context: Context) -> dict:
@@ -297,6 +461,7 @@ def rpc_synthesize(params: dict, context: Context) -> dict:
     def run(device: str) -> List[dict]:
         context.phase("loadModel")
         _load_bert(params["language"], params["berts"])
+        _check_bert_length(params["language"], params["segments"])
         model = _load_model(params, device)
         sample_rate = int(model.hyper_parameters.data.sampling_rate)
         results = []
@@ -304,8 +469,11 @@ def rpc_synthesize(params: dict, context: Context) -> dict:
         context.phase("synthesize", 0.0)
         for index, segment in enumerate(segments):
             path = os.path.join(params["outputDir"], f"{segment['id']}.wav")
-            frames = _write_segment(segment, params, model, sample_rate, path)
-            results.append({"id": segment["id"], "path": path, "duration": frames / sample_rate})
+            frames, parts = _write_segment(segment, params, model, sample_rate, path)
+            results.append(
+                {"id": segment["id"], "path": path, "duration": frames / sample_rate, "sampleRate": sample_rate,
+                 "parts": parts}
+            )
             context.progress((index + 1) / len(segments), str(segment["id"]))
             context.phase("synthesize", (index + 1) / len(segments))
         return results

@@ -131,7 +131,7 @@ export default function VoiceModelsPage({ feature }: Props) {
         }
         if (voice.tts) {
             return `${t('voice.models.ttsInfo', {
-                engine: t(`voice.engine.${voice.tts.engine}`),
+                modelType: t(`voice.modelType.${voice.tts.modelType}`),
                 styles: voice.tts.styles.length,
                 version: voice.tts.version,
             })} / ${voice.tts.languages.map(language => t(`voice.languages.${language}`)).join(', ')}`;
@@ -216,7 +216,7 @@ export default function VoiceModelsPage({ feature }: Props) {
                                                 <DriveFileRenameOutlineIcon fontSize='small' />
                                             </IconButton>
                                         </Tooltip>
-                                        {voice.tts?.engine === 'multilingual' && (
+                                        {voice.tts?.modelType === 'multilingual' && (
                                             <Tooltip title={t('voice.models.editLanguages')}>
                                                 <IconButton
                                                     size='small'

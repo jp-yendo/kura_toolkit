@@ -56,6 +56,9 @@ export default function SyncPlayer({ source, actions, keepPosition = true }: Pro
     // 再生対象の波形。切り替え先の波形ができるまでは前の波形を示す (切り替えのたびに消えてちらつかないように)
     const [waveform, setWaveform] = React.useState<WaveformData | null>(null);
     const loadedUrl = React.useRef<string | null>(null);
+    // 作り直した音声へ差し替えるときに止めた前の audio 要素。その停止の通知 (非同期に届く) で、
+    // 先頭へ戻した再生位置を前の音声の位置で上書きしないようにする
+    const replacedRef = React.useRef<HTMLAudioElement | null>(null);
 
     const current = () => audioRefs[activeRef.current].current;
 
@@ -116,6 +119,7 @@ export default function SyncPlayer({ source, actions, keepPosition = true }: Pro
         const next = audioRefs[nextIndex].current;
         if (!next) return;
         if (!keepPosition) {
+            if (previous && !previous.paused) replacedRef.current = previous;
             previous?.pause();
             playingRef.current = false;
             setPlaying(false);
@@ -196,8 +200,12 @@ export default function SyncPlayer({ source, actions, keepPosition = true }: Pro
 
     // 止まった位置をそのまま示す (描画のたびの更新は止まるため)
     const handlePause = (index: number) => {
-        if (index !== activeRef.current) return;
         const audio = audioRefs[index].current;
+        if (audio && audio === replacedRef.current) {
+            replacedRef.current = null;
+            return;
+        }
+        if (index !== activeRef.current) return;
         playingRef.current = false;
         setPlaying(false);
         if (audio) {

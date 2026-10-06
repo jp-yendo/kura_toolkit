@@ -96,7 +96,7 @@ export default {
         },
         tts: {
             title: '読み上げ',
-            desc: 'テキストや字幕 (SRT/WebVTT) を指定した声で読み上げます。声のモデルの学習もできます。',
+            desc: 'テキストや字幕 (SRT・WebVTT・ASS・SSA・SBV) を指定した声で読み上げます。声のモデルの学習もできます。',
         },
         chapterCut: {
             title: 'チャプターカット',

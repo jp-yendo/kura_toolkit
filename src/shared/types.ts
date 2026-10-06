@@ -62,7 +62,7 @@ export type JobEvent = {
     phase?: JobPhase;
 };
 
-// 処理の段階。id は画面の文言の名前 (音声機能は voice.phases.<id>)
+// 処理の段階。id は画面の文言の名前 (jobPhases.<id>。回数で数える段階は jobPhasesCounted.<id>)
 export type JobPhase = {
     id: string;
     // 段階の中の進み具合 (0-1)。分からない段階では省略し、残り時間を示さない

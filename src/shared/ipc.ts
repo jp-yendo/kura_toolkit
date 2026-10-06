@@ -34,7 +34,7 @@ import type {
     UpdateState,
     VectorizeParams,
 } from './types';
-import type { TtsEngineId, VoiceLanguage } from './voice/languages';
+import type { TtsModelType, VoiceLanguage } from './voice/languages';
 import type {
     AudioExportSettings,
     ConversionCandidate,
@@ -122,7 +122,8 @@ export type VoiceApi = {
         run(jobId: string, request: TtsRunRequest): Promise<TtsRunResult>;
         cancelConfirmation(token: string): Promise<void>;
         // 文章ファイルの内容 (改行は LF)
-        loadText(path: string): Promise<string>;
+        // language: 読み上げの言語 (文字コードを見分けられないときの手がかり)
+        loadText(path: string, language?: VoiceLanguage): Promise<string>;
         saveText(path: string, text: string): Promise<void>;
     };
     models: {
@@ -177,7 +178,10 @@ export type VoiceApi = {
     };
     training: {
         rvcStart(jobId: string, setId: string, name: string): Promise<VoiceModelInfo>;
-        ttsStart(jobId: string, options: { setId: string; engine: TtsEngineId; name: string }): Promise<VoiceModelInfo>;
+        ttsStart(
+            jobId: string,
+            options: { setId: string; modelType: TtsModelType; name: string }
+        ): Promise<VoiceModelInfo>;
     };
     export: {
         run(jobId: string, workKey: string, items: ExportItem[], settings: AudioExportSettings): Promise<ExportResult>;

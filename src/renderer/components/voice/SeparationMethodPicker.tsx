@@ -34,7 +34,7 @@ import {
 } from '@shared/voice/types';
 
 // 方式の選び方。おすすめ (目的別のおすすめの組み合わせとモデル)・モデル (1 つ)・組み合わせ (任意の複数のモデル)・
-// 信号処理 (中央定位の打ち消し。ボーカルと伴奏の 2 分割だけ)
+// 信号処理 (中央定位の打ち消し。ボーカルと伴奏の 2 分割で、元の音源がステレオの場合だけ)
 export type PickMode = 'recommended' | 'model' | 'ensemble' | 'signal';
 
 export type MethodSelection = {
@@ -83,8 +83,9 @@ function compareModels(a: SeparationModel, b: SeparationModel): number {
     return Number.isNaN(order) || order === 0 ? a.name.localeCompare(b.name) : order;
 }
 
-// 分離の種類で選べるもの (取得済みのものだけ)
-function choicesFor(category: SeparationCategory, list: SeparationModelList | null): Choices {
+// 分離の種類で選べるもの (取得済みのものだけ)。stereo: 元の音源がステレオか (中央定位の打ち消しは左右の差を使うため、
+// モノラルの音源では選べない)
+function choicesFor(category: SeparationCategory, list: SeparationModelList | null, stereo: boolean): Choices {
     const models = (list?.models ?? [])
         .filter(model => model.category === category && model.installed)
         .sort(compareModels);
@@ -111,7 +112,7 @@ function choicesFor(category: SeparationCategory, list: SeparationModelList | nu
     if (recommended.length > 0) modes.push('recommended');
     if (models.length > 0) modes.push('model');
     if (models.length >= 2) modes.push('ensemble');
-    if (category === 'vocals') modes.push('signal');
+    if (category === 'vocals' && stereo) modes.push('signal');
     return { modes, recommended, models, ensembles };
 }
 
@@ -123,9 +124,10 @@ function activeMode(selection: MethodSelection, modes: PickMode[]): PickMode | n
 export function resolveMethod(
     selection: MethodSelection,
     category: SeparationCategory,
-    list: SeparationModelList | null
+    list: SeparationModelList | null,
+    stereo: boolean
 ): ResolvedMethod {
-    const choices = choicesFor(category, list);
+    const choices = choicesFor(category, list, stereo);
     const mode = activeMode(selection, choices.modes);
     const byFile = (filename: string) => choices.models.find(model => model.filename === filename) ?? null;
     const none: ResolvedMethod = { method: null, archs: [], model: null };
@@ -195,6 +197,8 @@ function ModelOption({ model, detail }: { model: SeparationModel; detail: string
 type Props = {
     category: SeparationCategory;
     models: SeparationModelList | null;
+    // 元の音源がステレオか
+    stereo: boolean;
     value: MethodSelection;
     onChange(value: MethodSelection): void;
     disabled?: boolean;
@@ -203,11 +207,11 @@ type Props = {
 const captionSx = { lineHeight: 1.5 } as const;
 
 // 分離の方式を選ぶ。選び方 (おすすめ・モデル・組み合わせ・信号処理) を切り替え、取得済みのものだけを示す
-export default function SeparationMethodPicker({ category, models, value, onChange, disabled }: Props) {
+export default function SeparationMethodPicker({ category, models, stereo, value, onChange, disabled }: Props) {
     const { t } = useTranslation();
-    const choices = React.useMemo(() => choicesFor(category, models), [category, models]);
+    const choices = React.useMemo(() => choicesFor(category, models, stereo), [category, models, stereo]);
     const mode = activeMode(value, choices.modes);
-    const resolved = resolveMethod(value, category, models);
+    const resolved = resolveMethod(value, category, models, stereo);
     const update = (patch: Partial<MethodSelection>) => onChange({ ...value, ...patch });
 
     if (choices.modes.length === 0) {

@@ -11,7 +11,8 @@ import { JVNV_MODEL_NAMES, readyItemId, TTS_READY_DIR } from './spec';
 import { discardLater, newTempDir } from '../work-dir';
 import { renameWithRetry } from '../../utils/rename-retry';
 import { moveToTrash } from '../../utils/trash';
-import { languagesForEngine, type TtsEngineId, type VoiceLanguage } from '../../../shared/voice/languages';
+import { languagesForModelType, type TtsModelType, type VoiceLanguage } from '../../../shared/voice/languages';
+import { voiceDisplayName } from '../../../shared/voice/voice-name';
 import type {
     ImportCandidate,
     ImportChoices,
@@ -153,12 +154,12 @@ function sortedKeys(map: Record<string, number> | undefined): string[] {
 }
 
 export function ttsMetaFromConfig(config: SbvConfig): TtsModelMeta {
-    // version が無い設定は JP-Extra 版として扱われる (エンジン側の既定値)
+    // version が無い設定は JP-Extra 版として扱われる (ライブラリの既定値)
     const version = typeof config.version === 'string' ? config.version : '2.0-JP-Extra';
-    const engine: TtsEngineId = version.endsWith('JP-Extra') ? 'jp-extra' : 'multilingual';
+    const modelType: TtsModelType = version.endsWith('JP-Extra') ? 'jp-extra' : 'multilingual';
     return {
-        engine,
-        languages: languagesForEngine(engine),
+        modelType,
+        languages: languagesForModelType(modelType),
         styles: sortedKeys(config.data?.style2id),
         speakers: sortedKeys(config.data?.spk2id),
         version,
@@ -224,7 +225,7 @@ function readyModelInfo(name: string, overrides: Record<string, ReadyModelOverri
         throw new Error(`DATA_FILE_CORRUPT: ${dir}`, { cause: error });
     }
     const override = overrides[name] ?? {};
-    if (override.languages && meta.engine === 'multilingual') meta.languages = override.languages;
+    if (override.languages && meta.modelType === 'multilingual') meta.languages = override.languages;
     return {
         id: `ready:${name}`,
         feature: 'tts',
@@ -317,7 +318,7 @@ export function renameVoice(feature: VoiceModelFeature, id: string, name: string
 export function setVoiceLanguages(id: string, languages: VoiceLanguage[]): VoiceModelInfo {
     if (languages.length === 0) throw new Error('VOICE_LANGUAGES_EMPTY');
     const voice = getVoice('tts', id);
-    if (voice.info.tts?.engine !== 'multilingual') throw new Error('VOICE_LANGUAGES_FIXED');
+    if (voice.info.tts?.modelType !== 'multilingual') throw new Error('VOICE_LANGUAGES_FIXED');
     const readyModel = readyModelName(id);
     if (readyModel) {
         const overrides = readReadyModelOverrides();
@@ -361,7 +362,8 @@ type VoiceManifest = {
 // 本アプリに取り込み直したときに名前などを戻すための kura-voice.json も入れる (他のツールは使わない)
 export async function exportVoice(feature: VoiceModelFeature, id: string, destPath: string): Promise<void> {
     const voice = getVoice(feature, id);
-    const name = voice.info.name || voice.info.distributedName || id;
+    // 一覧と同じ表示名 (取り込み直したときに、一覧で見ていた名前になるように)
+    const name = voiceDisplayName(voice.info);
     const manifest: VoiceManifest = {
         format: VOICE_FILE_FORMAT,
         feature,
@@ -421,9 +423,9 @@ function importStagingDir(feature: VoiceModelFeature, stagingId: string): string
     return path.join(voicesDir(feature), `${IMPORT_STAGING_PREFIX}${stagingId}`);
 }
 
-// 書き出しファイルに記録された言語を確かめる (そのエンジンが読み上げられる言語に限る)
-function manifestLanguages(value: unknown, engine: TtsEngineId): VoiceLanguage[] {
-    const allowed = languagesForEngine(engine);
+// 書き出しファイルに記録された言語を確かめる (そのモデルの種類が読み上げられる言語に限る)
+function manifestLanguages(value: unknown, modelType: TtsModelType): VoiceLanguage[] {
+    const allowed = languagesForModelType(modelType);
     if (!Array.isArray(value) || value.length === 0 || !value.every(item => allowed.includes(item))) {
         throw new Error('IMPORT_INVALID_FILE');
     }
@@ -491,8 +493,8 @@ async function inspectKuraFile(feature: VoiceModelFeature, file: string, staging
     const tts = ttsMetaFromConfig(
         parseImportJson<SbvConfig>(fs.readFileSync(files['config.json'], 'utf-8'), 'config.json')
     );
-    if (manifest.tts?.languages !== undefined && tts.engine === 'multilingual') {
-        tts.languages = manifestLanguages(manifest.tts.languages, tts.engine);
+    if (manifest.tts?.languages !== undefined && tts.modelType === 'multilingual') {
+        tts.languages = manifestLanguages(manifest.tts.languages, tts.modelType);
     }
     const result = await getWorker('tts').request<{ safe: boolean; detail?: string }>('inspect_style_vectors', {
         path: files['style_vectors.npy'],
@@ -682,7 +684,7 @@ export async function commitImport(
     if (!inspection.safe && !options.allowUnsafe) throw new Error('IMPORT_UNSAFE_NOT_ALLOWED');
     const name = options.name.trim();
     if (!name) throw new Error('VOICE_NAME_EMPTY');
-    const multilingual = inspection.tts?.engine === 'multilingual';
+    const multilingual = inspection.tts?.modelType === 'multilingual';
     if (multilingual && options.languages?.length === 0) throw new Error('VOICE_LANGUAGES_EMPTY');
     // 展開したファイルは名前の変更で移す (同じディスク)。利用者の元のファイルは残すためコピーする
     const place = (source: string, dest: string) => {

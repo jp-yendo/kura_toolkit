@@ -139,6 +139,7 @@ def _patch_sbv2(script: str) -> None:
         raise RuntimeError("NLTK download blocked by Kura Toolkit")
 
     nltk.download = blocked
+    runtime.patch_nltk_zip_lookup()
 
 
 def main() -> int:

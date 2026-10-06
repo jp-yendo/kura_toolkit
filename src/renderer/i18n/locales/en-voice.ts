@@ -31,7 +31,7 @@ export default {
         tts: 'Text to Speech',
         ttsTraining: 'Text to Speech model training',
     },
-    engine: {
+    modelType: {
         'jp-extra': 'JP-Extra',
         multilingual: 'Multilingual',
     },
@@ -684,7 +684,7 @@ export default {
         rvcInfo: 'RVC {{version}} / {{rate}} Hz / index: {{index}} / {{embedder}}',
         indexYes: 'yes',
         indexNo: 'no',
-        ttsInfo: '{{engine}} / {{styles}} styles / format {{version}}',
+        ttsInfo: '{{modelType}} / {{styles}} styles / format {{version}}',
         languages: 'Languages',
         languagesHint:
             'Choose the languages this multilingual model is used for. It can then only be used for text in those languages.',
@@ -728,8 +728,9 @@ export default {
         multipleCandidates: 'Several files that can be imported were found. Choose the one to import.',
         modelFile: 'Model file',
         indexFile: 'Index file',
-        sourceKura: 'This model was exported by this app. It is imported with its original type.',
-        sourceExternal: 'This model was obtained elsewhere. It is imported as "Imported".',
+        sourceKura:
+            'This model was exported by this app. It is imported with the name it had, and keeps the mark of a model trained in this app.',
+        sourceExternal: 'This model was obtained elsewhere.',
         unsafeTitle: 'The file could not be read safely',
         unsafeMessage: {
             converter:
@@ -764,7 +765,7 @@ export default {
             empty: 'Enter rows with "Add Row", or load a subtitle file with "Open".',
             addRowFirst: 'Add a row first.',
             rowIssue: 'Row {{row}}: {{message}}',
-            errorAt: 'Row {{row}} (line {{line}}, character {{column}}): {{message}}',
+            errorAt: 'Table row {{row}}, text line {{line}}, character {{column}}: {{message}}',
             fixItem: 'Row {{row}} {{line}}:{{column}} {{kind}} "{{from}}" -> "{{to}}"',
             issues: {
                 startFormat: 'The start time is not in a valid format (for example 00:01:02.500).',
@@ -775,16 +776,16 @@ export default {
             },
             unsupportedFile: 'This file format is not supported.',
             noLines: 'Nothing to read could be found in the file.',
-            skipped: '{{count}} entries with invalid times were not loaded.',
+            skipped:
+                '{{count}} parts whose times could not be read were not loaded. To keep the original file, choose where to save when you save.',
             saveInvalidTime: 'The time in row {{row}} is not in a valid format, so the file cannot be saved.',
         },
         language: 'Language',
-        engine: 'Engine',
-        getLanguageModels: 'Download Language Models',
+        modelType: 'Model type',
         languageModelMissing: 'The language model for {{language}} is not downloaded.',
         voice: 'Voice model',
         noVoices:
-            'No voice model can be used with this engine and language. Get ready-to-use models or import a model in "Voice Models".',
+            'No voice model can be used with this model type and language. Get ready-to-use models or import a model in "Voice Models".',
         style: 'Style',
         speaker: 'Speaker',
         styleWeight: 'Style strength',
@@ -792,9 +793,9 @@ export default {
         pitchScale: 'Pitch',
         intonationScale: 'Intonation',
         advanced: 'Advanced Settings',
-        sdpRatio: 'SDP ratio (variation)',
-        noise: 'Noise',
-        noiseW: 'Noise (phoneme length)',
+        sdpRatio: 'Tempo variation',
+        noise: 'Expression variation',
+        noiseW: 'Sound length variation',
         paragraphPause: 'Pause between lines',
         readSymbols: 'Read symbols aloud',
         overflowMode: 'When it does not fit in the time',
@@ -810,8 +811,7 @@ export default {
         run: 'Create Audio',
         running: 'Creating audio',
         empty: 'Enter the text to read.',
-        hasErrors:
-            'The audio cannot be created because the control tags or the times contain errors. Fix the highlighted parts.',
+        hasErrors: 'The audio cannot be created because there are errors. Fix the parts shown.',
         errorAt: 'Line {{line}}, column {{column}}: {{message}}',
         fixesPending:
             'The control tags contain {{count}} places with different letter case or curly quotes. When you create the audio, you will be asked whether to fix them all at once.',
@@ -839,6 +839,8 @@ export default {
         reportOverflowItem: 'Row {{index}}: {{seconds}} s too long',
         exportLabel: 'Text to Speech result',
         discardChanges: 'The text you are editing has not been saved. Discard it and start new text?',
+        discardForOpen: 'The text you are editing has not been saved. Discard it and open a file?',
+        secondsValue: '{{value}} s',
     },
     tags: {
         groups: {
@@ -887,7 +889,7 @@ export default {
             mode: 'How to handle it: speedup (speed up to fit) / overlap (overlap the next row) / shift (push later rows back) / warn (report only)',
         },
         escapeTitle: 'Writing tag-like text',
-        escape: 'To write text that starts with a known tag name (such as "<break") as plain text, use the entities "&lt;" (<), "&gt;" (>) and "&amp;" (&).\nOther "<...>" text and full-width "＜" "＞" are treated as plain text and follow the symbol reading setting.',
+        escape: 'To write text that starts with a known tag name (such as "<break") as plain text, use the entities "&lt;" (<), "&gt;" (>) and "&amp;" (&).\nOther "<...>" text and full-width "＜" "＞" are treated as plain text and follow the symbol reading setting.\nIn timed rows, subtitle formatting marks (<i>, <b>, <u>, <s>, <font>) are kept in the text but not read aloud.',
     },
     tagErrors: {
         unclosedQuote: 'The attribute value quote of the "{{tag}}" tag is not closed.',
@@ -902,6 +904,9 @@ export default {
             'The value "{{value}}" of the attribute "{{attribute}}" of the "{{tag}}" tag is invalid ({{format}}).',
         attributeOnClosingTag: 'The closing tag "{{tag}}" cannot have attributes.',
         missingClosingTag: 'The "{{tag}}" tag has no closing tag.',
+        nothingToRead: 'There is nothing to read aloud.',
+        paragraphTooLong: 'This paragraph is too long to create. Split it by adding line breaks.',
+        rowTooLong: 'This row is too long to create. Split it into several rows.',
         unmatchedClosingTag: 'The closing tag "{{tag}}" has no matching opening tag.',
         misnested: 'The tags are not nested correctly. Close "{{expected}}" before "{{tag}}".',
         emptyContent: 'The "{{tag}}" tag does not wrap any text.',
@@ -1078,7 +1083,8 @@ export default {
         IMPORT_UNSAFE_NOT_ALLOWED: 'Loading without restrictions was not allowed.',
         INVALID_SAFETENSORS: 'The model weights (safetensors) could not be read.',
         TTS_NOT_INSTALLED: 'The Text to Speech package set has not been downloaded.',
-        TTS_ENGINE_MISMATCH: 'The selected engine does not match the format of the voice model.',
+        TTS_MODEL_TYPE_MISMATCH: 'The selected model type does not match the type of the voice model.',
+        TTS_PARAMS_INVALID: 'A speech setting is out of range. Please check the settings.',
         TTS_LANGUAGE_UNSUPPORTED: 'This voice model does not support the selected language.',
         VOICE_NOT_FOUND: 'The voice model was not found.',
         VOICE_NAME_EMPTY: 'Enter a name.',
@@ -1092,7 +1098,7 @@ export default {
         IPA_WORD_SPLIT: 'A pronunciation cannot be set for "{{detail}}". Use the sub tag to set its reading.',
         TTS_TRAINING_UNAVAILABLE:
             'Text to Speech model training is only available on Windows and Linux with an NVIDIA GPU.',
-        TTS_ENGINE_LANGUAGE_MISMATCH: 'This language cannot be trained with this engine.',
+        TTS_MODEL_TYPE_LANGUAGE_MISMATCH: 'This language cannot be trained with this type of model.',
         TTS_CONFIRMATION_EXPIRED: 'This confirmation is no longer valid. Create the audio again.',
         TRAINING_DATA_TOO_SHORT: 'The training audio is too short.',
         TRAINING_DATA_TOO_FEW: 'Too few sentences have audio.',
@@ -1127,7 +1133,8 @@ export default {
         AUDIO_INFO_UNKNOWN: 'The length or format of the audio file could not be read. ({{detail}})',
         EXPORT_FOLDER_MISSING: 'The output directory does not exist. ({{detail}})',
         PRESET_BUILTIN: 'Built-in presets cannot be changed. Save as a new preset instead.',
-        TTS_TIMING_INVALID: 'The times or text of the timed input contain errors. ({{detail}})',
+        TTS_TIMING_INVALID: 'The time or text in row(s) {{detail}} of the timed table contains errors.',
+        TTS_TIMING_EMPTY: 'The timed table has no rows.',
         FFMPEG_FAILED: 'ffmpeg failed. ({{detail}})',
         FFPROBE_FAILED: 'ffprobe failed. ({{detail}})',
         ZIP_OPEN_FAILED: 'The zip file could not be opened. Check that the file is not damaged. ({{detail}})',

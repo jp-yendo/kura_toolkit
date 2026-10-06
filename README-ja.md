@@ -29,10 +29,10 @@ Kura Toolkit は、音声・動画・画像の処理とファイルの整理を 
 ### オーディオ: 読み上げ
 
 - 文章を日本語・英語・中国語で読み上げ
-- 行ごとに開始時間と終了時間を指定して読み上げ (字幕ファイルを開けます)
+- 行ごとに開始時間と終了時間を指定して読み上げ (SRT・WebVTT・ASS・SSA・SBV の字幕ファイルを開けます)
 - 制御タグで、間・話速・音の高さ・音量・読みを指定
 - 声のモデルのダウンロード・取り込み・書き出し
-- 提示される文を読み上げて録音し、自分の声のモデルを作成 (NVIDIA GPU を搭載した Windows・Linux)
+- 提示される文を読み上げて録音するか、その文の音声ファイルを指定して、自分の声のモデルを作成 (NVIDIA GPU を搭載した Windows・Linux)
 
 ### 音声機能のダウンロード
 
@@ -60,7 +60,7 @@ macOS では、デスクトップ・書類・ダウンロードなどのフォ�
 ### アプリ設定
 
 - テーマ (ライト / ダーク / システム)、言語 (日本語 / 英語)
-- 検索に使うスレッド数
+- 探索のスレッド数 (ディレクトリの走査に使うスレッド数)
 - ffmpeg / ffprobe の場所 (指定しない場合は自動で探します)
 - 保存場所 (ライブラリ・モデル・キャッシュ・作業ディレクトリ) とキャッシュの保持期間
 
@@ -68,9 +68,10 @@ macOS では、デスクトップ・書類・ダウンロードなどのフォ�
 
 オーディオ正規化・チャプターカット・音声機能 (音声分離・音声変換・読み上げ) には [FFmpeg](https://ffmpeg.org/) が必要です。アプリには含まれていないため、別途インストールしてください。
 
-- 音声変換のキーの変更と、読み上げの時間を指定した行には、rubberband を含む FFmpeg が必要です (Windows は winget の Gyan.FFmpeg、macOS は Homebrew の `ffmpeg` など)
+- 音声変換のキーの変更 (オクターブ単位を除く) と、読み上げで時間を指定した行を話速を上げて収める場合 (既定) には、rubberband を含む FFmpeg が必要です (Windows は winget の Gyan.FFmpeg、macOS は Homebrew の `ffmpeg`、Linux はディストリビューションの `ffmpeg` など)
 - 音声機能のダウンロードには、インターネット接続と数 GB の空き容量が必要です
-- Windows: [Microsoft Visual C++ 再頒布可能パッケージ](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist) (x64)
+- Windows: [Microsoft Visual C++ 再頒布可能パッケージ](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist) (x64。音声機能に必要)
+- モデルの学習のための録音には、マイクの使用の許可が必要です (macOS では、求められたときにシステム設定で許可します)
 - macOS: Xcode Command Line Tools (`xcode-select --install`。音声分離に必要)
 - Linux: C/C++ のコンパイラー (`build-essential` など。音声分離に必要)
 

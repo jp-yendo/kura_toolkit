@@ -96,7 +96,7 @@ export default {
         },
         tts: {
             title: 'Text to Speech',
-            desc: 'Read text or subtitles (SRT/WebVTT) aloud in the chosen voice. You can also train voice models.',
+            desc: 'Read text or subtitles (SRT, WebVTT, ASS, SSA, SBV) aloud in the chosen voice. You can also train voice models.',
         },
         chapterCut: {
             title: 'Chapter Cut',

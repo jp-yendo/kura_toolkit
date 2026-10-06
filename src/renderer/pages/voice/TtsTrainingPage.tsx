@@ -47,7 +47,7 @@ import { isCancelledError, voiceErrorMessage } from '../../components/voice/voic
 import { useJobRunner } from '../../hooks/useJobRunner';
 import { showNotice } from '../../stores/noticeStore';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { LANGUAGE_DEFINITIONS, ttsTrainingItems, type TtsEngineId } from '@shared/voice/languages';
+import { LANGUAGE_DEFINITIONS, ttsTrainingItems, type TtsModelType } from '@shared/voice/languages';
 import type { TrainingAudio, TrainingSetDetail, VoiceModelInfo } from '@shared/voice/types';
 
 // 学習に向く 1 文の長さ (秒)。Style-Bert-VITS2 の学習には 2〜14 秒程度の音声が必要
@@ -68,7 +68,9 @@ export default function TtsTrainingPage() {
     const language = set?.language ?? 'ja';
     const [detail, setDetail] = React.useState<TrainingSetDetail | null>(null);
     const [index, setIndex] = React.useState(0);
-    const [engine, setEngine] = React.useState<TtsEngineId>(LANGUAGE_DEFINITIONS[language].trainingEngines[0]);
+    const [modelType, setModelType] = React.useState<TtsModelType>(
+        LANGUAGE_DEFINITIONS[language].trainingModelTypes[0]
+    );
     const [name, setName] = React.useState('');
     // 音声の削除の確認の対象。閉じる間も表示が変わらないよう、開閉とは別に持つ
     const [removeConfirm, setRemoveConfirm] = React.useState<{ open: boolean; audio: TrainingAudio | null }>({
@@ -80,7 +82,7 @@ export default function TtsTrainingPage() {
     const recordingActive = recordingTarget !== null;
     const { job, run, cancel } = useJobRunner();
 
-    const extra = ttsTrainingItems(engine, language);
+    const extra = ttsTrainingItems(modelType, language);
     const readiness = useFeatureReadiness('ttsTraining', extra);
     const platform = readiness.readiness?.platform;
     const available = platform?.ttsTrainingAvailable ?? false;
@@ -106,9 +108,9 @@ export default function TtsTrainingPage() {
         setIndex(0);
     }, [loadDetail]);
     React.useEffect(() => {
-        const engines = LANGUAGE_DEFINITIONS[language].trainingEngines;
-        if (!engines.includes(engine)) setEngine(engines[0]);
-    }, [language, engine]);
+        const modelTypes = LANGUAGE_DEFINITIONS[language].trainingModelTypes;
+        if (!modelTypes.includes(modelType)) setModelType(modelTypes[0]);
+    }, [language, modelType]);
 
     // 音声を変えたら、学習セットの内容と一覧の要約 (音声の数・長さ) を読み直す
     const refresh = async () => {
@@ -153,7 +155,7 @@ export default function TtsTrainingPage() {
         if (!setId) return;
         try {
             const info = await run(t('voice.training.running'), jobId =>
-                window.kuraToolkit.voice.training.ttsStart(jobId, { setId, engine, name })
+                window.kuraToolkit.voice.training.ttsStart(jobId, { setId, modelType, name })
             );
             setCreated(info);
             setName('');
@@ -354,16 +356,16 @@ export default function TtsTrainingPage() {
                             })}
                         </Typography>
                         <FormControl size='small' sx={{ minWidth: 200 }}>
-                            <InputLabel id='training-engine'>{t('voice.tts.engine')}</InputLabel>
+                            <InputLabel id='training-model-type'>{t('voice.tts.modelType')}</InputLabel>
                             <Select
-                                labelId='training-engine'
-                                label={t('voice.tts.engine')}
-                                value={engine}
-                                onChange={event => setEngine(event.target.value as TtsEngineId)}
+                                labelId='training-model-type'
+                                label={t('voice.tts.modelType')}
+                                value={modelType}
+                                onChange={event => setModelType(event.target.value as TtsModelType)}
                             >
-                                {LANGUAGE_DEFINITIONS[language].trainingEngines.map(item => (
+                                {LANGUAGE_DEFINITIONS[language].trainingModelTypes.map(item => (
                                     <MenuItem key={item} value={item}>
-                                        {t(`voice.engine.${item}`)}
+                                        {t(`voice.modelType.${item}`)}
                                     </MenuItem>
                                 ))}
                             </Select>

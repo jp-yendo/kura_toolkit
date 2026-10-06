@@ -52,7 +52,7 @@ import {
     renameVoice,
     setVoiceLanguages,
 } from '../services/voice/voice-models';
-import { isVoiceLanguage, type TtsEngineId, type VoiceLanguage } from '../../shared/voice/languages';
+import { isVoiceLanguage, type TtsModelType, type VoiceLanguage } from '../../shared/voice/languages';
 import type {
     AudioExportSettings,
     ConversionRunRequest,
@@ -168,7 +168,9 @@ export function registerVoiceIpcHandlers() {
         runTts(jobId, { ...request, language: checkLanguage(request.language) })
     );
     ipcMain.handle(IPC_CHANNELS.VOICE_TTS_CANCEL_CONFIRMATION, (_e, token: string) => cancelTtsConfirmation(token));
-    ipcMain.handle(IPC_CHANNELS.VOICE_TTS_LOAD_TEXT, (_e, filePath: string) => loadTextFile(filePath));
+    ipcMain.handle(IPC_CHANNELS.VOICE_TTS_LOAD_TEXT, (_e, filePath: string, language?: unknown) =>
+        loadTextFile(filePath, typeof language === 'string' && isVoiceLanguage(language) ? language : undefined)
+    );
     ipcMain.handle(IPC_CHANNELS.VOICE_TTS_SAVE_TEXT, (_e, filePath: string, text: string) =>
         saveTextFile(filePath, text)
     );
@@ -255,7 +257,7 @@ export function registerVoiceIpcHandlers() {
     );
     ipcMain.handle(
         IPC_CHANNELS.VOICE_TRAINING_TTS_START,
-        (_e, jobId: string, options: { setId: string; engine: TtsEngineId; name: string }) =>
+        (_e, jobId: string, options: { setId: string; modelType: TtsModelType; name: string }) =>
             startTtsTraining(jobId, options)
     );
 

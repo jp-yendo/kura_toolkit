@@ -45,19 +45,27 @@ type UnsavedInput = {
     discard(): void;
 };
 
+function normalUnsaved(): boolean {
+    const tts = useTtsStore.getState();
+    return tts.normal.text !== tts.normal.savedText;
+}
+
+function timedUnsaved(): boolean {
+    const tts = useTtsStore.getState();
+    return timedSnapshot(tts.timed.rows) !== tts.timed.savedSnapshot;
+}
+
 const UNSAVED_INPUTS: Record<string, UnsavedInput> = {
     // 読み上げの文章 (通常の入力とタイミング指定のどちらか、または両方)
     'audio/tts': {
         hasUnsaved() {
-            const tts = useTtsStore.getState();
-            return (
-                tts.normal.text !== tts.normal.savedText || timedSnapshot(tts.timed.rows) !== tts.timed.savedSnapshot
-            );
+            return normalUnsaved() || timedUnsaved();
         },
+        // 保存していない変更だけを破棄する (最後に読み込んだ・保存した内容に戻す。保存済みの方の文章はそのまま残す)
         discard() {
             const tts = useTtsStore.getState();
-            tts.loadNormal('', null);
-            tts.loadTimed([], null, true);
+            if (normalUnsaved()) tts.revertNormal();
+            if (timedUnsaved()) tts.revertTimed();
         },
     },
 };

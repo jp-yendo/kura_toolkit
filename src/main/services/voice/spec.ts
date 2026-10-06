@@ -7,7 +7,7 @@ import type {
     VoicePlatformInfo,
     VoicePlatformKey,
 } from '../../../shared/voice/types';
-import { languagesForEngine, TTS_LANGUAGE_MODEL_ITEMS, type VoiceLanguage } from '../../../shared/voice/languages';
+import { languagesForModelType, TTS_LANGUAGE_MODEL_ITEMS, type VoiceLanguage } from '../../../shared/voice/languages';
 import { SEPARATOR_MODEL_PREFIX, TTS_READY_PREFIX } from '../../../shared/voice/requirements';
 import { libraryPaths, MODEL_GROUP_DIRS } from './paths';
 
@@ -433,7 +433,7 @@ function jvnvSpec(model: JvnvModel): ModelSpec {
         // JP-Extra 版の声は日本語だけを読むため、日本語の言語モデルが無いと使えない。多言語版の声は、読み上げる言語の
         // 言語モデルがあれば使える (読み上げの実行時に確かめる)
         requires: model.jpExtra ? [TTS_LANGUAGE_MODEL_ITEMS.ja] : [],
-        readsLanguages: model.jpExtra ? ['ja'] : languagesForEngine('multilingual'),
+        readsLanguages: model.jpExtra ? ['ja'] : languagesForModelType('multilingual'),
         usedBy: ['tts'],
         license: JVNV_LICENSE,
         source: JVNV_SOURCE,

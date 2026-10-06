@@ -134,6 +134,31 @@ export async function convertChannels(
     );
 }
 
+// 音声の一部 (サンプル単位) を切り出す
+export async function extractSamples(
+    input: string,
+    output: string,
+    start: number,
+    frames: number,
+    jobId?: string
+): Promise<void> {
+    await runFfmpeg(
+        [
+            '-hide_banner',
+            '-nostdin',
+            '-y',
+            '-i',
+            input,
+            '-af',
+            `atrim=start_sample=${start}:end_sample=${start + frames},asetpts=PTS-STARTPTS`,
+            '-c:a',
+            'pcm_f32le',
+            output,
+        ],
+        { jobId }
+    );
+}
+
 // 末尾に無音を足す (分離の入力。モデルによっては末尾の数ミリ秒を処理せずに短く返すため、
 // 無音を足した入力で分離し、結果を元の長さに切りそろえる)
 export async function padEnd(input: string, output: string, seconds: number, jobId?: string): Promise<void> {
@@ -216,7 +241,10 @@ async function rubberbandOffset(filter: string, sampleRate: number, tempo: numbe
         });
         const data = fs.readFileSync(output);
         const processed = new Float32Array(data.buffer, data.byteOffset, Math.floor(data.length / 4));
-        const search = Math.round(CALIBRATION_SEARCH_SEC * sampleRate);
+        // 探す範囲は、伸縮後のクリック音の間隔の半分より狭くする (話速を大きく上げると間隔が詰まり、隣のクリック音を拾うため)
+        const search = Math.round(
+            Math.min(CALIBRATION_SEARCH_SEC, CALIBRATION_INTERVAL_SEC / tempo / 2.5) * sampleRate
+        );
         const offsets = clicks
             .map(click => {
                 const expected = Math.round(click / tempo);
@@ -283,8 +311,20 @@ export async function pitchShift(
 
 // 音程を変えずに長さを変える (読み上げの話速の微調整)。tempo > 1 で短くなる。先頭の位置は変えない
 export async function timeStretch(input: string, output: string, tempo: number, jobId?: string): Promise<void> {
-    await runRubberband(input, output, `rubberband=tempo=${tempo.toFixed(6)}`, tempo, jobId);
+    // ffmpeg の rubberband が受け付ける倍率は 100 倍まで。それを超える倍率は 100 倍以下の段に分けてつなぐ
+    const stages: number[] = [];
+    let rest = tempo;
+    while (rest > RUBBERBAND_MAX_TEMPO) {
+        stages.push(RUBBERBAND_MAX_TEMPO);
+        rest /= RUBBERBAND_MAX_TEMPO;
+    }
+    stages.push(rest);
+    const filter = stages.map(stage => `rubberband=tempo=${stage.toFixed(6)}`).join(',');
+    await runRubberband(input, output, filter, tempo, jobId);
 }
+
+// ffmpeg の rubberband フィルタの tempo の上限
+const RUBBERBAND_MAX_TEMPO = 100;
 
 // 複数の音声を重ねる (分離結果の重ね合わせ再生や、変換結果と伴奏の簡易合成のプレビュー)。
 // 音量の自動調整は行わず、そのままの大きさで足し合わせる。

@@ -4,8 +4,8 @@
 
 export type VoiceLanguage = 'ja' | 'en' | 'zh';
 
-// 読み上げの声の形式 (Style-Bert-VITS2 の 2 形式。画面では「エンジン」として選ぶ)
-export type TtsEngineId = 'jp-extra' | 'multilingual';
+// 読み上げの声のモデルの種類 (Style-Bert-VITS2 の 2 形式。画面では「モデルの種類」として選ぶ)
+export type TtsModelType = 'jp-extra' | 'multilingual';
 
 // 読み上げる言語ごとに必要な言語モデル (BERT) のダウンロード項目。どちらの形式の声でも、読む言語のものだけを使う
 export const TTS_LANGUAGE_MODEL_ITEMS: Record<VoiceLanguage, string> = {
@@ -15,7 +15,7 @@ export const TTS_LANGUAGE_MODEL_ITEMS: Record<VoiceLanguage, string> = {
 };
 
 // 読み上げのモデルの学習で初期値に使う事前学習済みモデルのダウンロード項目 (声の形式ごと)
-const TTS_PRETRAINED_ITEMS: Record<TtsEngineId, string> = {
+const TTS_PRETRAINED_ITEMS: Record<TtsModelType, string> = {
     'jp-extra': 'model:tts:train-jp-extra',
     multilingual: 'model:tts:train-multilingual',
 };
@@ -34,10 +34,10 @@ type CorpusDefinition = {
 export type PhonemeAlphabet = 'x-kana' | 'ipa' | 'x-pinyin';
 
 type LanguageDefinition = {
-    // 読み上げに使えるエンジン (推奨順)
-    engines: TtsEngineId[];
-    // 学習に使えるエンジン (推奨順)
-    trainingEngines: TtsEngineId[];
+    // 読み上げに使えるモデルの種類 (推奨順)
+    modelTypes: TtsModelType[];
+    // 学習に使えるモデルの種類 (推奨順)
+    trainingModelTypes: TtsModelType[];
     corpus: CorpusDefinition;
     // phoneme タグで使える表記 (alphabet を省略したときもこの表記として扱う)
     phonemeAlphabet: PhonemeAlphabet;
@@ -155,8 +155,8 @@ const ZH_SYMBOLS: SymbolReading[] = [
 export const LANGUAGE_DEFINITIONS: Record<VoiceLanguage, LanguageDefinition> = {
     ja: {
         // 日本語だけを扱う場合は JP-Extra 版が強く推奨されている
-        engines: ['jp-extra', 'multilingual'],
-        trainingEngines: ['jp-extra', 'multilingual'],
+        modelTypes: ['jp-extra', 'multilingual'],
+        trainingModelTypes: ['jp-extra', 'multilingual'],
         corpus: { file: 'ita-corpus/ja-ita.json' },
         phonemeAlphabet: 'x-kana',
         punctuation: ['、', '。', '，', '．', ',', '.', '!', '?', '！', '？', '…', '‥'],
@@ -167,8 +167,8 @@ export const LANGUAGE_DEFINITIONS: Record<VoiceLanguage, LanguageDefinition> = {
     },
     en: {
         // 英語の読み上げには多言語版が必要
-        engines: ['multilingual'],
-        trainingEngines: ['multilingual'],
+        modelTypes: ['multilingual'],
+        trainingModelTypes: ['multilingual'],
         corpus: { file: 'cmu-arctic/en-cmu-arctic.json' },
         phonemeAlphabet: 'ipa',
         punctuation: [',', '.', '!', '?', '…'],
@@ -179,8 +179,8 @@ export const LANGUAGE_DEFINITIONS: Record<VoiceLanguage, LanguageDefinition> = {
     },
     zh: {
         // 中国語を読めるのは多言語版の形式だけ (JP-Extra 版は日本語専用)
-        engines: ['multilingual'],
-        trainingEngines: ['multilingual'],
+        modelTypes: ['multilingual'],
+        trainingModelTypes: ['multilingual'],
         corpus: { file: 'common-voice-zh/zh-common-voice.json' },
         phonemeAlphabet: 'x-pinyin',
         punctuation: ['，', '。', '！', '？', '、', '；', '：', '…', ',', '.', '!', '?', ';', ':'],
@@ -197,15 +197,15 @@ export function isVoiceLanguage(value: string): value is VoiceLanguage {
     return (VOICE_LANGUAGES as string[]).includes(value);
 }
 
-// エンジンが読み上げられる言語
-export function languagesForEngine(engine: TtsEngineId): VoiceLanguage[] {
-    return VOICE_LANGUAGES.filter(language => LANGUAGE_DEFINITIONS[language].engines.includes(engine));
+// モデルの種類ごとの、読み上げられる言語
+export function languagesForModelType(modelType: TtsModelType): VoiceLanguage[] {
+    return VOICE_LANGUAGES.filter(language => LANGUAGE_DEFINITIONS[language].modelTypes.includes(modelType));
 }
 
 // 読み上げのモデルの学習に必要なダウンロード項目のうち、声の形式と言語によって変わるもの
 // (Python と読み上げ・学習のパッケージ一式は含まない)。学習する言語の言語モデルと、形式の事前学習モデル
-export function ttsTrainingItems(engine: TtsEngineId, language: VoiceLanguage): string[] {
-    return [TTS_LANGUAGE_MODEL_ITEMS[language], TTS_PRETRAINED_ITEMS[engine]];
+export function ttsTrainingItems(modelType: TtsModelType, language: VoiceLanguage): string[] {
+    return [TTS_LANGUAGE_MODEL_ITEMS[language], TTS_PRETRAINED_ITEMS[modelType]];
 }
 
 // 記号の読みを文章に適用する。長い記号から順に照合し、句読点は対象外とする

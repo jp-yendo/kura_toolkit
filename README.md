@@ -29,10 +29,10 @@ Kura Toolkit is a desktop application that brings together audio, video and imag
 ### Audio: Text to Speech
 
 - Read text aloud in Japanese, English or Chinese
-- Read rows at their own start and end times (subtitle files can be opened)
+- Read rows at their own start and end times (subtitle files in SRT, WebVTT, ASS, SSA or SBV format can be opened)
 - Set pauses, speed, pitch, volume and readings with control tags
 - Download, import and export voice models
-- Create a voice model of your own voice by reading presented sentences aloud (Windows or Linux with an NVIDIA GPU)
+- Create a voice model of your own voice by recording the presented sentences, or by choosing audio files of them (Windows or Linux with an NVIDIA GPU)
 
 ### Voice Feature Downloads
 
@@ -60,7 +60,7 @@ On macOS, Full Disk Access is required to search folders such as Desktop, Docume
 ### App Settings
 
 - Theme (light / dark / system) and language (Japanese / English)
-- Number of threads used for searching
+- Search threads (how many threads scan directories)
 - Location of ffmpeg / ffprobe (found automatically when not set)
 - Storage locations (library, model, cache and work directories) and how long the cache is kept
 
@@ -68,9 +68,10 @@ On macOS, Full Disk Access is required to search folders such as Desktop, Docume
 
 Audio Normalizer, Chapter Cut and the voice features (Audio Separation, Voice Conversion, Text to Speech) require [FFmpeg](https://ffmpeg.org/). It is not included with the app, so install it separately.
 
-- Changing the key in Voice Conversion and timed rows in Text to Speech need an FFmpeg build that includes rubberband (such as Gyan.FFmpeg from winget on Windows or the Homebrew `ffmpeg` on macOS)
+- Changing the key in Voice Conversion (except by whole octaves), and timed rows in Text to Speech that are sped up to fit their time (the default), need an FFmpeg build that includes rubberband (such as Gyan.FFmpeg from winget on Windows, the Homebrew `ffmpeg` on macOS, or your distribution's `ffmpeg` on Linux)
 - The voice feature downloads need an Internet connection and several GB of free space
-- Windows: the [Microsoft Visual C++ Redistributable](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist) (x64)
+- Windows: the [Microsoft Visual C++ Redistributable](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist) (x64, needed for the voice features)
+- Recording voices for model training needs permission to use the microphone (on macOS, allow it in System Settings when asked)
 - macOS: the Xcode Command Line Tools (`xcode-select --install`, needed for Audio Separation)
 - Linux: a C/C++ compiler (such as `build-essential`, needed for Audio Separation)
 

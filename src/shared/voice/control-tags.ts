@@ -121,6 +121,11 @@ export type SpeechRun =
       };
 
 export type TagErrorCode =
+    // 読み上げる文字が無い (記号だけなど。合成の前に main が確かめる)
+    | 'nothingToRead'
+    // 段落 (通常の入力) や行 (タイミング指定) が長すぎて合成できない (改行や行を分けてもらう。合成の前後に確かめる)
+    | 'paragraphTooLong'
+    | 'rowTooLong'
     | 'unclosedQuote'
     | 'unclosedTag'
     | 'unexpectedChar'
@@ -211,21 +216,76 @@ type OpenElement = {
     content: string;
     // 属性の誤りがあった要素は内容の検証を省く (同じ問題を重ねて報告しないため)
     invalid: boolean;
-    // ph 属性値の文書中の位置 (アクセント記法の誤りの位置を示すため)
+    // ph 属性値の文書中の位置と書いたままの値 (アクセント記法などの誤りの位置を示すため)
     phOffset: number;
+    phRaw: string;
+    // 中に書けないタグがあった (その誤りとして示したため、内容の検証を省く)
+    nestedError?: boolean;
 };
 
 type ParsedAttribute = {
     name: string;
+    // 置き換え表記 (&lt; など) を元の文字に戻した値と、文書中の書いたままの値
     value: string;
+    raw: string;
     nameOffset: number;
     valueOffset: number;
 };
 
+// 置き換え表記を戻した値の中の位置を、書いたままの値の中の位置にする (誤りの位置を文書中で正しく示すため)
+function rawIndex(raw: string, decodedIndex: number): number {
+    let index = 0;
+    for (let decoded = 0; decoded < decodedIndex && index < raw.length; decoded++) {
+        const entity = readEntity(raw, index);
+        index += entity ? entity.length : 1;
+    }
+    return index;
+}
+
+// 戻した値の中の範囲 (開始と長さ) を、書いたままの値の中の範囲にする
+function rawSpan(raw: string, start: number, length: number): { start: number; length: number } {
+    const rawStart = rawIndex(raw, start);
+    return { start: rawStart, length: Math.max(1, rawIndex(raw, start + length) - rawStart) };
+}
+
 const ENTITIES: Record<string, string> = { lt: '<', gt: '>', amp: '&', quot: '"', apos: "'" };
+// 置き換え表記 (名前のもの &lt; など、数値のもの &#60; &#x3C;)。文字に戻せない数値 (範囲外・サロゲート・
+// タブと改行以外の制御文字) はそのまま残す
+const ENTITY_PATTERN = /^&(?:(lt|gt|amp|quot|apos)|#(\d{1,7})|#[xX]([0-9A-Fa-f]{1,6}));/;
+
+// 位置 index から始まる置き換え表記を読む。読めなければ null
+function readEntity(text: string, index: number): { char: string; length: number } | null {
+    if (text[index] !== '&') return null;
+    const match = ENTITY_PATTERN.exec(text.slice(index, index + 12));
+    if (!match) return null;
+    if (match[1]) return { char: ENTITIES[match[1]], length: match[0].length };
+    const code = match[2] !== undefined ? Number(match[2]) : parseInt(match[3], 16);
+    if (code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff)) return null;
+    if ((code < 0x20 && code !== 0x09 && code !== 0x0a) || (code >= 0x7f && code <= 0x9f)) return null;
+    return { char: String.fromCodePoint(code), length: match[0].length };
+}
 
 const OPEN_CURLY = '“';
 const CLOSE_CURLY = '”';
+// 引用符の種類。曲がった引用符で始めた値は、同じ種類 (二重・一重) の引用符ならまっすぐなものと曲がったもの
+// (向きを問わない) のどれでも閉じられる。まっすぐな引用符で始めた値は、同じ引用符でだけ閉じる (値の中の「’」
+// (rock’n’roll など) や「”」は値の文字)。曲がった引用符は一括修正でまっすぐなものに直す
+const DOUBLE_QUOTES = ['"', OPEN_CURLY, CLOSE_CURLY];
+const SINGLE_QUOTES = ["'", '‘', '’'];
+
+function quoteFamily(char: string | undefined): string[] | null {
+    if (char === undefined) return null;
+    if (DOUBLE_QUOTES.includes(char)) return DOUBLE_QUOTES;
+    if (SINGLE_QUOTES.includes(char)) return SINGLE_QUOTES;
+    return null;
+}
+
+// 値を閉じる引用符 (開きの引用符ごと)
+function closingQuotes(quote: string): string[] | null {
+    const family = quoteFamily(quote);
+    if (!family) return null;
+    return quote === family[0] ? [quote] : family;
+}
 
 function isNameChar(char: string): boolean {
     return /[A-Za-z0-9_:.-]/.test(char);
@@ -237,11 +297,17 @@ function isSpace(char: string): boolean {
 
 // 「&lt;」などの置き換え表記を戻す。既知の表記以外の「&」はそのまま残す
 function decodeEntities(text: string): string {
-    return text.replace(/&(lt|gt|amp|quot|apos);/g, (_match, name: string) => ENTITIES[name]);
+    let result = '';
+    for (let index = 0; index < text.length;) {
+        const entity = readEntity(text, index);
+        result += entity ? entity.char : text[index];
+        index += entity ? entity.length : 1;
+    }
+    return result;
 }
 
 function parseBreakTime(value: string): number | null {
-    const match = /^(\d+(?:\.\d+)?)\s*(ms|s)$/i.exec(value.trim());
+    const match = /^(\d+(?:\.\d+)?|\.\d+)\s*(ms|s)$/i.exec(value.trim());
     if (!match) return null;
     const ms = Number(match[1]) * (match[2].toLowerCase() === 's' ? 1000 : 1);
     return Math.round(ms);
@@ -251,7 +317,7 @@ function parseBreakTime(value: string): number | null {
 function parseRate(value: string): number | null {
     const text = value.trim().toLowerCase();
     if (Object.hasOwn(RATE_LABELS, text)) return RATE_LABELS[text];
-    const match = /^([+-]?)(\d+(?:\.\d+)?)%$/.exec(text);
+    const match = /^([+-]?)(\d+(?:\.\d+)?|\.\d+)%$/.exec(text);
     if (!match) return null;
     const amount = Number(match[2]) / 100;
     const rate = match[1] === '+' ? 1 + amount : match[1] === '-' ? 1 - amount : amount;
@@ -263,11 +329,11 @@ function parseRate(value: string): number | null {
 function parsePitch(value: string): number | null {
     const text = value.trim().toLowerCase();
     if (Object.hasOwn(PITCH_LABELS, text)) return PITCH_LABELS[text];
-    const semitone = /^([+-])(\d+(?:\.\d+)?)st$/.exec(text);
+    const semitone = /^([+-])(\d+(?:\.\d+)?|\.\d+)st$/.exec(text);
     if (semitone) {
         return Number(semitone[2]) * (semitone[1] === '-' ? -1 : 1);
     }
-    const percent = /^([+-])(\d+(?:\.\d+)?)%$/.exec(text);
+    const percent = /^([+-])(\d+(?:\.\d+)?|\.\d+)%$/.exec(text);
     if (percent) {
         const ratio = 1 + (Number(percent[2]) / 100) * (percent[1] === '-' ? -1 : 1);
         if (ratio <= 0) return null;
@@ -280,7 +346,7 @@ function parsePitch(value: string): number | null {
 function parseVolume(value: string): number | null {
     const text = value.trim().toLowerCase();
     if (Object.hasOwn(VOLUME_LABELS, text)) return VOLUME_LABELS[text];
-    const match = /^([+-])(\d+(?:\.\d+)?)db$/.exec(text);
+    const match = /^([+-])(\d+(?:\.\d+)?|\.\d+)db$/.exec(text);
     if (!match) return null;
     return Number(match[2]) * (match[1] === '-' ? -1 : 1);
 }
@@ -325,6 +391,10 @@ function matchTagCandidate(
     return { closing, name, nameStart, nameEnd: cursor };
 }
 
+// 字幕 (SRT) の装飾の印。タイミング指定の行では本文に残したまま読み上げない
+// (字幕ファイルの本文をそのまま持ち、保存して開き直しても内容が変わらないようにするため)
+const SUBTITLE_MARKUP = /^<\/?(?:i|b|u|s|font)(?:\s[^<>]*)?>/i;
+
 type ParseOptions = {
     language: VoiceLanguage;
     // タイミング指定の行の文章か (fit を使えるのはタイミング指定の行だけ)
@@ -341,6 +411,14 @@ export function parseControlTags(text: string, options: ParseOptions): ControlTa
     let fit: TimelineOverflowMode | undefined;
 
     const issue = (code: TagErrorCode, offset: number, length: number, extra: Partial<TagIssue> = {}) => {
+        // 書けない文字が続く場合 (閉じていないタグの後ろの本文など) は 1 件にまとめる
+        // (文字ごとに数えると、長い行では誤りが数万件になり、入力のたびの解析が止まるため)
+        const last = errors[errors.length - 1];
+        if (code === 'unexpectedChar' && last?.code === 'unexpectedChar' && last.offset + last.length === offset) {
+            last.length += length;
+            last.value = text.slice(last.offset, offset + length);
+            return;
+        }
         errors.push({
             code,
             offset,
@@ -386,20 +464,28 @@ export function parseControlTags(text: string, options: ParseOptions): ControlTa
     };
 
     let index = 0;
+    // 直前の単独で完結するタグ (break・fit) を「/」なしで書いたもの。SSML では直後に閉じタグを書いてもよい (<break ...></break>)
+    let openEmpty: { name: ControlTagName; end: number } | null = null;
     // 構文が壊れて以降を解析できない場合に打ち切る
     let aborted = false;
 
     while (index < text.length && !aborted) {
+        if (options.timed && text[index] === '<') {
+            const markup = SUBTITLE_MARKUP.exec(text.slice(index, index + 200));
+            if (markup) {
+                flushText(index);
+                index += markup[0].length;
+                continue;
+            }
+        }
         const candidate = matchTagCandidate(text, index);
         if (!candidate) {
             if (pending.length === 0) pendingStart = index;
-            if (text[index] === '&') {
-                const entity = /^&(lt|gt|amp|quot|apos);/.exec(text.slice(index, index + 6));
-                if (entity) {
-                    pending += ENTITIES[entity[1]];
-                    index += entity[0].length;
-                    continue;
-                }
+            const entity = readEntity(text, index);
+            if (entity) {
+                pending += entity.char;
+                index += entity.length;
+                continue;
             }
             pending += text[index];
             index += 1;
@@ -458,7 +544,8 @@ export function parseControlTags(text: string, options: ParseOptions): ControlTa
             cursor += 1;
             while (cursor < text.length && isSpace(text[cursor])) cursor += 1;
             const quote = text[cursor];
-            if (quote !== '"' && quote !== "'" && quote !== OPEN_CURLY && quote !== CLOSE_CURLY) {
+            const family = quoteFamily(quote);
+            if (!family) {
                 // 引用符の無い値。次の空白か終端までを値として読み飛ばす
                 const valueStart = cursor;
                 while (cursor < text.length && !isSpace(text[cursor]) && text[cursor] !== '>') cursor += 1;
@@ -469,13 +556,12 @@ export function parseControlTags(text: string, options: ParseOptions): ControlTa
                 tagBroken = true;
                 continue;
             }
-            const curly = quote === OPEN_CURLY || quote === CLOSE_CURLY;
-            if (curly) fix('curlyQuote', cursor, quote, '"');
+            const straight = family[0];
+            if (quote !== straight) fix('curlyQuote', cursor, quote, straight);
             const valueOffset = cursor + 1;
             let valueEnd = valueOffset;
-            const isClosingQuote = (value: string) =>
-                curly ? value === CLOSE_CURLY || value === OPEN_CURLY || value === '"' : value === quote;
-            while (valueEnd < text.length && !isClosingQuote(text[valueEnd])) valueEnd += 1;
+            const closers = closingQuotes(quote) ?? family;
+            while (valueEnd < text.length && !closers.includes(text[valueEnd])) valueEnd += 1;
             if (valueEnd >= text.length) {
                 // 引用符が閉じられていないため、以降を解析できない
                 issue('unclosedQuote', cursor, 1, { tag: name, attribute: attributeName });
@@ -483,11 +569,11 @@ export function parseControlTags(text: string, options: ParseOptions): ControlTa
                 break;
             }
             const closingQuote = text[valueEnd];
-            if (closingQuote === OPEN_CURLY || closingQuote === CLOSE_CURLY)
-                fix('curlyQuote', valueEnd, closingQuote, '"');
+            if (closingQuote !== straight) fix('curlyQuote', valueEnd, closingQuote, straight);
             attributes.push({
                 name: attributeName,
                 value: decodeEntities(text.slice(valueOffset, valueEnd)),
+                raw: text.slice(valueOffset, valueEnd),
                 nameOffset,
                 valueOffset,
             });
@@ -506,6 +592,11 @@ export function parseControlTags(text: string, options: ParseOptions): ControlTa
             if (attributes.length > 0) {
                 issue('attributeOnClosingTag', tagStart, tagEnd - tagStart, { tag: name });
             }
+            // 「/」なしの break・fit の直後 (空白のみを挟む) の閉じタグは、その要素の終わりとして受け入れる
+            if (openEmpty?.name === name && text.slice(openEmpty.end, tagStart).trim() === '') {
+                openEmpty = null;
+                continue;
+            }
             closeElement(name, tagStart, tagEnd);
             continue;
         }
@@ -514,17 +605,21 @@ export function parseControlTags(text: string, options: ParseOptions): ControlTa
         const parent = textOnlyParent();
         if (parent) {
             issue('nestedTagNotAllowed', tagStart, tagEnd - tagStart, { tag: parent.name, value: name });
+            // 中のタグの誤りとして示すため、外側の要素の内容の検証 (中身が空など) は重ねて報告しない
+            parent.invalid = true;
+            parent.nestedError = true;
         }
 
         if (EMPTY_TAGS.has(name)) {
             // 単独で完結するタグ。終端の「/」が無くても補って受け入れる
+            openEmpty = selfClosing ? null : { name, end: tagEnd };
             if (name === 'fit') {
                 if (!options.timed) {
                     issue('fitNotTimed', tagStart, tagEnd - tagStart, { tag: name });
                 } else if (fit !== undefined) {
                     issue('duplicateFit', tagStart, tagEnd - tagStart, { tag: name });
                 } else if (validated && !parent) {
-                    fit = validated.mode as TimelineOverflowMode;
+                    fit = validated.mode.trim().toLowerCase() as TimelineOverflowMode;
                 }
                 continue;
             }
@@ -549,6 +644,7 @@ export function parseControlTags(text: string, options: ParseOptions): ControlTa
             content: '',
             invalid: validated === null || parent !== null,
             phOffset: phAttribute ? phAttribute.valueOffset : tagStart,
+            phRaw: phAttribute ? phAttribute.raw : '',
         });
     }
 
@@ -589,7 +685,7 @@ export function parseControlTags(text: string, options: ParseOptions): ControlTa
             }
             const format = checkValue(tag, lower, attribute.value);
             if (format) {
-                issue('invalidValue', attribute.valueOffset, Math.max(1, attribute.value.length), {
+                issue('invalidValue', attribute.valueOffset, Math.max(1, attribute.raw.length), {
                     tag,
                     attribute: lower,
                     value: attribute.value,
@@ -598,7 +694,8 @@ export function parseControlTags(text: string, options: ParseOptions): ControlTa
                 valid = false;
                 continue;
             }
-            result[lower] = attribute.value;
+            // 表記の名前は大文字小文字を問わない (ほかの値と同じ)
+            result[lower] = lower === 'alphabet' ? attribute.value.trim().toLowerCase() : attribute.value;
         }
         // 必須属性
         const required: Partial<Record<ControlTagName, string>> = { sub: 'alias', phoneme: 'ph', fit: 'mode' };
@@ -619,7 +716,8 @@ export function parseControlTags(text: string, options: ParseOptions): ControlTa
             const alphabetAttribute = attributes.find(a => a.name.toLowerCase() === 'alphabet');
             const alphabetOffset = alphabetAttribute ? alphabetAttribute.valueOffset : tagOffset;
             if (alphabet !== languageAlphabet) {
-                issue(ALPHABET_LANGUAGE_ERRORS[alphabet as PhonemeAlphabet], alphabetOffset, alphabet.length, { tag });
+                const alphabetLength = alphabetAttribute ? Math.max(1, alphabetAttribute.raw.length) : 1;
+                issue(ALPHABET_LANGUAGE_ERRORS[alphabet as PhonemeAlphabet], alphabetOffset, alphabetLength, { tag });
                 valid = false;
             } else {
                 result.alphabet = alphabet;
@@ -642,9 +740,9 @@ export function parseControlTags(text: string, options: ParseOptions): ControlTa
             case 'prosody.volume':
                 return parseVolume(value) === null ? 'volume' : null;
             case 'phoneme.alphabet':
-                return Object.hasOwn(ALPHABET_LANGUAGE_ERRORS, value) ? null : 'alphabet';
+                return Object.hasOwn(ALPHABET_LANGUAGE_ERRORS, value.trim().toLowerCase()) ? null : 'alphabet';
             case 'fit.mode':
-                return FIT_MODES.includes(value.trim() as TimelineOverflowMode) ? null : 'fitMode';
+                return FIT_MODES.includes(value.trim().toLowerCase() as TimelineOverflowMode) ? null : 'fitMode';
             case 'sub.alias':
             case 'phoneme.ph':
                 return value.trim().length === 0 ? 'nonEmpty' : null;
@@ -684,7 +782,7 @@ export function parseControlTags(text: string, options: ParseOptions): ControlTa
             stack.length = position + 1;
         }
         const element = stack.pop() as OpenElement;
-        finishElement(element, tagEnd);
+        finishElement(element, tagStart, tagEnd);
     }
 
     function findOpen(name: ControlTagName): number {
@@ -694,10 +792,12 @@ export function parseControlTags(text: string, options: ParseOptions): ControlTa
         return -1;
     }
 
-    function finishElement(element: OpenElement, end: number) {
+    // closeStart: 閉じタグの位置 (中身の範囲の終わり)。end: 閉じタグの終わり
+    function finishElement(element: OpenElement, closeStart: number, end: number) {
         if (!TEXT_ONLY_TAGS.has(element.name)) return;
         const surface = element.content;
         const parentInvalid = element.invalid;
+        if (element.nestedError) return;
         if (surface.trim().length === 0) {
             issue('emptyContent', element.start, element.contentStart - element.start, { tag: element.name });
             return;
@@ -719,7 +819,8 @@ export function parseControlTags(text: string, options: ParseOptions): ControlTa
             const parsed = parseAccentNotation(ph.trim());
             if (!parsed.ok) {
                 const leading = ph.length - ph.trimStart().length;
-                issue('accentSyntax', element.phOffset + leading + parsed.error.offset, parsed.error.length, {
+                const span = rawSpan(element.phRaw, leading + parsed.error.offset, parsed.error.length);
+                issue('accentSyntax', element.phOffset + span.start, span.length, {
                     tag: 'phoneme',
                     value: parsed.error.text,
                     accentCode: parsed.error.code,
@@ -741,7 +842,8 @@ export function parseControlTags(text: string, options: ParseOptions): ControlTa
         if (element.attributes.alphabet === 'x-pinyin') {
             const pinyin = parsePinyin(ph);
             if (!pinyin.ok) {
-                issue('pinyinSyllable', element.phOffset + pinyin.offset, pinyin.length, {
+                const span = rawSpan(element.phRaw, pinyin.offset, pinyin.length);
+                issue('pinyinSyllable', element.phOffset + span.start, span.length, {
                     tag: 'phoneme',
                     value: pinyin.text,
                 });
@@ -750,12 +852,14 @@ export function parseControlTags(text: string, options: ParseOptions): ControlTa
             // 1 文字が 1 音節に対応するため、発音を指定する文字は漢字だけとし、音節の数を文字数とそろえる
             const characters = surface.trim();
             if (!isHanOnly(characters)) {
-                issue('pinyinSurface', element.contentStart, Math.max(1, surface.length), { tag: 'phoneme' });
+                issue('pinyinSurface', element.contentStart, Math.max(1, closeStart - element.contentStart), {
+                    tag: 'phoneme',
+                });
                 return;
             }
             const count = [...characters].length;
             if (pinyin.syllables.length !== count) {
-                issue('pinyinCount', element.phOffset, Math.max(1, ph.length), {
+                issue('pinyinCount', element.phOffset, Math.max(1, element.phRaw.length), {
                     tag: 'phoneme',
                     value: String(pinyin.syllables.length),
                     expected: String(count),
@@ -775,12 +879,13 @@ export function parseControlTags(text: string, options: ParseOptions): ControlTa
         }
         const parsed = parseIpa(ph);
         if (!parsed.ok) {
-            issue('ipaSymbol', element.phOffset + parsed.offset, 1, { tag: 'phoneme', value: parsed.symbol });
+            const span = rawSpan(element.phRaw, parsed.offset, 1);
+            issue('ipaSymbol', element.phOffset + span.start, span.length, { tag: 'phoneme', value: parsed.symbol });
             return;
         }
         const surfaceWords = surface.trim().split(/\s+/);
         if (surfaceWords.length !== parsed.words.length) {
-            issue('ipaWordCount', element.phOffset, Math.max(1, ph.length), {
+            issue('ipaWordCount', element.phOffset, Math.max(1, element.phRaw.length), {
                 tag: 'phoneme',
                 value: String(parsed.words.length),
                 expected: String(surfaceWords.length),
@@ -822,15 +927,14 @@ export function findTagRanges(text: string): { start: number; end: number }[] {
             continue;
         }
         let cursor = candidate.nameEnd;
-        let quote: string | null = null;
+        let quote: string[] | null = null;
         while (cursor < text.length) {
             const char = text[cursor];
             if (quote) {
-                // 解析と同じ規則で閉じる (曲がった引用符は “ ” " のいずれでも閉じられる)
-                const curly = quote === OPEN_CURLY || quote === CLOSE_CURLY;
-                if (curly ? char === OPEN_CURLY || char === CLOSE_CURLY || char === '"' : char === quote) quote = null;
-            } else if (char === '"' || char === "'" || char === OPEN_CURLY || char === CLOSE_CURLY) {
-                quote = char;
+                // 解析と同じ規則で閉じる
+                if (quote.includes(char)) quote = null;
+            } else if (closingQuotes(char)) {
+                quote = closingQuotes(char);
             } else if (char === '>') {
                 break;
             }

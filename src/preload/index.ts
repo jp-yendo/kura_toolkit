@@ -300,7 +300,7 @@ const api: IpcApi = {
         tts: {
             run: (jobId, request) => invoke(IPC_CHANNELS.VOICE_TTS_RUN, jobId, request),
             cancelConfirmation: token => invoke(IPC_CHANNELS.VOICE_TTS_CANCEL_CONFIRMATION, token),
-            loadText: path => invoke(IPC_CHANNELS.VOICE_TTS_LOAD_TEXT, path),
+            loadText: (path, language) => invoke(IPC_CHANNELS.VOICE_TTS_LOAD_TEXT, path, language),
             saveText: (path, text) => invoke(IPC_CHANNELS.VOICE_TTS_SAVE_TEXT, path, text),
         },
         models: {

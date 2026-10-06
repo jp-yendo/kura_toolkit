@@ -142,7 +142,7 @@ export default function ImportVoiceDialog({ open, feature, existing, onClose, on
             const info = await window.kuraToolkit.voice.models.commitImport(inspection.token, {
                 name,
                 allowUnsafe,
-                languages: inspection.tts?.engine === 'multilingual' ? languages : undefined,
+                languages: inspection.tts?.modelType === 'multilingual' ? languages : undefined,
             });
             setInspection(null);
             onImported(info);
@@ -282,7 +282,7 @@ export default function ImportVoiceDialog({ open, feature, existing, onClose, on
                         {inspection.tts && (
                             <Typography variant='body2' color='text.secondary'>
                                 {t('voice.models.ttsInfo', {
-                                    engine: t(`voice.engine.${inspection.tts.engine}`),
+                                    modelType: t(`voice.modelType.${inspection.tts.modelType}`),
                                     styles: inspection.tts.styles.length,
                                     version: inspection.tts.version,
                                 })}
@@ -296,7 +296,7 @@ export default function ImportVoiceDialog({ open, feature, existing, onClose, on
                             helperText={hasSameVoiceName(existing, name) ? t('voice.models.duplicateName') : undefined}
                             slotProps={{ formHelperText: { sx: { color: 'warning.main', whiteSpace: 'pre-line' } } }}
                         />
-                        {inspection.tts?.engine === 'multilingual' && (
+                        {inspection.tts?.modelType === 'multilingual' && (
                             <Box>
                                 <Typography variant='body2'>{t('voice.models.languages')}</Typography>
                                 <FormGroup row>
@@ -391,7 +391,7 @@ export default function ImportVoiceDialog({ open, feature, existing, onClose, on
                             busy ||
                             !name.trim() ||
                             (!inspection?.safe && !allowUnsafe) ||
-                            (inspection?.tts?.engine === 'multilingual' && languages.length === 0)
+                            (inspection?.tts?.modelType === 'multilingual' && languages.length === 0)
                         }
                         onClick={() => void commit()}
                     >

@@ -23,7 +23,7 @@ import {
 import {
     LANGUAGE_DEFINITIONS,
     ttsTrainingItems,
-    type TtsEngineId,
+    type TtsModelType,
     type VoiceLanguage,
 } from '../../../shared/voice/languages';
 import type { TrainingStage, VoiceModelInfo } from '../../../shared/voice/types';
@@ -180,7 +180,7 @@ async function trainRvc(jobId: string, audios: TrainingSetAudio[], name: string)
     }
 }
 
-type TtsTrainingOptions = { setId: string; engine: TtsEngineId; name: string };
+type TtsTrainingOptions = { setId: string; modelType: TtsModelType; name: string };
 
 export async function startTtsTraining(jobId: string, options: TtsTrainingOptions): Promise<VoiceModelInfo> {
     startJob(jobId);
@@ -205,10 +205,10 @@ async function trainTts(
     const platform = await getPlatformInfo();
     // 読み上げのモデルの学習は、上流が NVIDIA GPU を前提としているため NVIDIA GPU を使える Windows と Linux でのみ行う
     if (!platform.ttsTrainingAvailable) throw new Error('TTS_TRAINING_UNAVAILABLE');
-    if (!LANGUAGE_DEFINITIONS[language].trainingEngines.includes(options.engine)) {
-        throw new Error('TTS_ENGINE_LANGUAGE_MISMATCH');
+    if (!LANGUAGE_DEFINITIONS[language].trainingModelTypes.includes(options.modelType)) {
+        throw new Error('TTS_MODEL_TYPE_LANGUAGE_MISMATCH');
     }
-    const required = ['component:tts', 'component:tts-train', ...ttsTrainingItems(options.engine, language)];
+    const required = ['component:tts', 'component:tts-train', ...ttsTrainingItems(options.modelType, language)];
     const missing = required.filter(item => !isItemInstalled(item));
     if (missing.length > 0) throw new Error(`MODEL_REQUIRED: ${missing.join(', ')}`);
 
@@ -246,7 +246,7 @@ async function trainTts(
                     repoDir: repo,
                     modelName,
                     language,
-                    useJpExtra: options.engine === 'jp-extra',
+                    useJpExtra: options.modelType === 'jp-extra',
                     clips,
                     epochs,
                     batchSize,

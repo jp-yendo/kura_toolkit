@@ -268,6 +268,31 @@ def patch_applio_model_paths() -> None:
     applio_utils.load_embedding = load_embedding
 
 
+def patch_nltk_zip_lookup() -> None:
+    """Let NLTK find the app's extracted data when asked for the zip archive.
+
+    g2p_en (English pronunciation) checks for "taggers/averaged_perceptron_tagger.zip" and "corpora/cmudict.zip"
+    when it is imported and downloads them when they are missing. The app's download extracts these archives into
+    folders (as NLTK reads them), so the zip names are looked up as the extracted folders as well.
+    """
+    import nltk
+
+    if getattr(nltk.data.find, "_kura_zip_lookup", False):
+        return
+    original = nltk.data.find
+
+    def find(resource_name: str, *args: Any, **kwargs: Any) -> Any:
+        try:
+            return original(resource_name, *args, **kwargs)
+        except LookupError:
+            if not resource_name.endswith(".zip"):
+                raise
+            return original(resource_name[: -len(".zip")], *args, **kwargs)
+
+    find._kura_zip_lookup = True  # type: ignore[attr-defined]
+    nltk.data.find = find
+
+
 def write_wav_as_float() -> None:
     """Make every WAV file written with soundfile.write in this process 32-bit float.
 

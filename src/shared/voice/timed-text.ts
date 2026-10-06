@@ -97,16 +97,24 @@ function toSeconds(hours: string | undefined, minutes: string, seconds: string, 
     return Math.round(total * 1000) / 1000;
 }
 
-// 字幕の装飾 (SRT・WebVTT の書式タグと、WebVTT の文字の参照) を除く。読み上げの制御タグ (break・prosody・sub・phoneme) は残す
-function stripFormatting(text: string): string {
-    return text
+// 字幕の装飾を除く。読み上げの制御タグ (break・prosody・sub・phoneme・fit) は残す。
+// SRT・SBV: 何も除かない (アプリが保存する形式で、保存して開き直しても内容が変わらないようにするため。SRT の装飾の印
+// <i> などは本文に残し、読み上げるときに読み飛ばす。control-tags の SUBTITLE_MARKUP)。
+// WebVTT: 書式タグ (ふりがな rt は中身ごと除き、本文だけを読む) とカラオケの時刻を除く。文字の参照のうち &lt; &gt; &amp; は
+// そのまま残す (表のテキストでも同じ意味の置き換え表記で、戻すと字幕に文字として書かれたタグが本物の制御タグになるため)。
+// &nbsp; は空白にし、文字の向きの印 (&lrm; &rlm;) は除く。
+// ASS: {} の中の指定と注釈、図形の命令 ({\p1} から {\p0} まで。文字ではない)
+function stripFormatting(text: string, format: SubtitleFormat): string {
+    if (format === 'srt' || format === 'sbv') return text;
+    if (format === 'ass') {
+        return text.replace(/\{[^}]*\\p[1-9][^}]*\}[\s\S]*?(?:\{[^}]*\\p0[^}]*\}|$)/g, '').replace(/\{[^}]*\}/g, '');
+    }
+    let result = text
+        .replace(/<rt(?:[.\s][^>]*)?>[\s\S]*?<\/rt>/gi, '')
         .replace(/<\/?(?:i|b|u|s|font|c|v|lang|ruby|rt|span)(?:[.\s][^>]*)?>/gi, '')
-        .replace(/<\d{1,2}:\d{2}(?::\d{2})?\.\d{3}>/g, '')
-        .replace(/\{\\[^}]*\}/g, '')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&nbsp;/g, ' ')
-        .replace(/&amp;/g, '&');
+        .replace(/<\d{1,2}:\d{2}(?::\d{2})?\.\d{3}>/g, '');
+    if (format === 'vtt') result = result.replace(/&nbsp;/g, ' ').replace(/&(?:lrm|rlm);/g, '');
+    return result;
 }
 
 // 本文の行を整える (前後の空白と空の行を除く)
@@ -135,32 +143,64 @@ function parseBlocks(text: string, format: 'srt' | 'vtt' | 'sbv'): SubtitleFileR
     const blocks = text.split(/\n\s*\n/);
     const lines: TimedLine[] = [];
     let skipped = 0;
-    blocks.forEach((block, blockIndex) => {
-        const rows = block.split('\n').filter(row => row.trim() !== '');
+    // 中身のあるブロックを読んだか (WebVTT のヘッダーは、先頭の空行を除いた最初のブロック)
+    let seenBlock = false;
+    // 直前のブロックが区間として読めたか (本文の途中の空行で分かれたブロックを、その区間の続きとして読むため)
+    let previousCue: TimedLine | null = null;
+    blocks.forEach(block => {
+        let rows = block.split('\n').filter(row => row.trim() !== '');
         if (rows.length === 0) return;
-        // WebVTT のヘッダー (先頭のブロック) と、本文ではないブロックは読み飛ばす
-        if (format === 'vtt' && blockIndex === 0 && rows[0].startsWith('WEBVTT')) return;
-        if (format === 'vtt' && /^(NOTE|STYLE|REGION)(\s|$)/.test(rows[0])) return;
+        const first = !seenBlock;
+        seenBlock = true;
         const pattern = format === 'sbv' ? SBV_TIMING_LINE : TIMING_LINE;
+        // WebVTT のヘッダーと、本文ではないブロックは読み飛ばす。ヘッダーの直後に空行を挟まずに区間が続く場合
+        // (規格外) は、時刻の行から後を区間として読む
+        if (format === 'vtt' && first && rows[0].startsWith('WEBVTT')) {
+            const headerEnd = rows.findIndex(row => pattern.test(row));
+            if (headerEnd < 0) return;
+            rows = rows.slice(headerEnd);
+        }
+        if (format === 'vtt' && /^(NOTE|STYLE|REGION)(\s|$)/.test(rows[0])) {
+            previousCue = null;
+            return;
+        }
         // 時刻の行の前に番号 (SRT) や識別子 (WebVTT) の行がある
         const timingIndex = rows.findIndex(row => pattern.test(row));
+        if (timingIndex < 0 && previousCue && !looksLikeCue(rows, format)) {
+            // 時刻の行が無いブロックは、本文の途中の空行で分かれた、直前の区間の本文の続き。
+            // 時刻の行の書き方が崩れた区間 (番号と時刻らしい行がある) は続きにせず、読み飛ばして知らせる
+            const more = cleanText(stripFormatting(rows.join('\n'), format).split('\n'));
+            if (more) previousCue.text = previousCue.text ? `${previousCue.text}\n${more}` : more;
+            return;
+        }
         if (timingIndex < 0 || timingIndex > 1) {
             skipped += 1;
+            previousCue = null;
             return;
         }
         const timing = pattern.exec(rows[timingIndex]);
         if (!timing) {
             skipped += 1;
+            previousCue = null;
             return;
         }
-        const body = cleanText(stripFormatting(rows.slice(timingIndex + 1).join('\n')).split('\n'));
-        lines.push({
+        const body = cleanText(stripFormatting(rows.slice(timingIndex + 1).join('\n'), format).split('\n'));
+        const cue: TimedLine = {
             start: toSeconds(timing[1], timing[2], timing[3], timing[4]),
             end: toSeconds(timing[5], timing[6], timing[7], timing[8]),
             text: body,
-        });
+        };
+        lines.push(cue);
+        previousCue = cue;
     });
     return { lines, skipped };
+}
+
+// 時刻の行を読めなくても、区間として書かれたブロックか (番号の行や、時刻らしい行がある)
+function looksLikeCue(rows: string[], format: 'srt' | 'vtt' | 'sbv'): boolean {
+    if (format === 'sbv') return rows.some(row => /^\s*[\d:.]+\s*,\s*[\d:.]+\s*$/.test(row));
+    if (rows.some(row => row.includes('-->') || /^\s*[\d:.,]+\s*-+>\s*[\d:.,]+/.test(row))) return true;
+    return format === 'srt' && rows.length > 1 && /^\d+$/.test(rows[0].trim());
 }
 
 // ASS・SSA ([Events] の Format の並びに従って Dialogue の行を読む)
@@ -198,15 +238,20 @@ function parseAss(text: string): SubtitleFileResult {
             skipped += 1;
             continue;
         }
-        const plain = stripFormatting(body)
+        const plain = stripFormatting(body, 'ass')
             .replace(/\\[Nn]/g, '\n')
             .replace(/\\h/g, ' ');
+        const lineText = cleanText(plain.split('\n'));
+        // 図形だけ・装飾の指定だけの行は、読み上げる文字が無いため行にしない
+        if (!lineText) continue;
         lines.push({
             start: toSeconds(start[1], start[2], start[3], start[4]),
             end: toSeconds(end[1], end[2], end[3], end[4]),
-            text: cleanText(plain.split('\n')),
+            text: lineText,
         });
     }
+    // ASS の Dialogue は時間の順に並んでいるとは限らない (レイヤーや編集の順) ため、開始時間の順に並べる
+    lines.sort((a, b) => a.start - b.start || a.end - b.end);
     return { lines, skipped };
 }
 

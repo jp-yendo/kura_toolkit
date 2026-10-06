@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { emitJobEvent, finishJob, startJob } from '../job-manager';
-import { requireRubberband, timeStretch } from './audio-tools';
+import { extractSamples, requireRubberband, timeStretch } from './audio-tools';
 import { isItemInstalled } from './library';
 import { mediaRef } from './media';
 import { modelPaths } from './paths';
@@ -20,9 +20,11 @@ import {
     type VoiceLanguage,
 } from '../../../shared/voice/languages';
 import { validateTimedLines } from '../../../shared/voice/timed-text';
+import { voiceDisplayName } from '../../../shared/voice/voice-name';
 import type {
     SpeedupConfirmation,
     TimelineOverflowMode,
+    TtsParams,
     TtsRunRequest,
     TtsRunResult,
 } from '../../../shared/voice/types';
@@ -48,18 +50,26 @@ type Piece =
 
 type Segment = { id: string; pieces: Piece[] };
 
-type SegmentResult = { id: string; path: string; duration: number };
+// 合成した区間。parts は声と無音 (間) の位置 (サンプル単位)
+type SegmentPart = { kind: 'speech' | 'silence'; start: number; frames: number };
+type SegmentResult = { id: string; path: string; duration: number; sampleRate: number; parts: SegmentPart[] };
 
 // 合成の単位から、話速・音の高さ・音量が同じ並びをまとめた区切り (piece) を作る。
 // paragraphs = true のときは改行で段落 (別の segment) に分ける
+// 文章の改行 (改行の文字と、改行を表す置き換え表記)
+const LINE_BREAK_SOURCE = /\n|&#0*10;|&#[xX]0*[aA];/g;
+
 function buildSegments(
     runs: SpeechRun[],
     language: VoiceLanguage,
     readSymbols: boolean,
     request: TtsRunRequest,
-    paragraphs: boolean
+    paragraphs: boolean,
+    // 段落ごとの、元の文章での開始位置 (段落に分ける場合に、誤りの位置を示すために使う)
+    starts?: number[]
 ): Piece[][] {
     const groups: Piece[][] = [[]];
+    starts?.push(0);
     const current = () => groups[groups.length - 1];
     const addPart = (part: SpeechPart, prosody: { rate: number; pitch: number; volume: number }) => {
         const pieces = current();
@@ -86,10 +96,15 @@ function buildSegments(
         if (run.kind === 'text') {
             const text = readSymbols ? applySymbolReadings(run.text, language, request.symbolReadings) : run.text;
             const lines = text.split('\n');
+            // 改行の元の文章での位置 (改行は置き換え表記 &#10; などで書かれていることもある)
+            const breaks = [...request.text.slice(run.start, run.end).matchAll(LINE_BREAK_SOURCE)];
             lines.forEach((line, index) => {
                 if (index > 0) {
-                    if (paragraphs) groups.push([]);
-                    else if (joiner) addPart({ text: joiner }, run.prosody);
+                    if (paragraphs) {
+                        groups.push([]);
+                        const source = breaks[index - 1];
+                        starts?.push(source ? run.start + source.index + source[0].length : run.end);
+                    } else if (joiner) addPart({ text: joiner }, run.prosody);
                 }
                 if (line.length > 0) addPart({ text: line }, run.prosody);
             });
@@ -100,11 +115,11 @@ function buildSegments(
             continue;
         }
         if (run.alphabet === 'x-kana') {
-            addPart({ surface: run.surface, kataTone: run.kataTone, reading: run.reading }, run.prosody);
+            addPart({ surface: run.surface.trim(), kataTone: run.kataTone, reading: run.reading }, run.prosody);
         } else if (run.alphabet === 'x-pinyin') {
             addPart({ surface: run.surface.trim(), pinyin: run.pinyin }, run.prosody);
         } else {
-            addPart({ surface: run.surface, words: run.words }, run.prosody);
+            addPart({ surface: run.surface.trim(), words: run.words }, run.prosody);
         }
     }
     return groups;
@@ -152,39 +167,78 @@ type ResolvedModel = {
     config: string;
     style: string;
     sampleRate: number;
+    // 話者の番号 (画面で選ぶ話者の順。モデルの番号は連続していないことがある)
+    speakerIds: number[];
     voiceName: string;
 };
+
+// 設定値の範囲 (画面の入力欄と同じ範囲。範囲外の値では作成を始めない)
+const PARAM_RANGES: Record<Exclude<keyof TtsParams, 'style' | 'speakerId'>, [number, number]> = {
+    styleWeight: [0, 10],
+    speed: [0.5, 2],
+    pitchScale: [0.7, 1.3],
+    intonationScale: [0, 2],
+    sdpRatio: [0, 1],
+    noise: [0, 2],
+    noiseW: [0, 2],
+    paragraphPause: [0, 3],
+};
+
+function checkParams(params: TtsParams): void {
+    for (const [key, [min, max]] of Object.entries(PARAM_RANGES)) {
+        const value = params[key as keyof typeof PARAM_RANGES];
+        if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) {
+            throw new Error(`TTS_PARAMS_INVALID: ${key}`);
+        }
+    }
+    if (!Number.isInteger(params.speakerId) || params.speakerId < 0) throw new Error('TTS_PARAMS_INVALID: speakerId');
+    if (typeof params.style !== 'string') throw new Error('TTS_PARAMS_INVALID: style');
+}
 
 function resolveModel(request: TtsRunRequest): ResolvedModel {
     if (!isItemInstalled('component:tts')) throw new Error('TTS_NOT_INSTALLED');
     const voice = getVoice('tts', request.voiceId);
     const meta = voice.info.tts;
     if (!meta) throw new Error('VOICE_NOT_FOUND');
-    if (meta.engine !== request.engine) throw new Error('TTS_ENGINE_MISMATCH');
+    if (meta.modelType !== request.modelType) throw new Error('TTS_MODEL_TYPE_MISMATCH');
     if (!meta.languages.includes(request.language)) throw new Error('TTS_LANGUAGE_UNSUPPORTED');
-    if (request.engine === 'jp-extra' && request.language !== 'ja') throw new Error('TTS_LANGUAGE_UNSUPPORTED');
+    if (request.modelType === 'jp-extra' && request.language !== 'ja') throw new Error('TTS_LANGUAGE_UNSUPPORTED');
     // 読み上げには、読み上げる言語の BERT モデルだけを使う (声の形式によらない)
     const requiredItem = TTS_LANGUAGE_MODEL_ITEMS[request.language];
     if (!isItemInstalled(requiredItem)) throw new Error(`MODEL_REQUIRED: ${requiredItem}`);
     const files = ttsModelFiles(voice);
+    const config = readModelConfig(files.config);
+    if (request.params.speakerId >= Math.max(config.speakerIds.length, 1)) {
+        throw new Error('TTS_PARAMS_INVALID: speakerId');
+    }
     return {
         ...files,
-        sampleRate: readSampleRate(files.config),
-        voiceName: voice.info.name || voice.info.distributedName || '',
+        ...config,
+        voiceName: voiceDisplayName(voice.info),
     };
 }
 
-// モデルが出力する音声のサンプリング周波数 (config.json の data.sampling_rate)
-function readSampleRate(configPath: string): number {
-    let config: { data?: { sampling_rate?: unknown } } | null;
+type ModelConfigJson = { data?: { sampling_rate?: unknown; spk2id?: unknown } } | null;
+
+// モデルの設定 (config.json) から、出力する音声のサンプリング周波数 (data.sampling_rate) と、
+// 話者の番号 (data.spk2id の番号を小さい順に。画面の話者の一覧と同じ順) を読む
+function readModelConfig(configPath: string): { sampleRate: number; speakerIds: number[] } {
+    let config: ModelConfigJson;
     try {
-        config = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as { data?: { sampling_rate?: unknown } } | null;
+        config = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as ModelConfigJson;
     } catch (error) {
         throw new Error(`INVALID_TTS_MODEL: ${configPath}`, { cause: error });
     }
     const sampleRate = config?.data?.sampling_rate;
     if (typeof sampleRate !== 'number' || !(sampleRate > 0)) throw new Error(`INVALID_TTS_MODEL: ${configPath}`);
-    return sampleRate;
+    const spk2id = config?.data?.spk2id;
+    const speakerIds =
+        spk2id && typeof spk2id === 'object'
+            ? Object.values(spk2id)
+                  .filter((value): value is number => typeof value === 'number')
+                  .sort((a, b) => a - b)
+            : [];
+    return { sampleRate, speakerIds };
 }
 
 async function synthesize(
@@ -203,14 +257,15 @@ async function synthesize(
             'synthesize',
             {
                 language: request.language,
-                engine: request.engine,
+                modelType: request.modelType,
                 berts: {
                     ja: models.file(TTS_BERT_DIRS.ja),
                     en: models.file(TTS_BERT_DIRS.en),
                     zh: models.file(TTS_BERT_DIRS.zh),
                 },
                 model: { weights: model.weights, config: model.config, style: model.style },
-                params: request.params,
+                // 画面で選んだ話者の順をモデルの話者の番号にする
+                params: { ...request.params, speakerId: model.speakerIds[request.params.speakerId] ?? 0 },
                 segments,
                 outputDir,
             },
@@ -241,6 +296,73 @@ async function assemble(
     );
 }
 
+// 読み上げる文字があるか (補助プロセスの _speakable と同じ判定: 文字か数字を含むか)
+function isSpeakable(piece: Piece): boolean {
+    if (piece.kind !== 'speech') return false;
+    return piece.parts.some(part => /[\p{L}\p{N}]/u.test('text' in part ? part.text : part.surface));
+}
+
+// 区間の中の間 (break) の長さ (秒)
+function silenceSeconds(segment: Segment): number {
+    return segment.pieces.reduce((sum, piece) => sum + (piece.kind === 'silence' ? piece.ms / 1000 : 0), 0);
+}
+
+// 合成できないほど長かった区間 (補助プロセスの TTS_SEGMENT_TOO_LONG) の ID。それ以外の失敗は null
+function tooLongSegment(error: unknown): string | null {
+    const match = /TTS_SEGMENT_TOO_LONG:\s*(\S+)/.exec(error instanceof Error ? error.message : String(error));
+    return match ? match[1] : null;
+}
+
+// 文章の段落 (元の文章での開始位置と終わりの位置) 全体を指す誤り。段落はタグの中の改行で文章の複数の行にまたがることがある
+function paragraphIssue(text: string, start: number, end: number, code: TagIssue['code']): TagIssue {
+    const body = text.slice(start, end).replace(/(?:\n|&#0*10;|&#[xX]0*[aA];)$/, '');
+    const line = text.slice(0, start).split('\n').length;
+    const column = start - (text.lastIndexOf('\n', start - 1) + 1) + 1;
+    return { code, offset: start, length: Math.max(1, body.length), line, column };
+}
+
+// 読み上げる文字が無いことを、文章 (または表の行) の先頭の誤りとして返す
+function nothingToRead(row?: number): TagIssue {
+    return { code: 'nothingToRead', offset: 0, length: 1, line: 1, column: 1, ...(row ? { row } : {}) };
+}
+
+// 合成した区間を、行の時間に収まるよう時間伸縮で縮める。間 (break) を含む区間は、声の部分だけを同じ倍率で縮めて
+// 間はそのままの長さで挟み直す (間の長さを保つため)。間だけで行の時間を超える区間と、間の無い区間は全体を縮める
+async function fitIntoSlot(
+    jobId: string,
+    model: ResolvedModel,
+    result: SegmentResult,
+    slot: number
+): Promise<SegmentResult> {
+    const folder = path.dirname(result.path);
+    const output = path.join(folder, `${result.id}-fit.wav`);
+    const rate = result.sampleRate;
+    const silence = result.parts.filter(part => part.kind === 'silence').reduce((sum, part) => sum + part.frames, 0);
+    const speech = result.parts.filter(part => part.kind === 'speech').reduce((sum, part) => sum + part.frames, 0);
+    const available = slot - silence / rate;
+    if (silence === 0 || speech === 0 || available <= 0.05) {
+        await timeStretch(result.path, output, result.duration / slot, jobId);
+        return { ...result, path: output, duration: slot };
+    }
+    const tempo = speech / rate / available;
+    const placements: { path: string; start: number }[] = [];
+    let cursor = 0;
+    for (const [index, part] of result.parts.entries()) {
+        if (part.kind === 'silence') {
+            cursor += part.frames / rate;
+            continue;
+        }
+        const piece = path.join(folder, `${result.id}-part${index}.wav`);
+        const stretched = path.join(folder, `${result.id}-part${index}-fit.wav`);
+        await extractSamples(result.path, piece, part.start, part.frames, jobId);
+        await timeStretch(piece, stretched, tempo, jobId);
+        placements.push({ path: stretched, start: cursor });
+        cursor += part.frames / tempo / rate;
+    }
+    await assemble(jobId, model, placements, output, slot);
+    return { ...result, path: output, duration: Math.max(slot, cursor) };
+}
+
 // 話速を上げた合成の設定 (制御タグで話速を指定している区間は、その指定に倍率を掛ける)
 function speedUp(segment: Segment, factor: number): Segment {
     return {
@@ -258,6 +380,7 @@ function invalid(errors: TagIssue[], fixes: TagFix[]): TtsRunResult {
 export async function runTts(jobId: string, request: TtsRunRequest): Promise<TtsRunResult> {
     startJob(jobId);
     try {
+        checkParams(request.params);
         const model = resolveModel(request);
         const id = newId();
         const dir = sessionDir(request.workKey, 'tts', id);
@@ -289,11 +412,34 @@ async function synthesizeInto(
     if (request.inputMode === 'normal') {
         const parsed = parseControlTags(request.text, { language: request.language });
         if (parsed.errors.length > 0 || parsed.fixes.length > 0) return invalid(parsed.errors, parsed.fixes);
-        const groups = buildSegments(parsed.runs, request.language, request.readSymbols, request, true);
-        const segments = groups.map((pieces, index) => ({ id: `p${String(index + 1).padStart(4, '0')}`, pieces }));
-        const results = await synthesize(jobId, request, model, segments, path.join(dir, 'parts'), fraction =>
-            progress(fraction * 90)
-        );
+        // 音の無い段落 (空行・末尾の改行・読み上げる文字の無い段落) は除く。段落の間の無音は、音のある段落の間にだけ入れる。
+        // 段落は文章の改行で分ける (start・end: 元の文章での段落の範囲。長すぎる段落を示すときに使う)
+        const starts: number[] = [];
+        const groups = buildSegments(parsed.runs, request.language, request.readSymbols, request, true, starts)
+            .map((pieces, index) => ({
+                pieces,
+                start: starts[index] ?? 0,
+                end: starts[index + 1] ?? request.text.length,
+            }))
+            .filter(group => group.pieces.some(piece => piece.kind === 'silence' || isSpeakable(piece)));
+        if (groups.length === 0) return invalid([nothingToRead()], []);
+        const segments = groups.map((group, index) => ({
+            id: `p${String(index + 1).padStart(4, '0')}`,
+            pieces: group.pieces,
+        }));
+        let results: SegmentResult[];
+        try {
+            results = await synthesize(jobId, request, model, segments, path.join(dir, 'parts'), fraction =>
+                progress(fraction * 90)
+            );
+        } catch (error) {
+            // 合成できないほど長い段落は、その段落を示して改行で分けてもらう (アプリでは分けない)
+            const tooLong = tooLongSegment(error);
+            const index = segments.findIndex(segment => segment.id === tooLong);
+            if (index < 0) throw error;
+            const group = groups[index];
+            return invalid([paragraphIssue(request.text, group.start, group.end, 'paragraphTooLong')], []);
+        }
         const placements: { path: string; start: number }[] = [];
         let cursor = 0;
         results.forEach((result, index) => {
@@ -312,7 +458,7 @@ async function synthesizeInto(
                 id,
                 voiceId: request.voiceId,
                 voiceName: model.voiceName,
-                engine: request.engine,
+                modelType: request.modelType,
                 language: request.language,
                 params: request.params,
                 media: await mediaRef(output),
@@ -339,12 +485,12 @@ async function runTimeline(
     const pending = request.confirmationToken ? await takePendingTimeline(request.confirmationToken, key) : undefined;
     try {
         // 時間とテキストは画面で確かめてから渡される。ここでも確かめ、誤りがあれば始めない
-        if (request.lines.length === 0) throw new Error('TTS_TIMING_INVALID: empty');
+        if (request.lines.length === 0) throw new Error('TTS_TIMING_EMPTY');
         const timingIssues = validateTimedLines(request.lines);
         if (timingIssues.length > 0) {
-            throw new Error(
-                `TTS_TIMING_INVALID: ${timingIssues.map(issue => `${issue.row}:${issue.code}`).join(', ')}`
-            );
+            // 利用者には誤りのある行の番号を示す (誤りの内容は画面の表で示す)
+            const rows = [...new Set(timingIssues.map(issue => issue.row))].sort((a, b) => a - b);
+            throw new Error(`TTS_TIMING_INVALID: ${rows.join(', ')}`);
         }
         const cues: TimelineCue[] = request.lines.map((line, index) => ({ index: index + 1, ...line }));
         const errors: TagIssue[] = [];
@@ -357,10 +503,22 @@ async function runTimeline(
             errors.push(...parsed.errors.map(issue => ({ ...issue, row: cue.index })));
             fixes.push(...parsed.fixes.map(fix => ({ ...fix, row: cue.index })));
             const pieces = buildSegments(parsed.runs, request.language, request.readSymbols, request, false)[0];
+            if (parsed.errors.length === 0 && !pieces.some(isSpeakable)) errors.push(nothingToRead(cue.index));
             segments.push({ id: `c${String(cue.index).padStart(4, '0')}`, pieces });
         }
         if (errors.length > 0 || fixes.length > 0) return invalid(errors, fixes);
-        return await placeTimeline(jobId, request, key, model, id, dir, output, progress, cues, segments, pending);
+        // 話速を上げて収める行 (全体の設定、または行の fit タグ) があれば、微調整に使う rubberband の有無を
+        // 合成を始める前に確かめる (合成や確認の後で失敗しないため)
+        if (cues.some(cue => (cue.fit ?? request.overflowMode) === 'speedup')) await requireRubberband();
+        try {
+            return await placeTimeline(jobId, request, key, model, id, dir, output, progress, cues, segments, pending);
+        } catch (error) {
+            // 合成できないほど長い行は、その行を示して分けてもらう (区間の ID は c<行の番号>、話速を上げた合成は -fast 付き)
+            const match = /^c(\d+)/.exec(tooLongSegment(error) ?? '');
+            if (!match) throw error;
+            const row = Number(match[1]);
+            return invalid([{ code: 'rowTooLong', offset: 0, length: 1, line: 1, column: 1, row }], []);
+        }
     } finally {
         // 確認を求めたときの合成結果は、続きの処理が終われば成否を問わず不要になる
         if (pending) discardLater(pending.dir);
@@ -380,22 +538,34 @@ async function placeTimeline(
     segments: Segment[],
     pending: PendingTimeline | undefined
 ): Promise<TtsRunResult> {
+    const modeOf = (cue: TimelineCue): TimelineOverflowMode => cue.fit ?? request.overflowMode;
+    // 進み具合の割り当て: 話速を上げる区間がありうる場合は 1 回目を 60% まで、無ければ 1 回目でほぼすべて
+    const firstShare = cues.some(cue => modeOf(cue) === 'speedup') ? 60 : 95;
+
     // 1 回目: すべての区間を指定どおりの話速で合成する (確認を済ませた再実行では、確認を求めたときの結果を使う)
     let first: SegmentResult[];
     if (pending) {
         first = pending.results;
+        progress(firstShare);
     } else {
         first = await synthesize(jobId, request, model, segments, path.join(dir, 'first'), fraction =>
-            progress(fraction * 60)
+            progress(fraction * firstShare)
         );
     }
-
-    const modeOf = (cue: TimelineCue): TimelineOverflowMode => cue.fit ?? request.overflowMode;
+    // 話速の倍率は、間 (break) の無音を除いた声の部分で求める (間の長さは保つ)。
+    // 間だけで行の時間を超える場合は、行全体を縮める倍率にする
     const speedups = cues
-        .map((cue, index) => ({ cue, index, result: first[index], slot: Math.max(0.05, cue.end - cue.start) }))
+        .map((cue, index) => {
+            const result = first[index];
+            const slot = Math.max(0.05, cue.end - cue.start);
+            const silence = silenceSeconds(segments[index]);
+            const factor =
+                slot - silence > 0.05 ? (result.duration - silence) / (slot - silence) : result.duration / slot;
+            return { cue, index, result, slot, factor };
+        })
         .filter(item => modeOf(item.cue) === 'speedup' && item.result.duration > item.slot + 0.005);
 
-    const needsConfirm = speedups.filter(item => item.result.duration / item.slot > SPEEDUP_CONFIRM_THRESHOLD);
+    const needsConfirm = speedups.filter(item => item.factor > SPEEDUP_CONFIRM_THRESHOLD);
     if (needsConfirm.length > 0 && !pending) {
         // 閾値を超える区間の一覧を示して確認する。承諾されたら、この結果を使って続きから処理する
         const token = crypto.randomUUID();
@@ -407,7 +577,7 @@ async function placeTimeline(
                 start: item.cue.start,
                 end: item.cue.end,
                 text: item.cue.text,
-                factor: item.result.duration / item.slot,
+                factor: item.factor,
             })),
         };
         return { status: 'needsConfirmation', confirmation };
@@ -417,27 +587,52 @@ async function placeTimeline(
     const finalResults = [...first];
     const adjusted: { index: number; factor: number }[] = [];
     if (speedups.length > 0) {
-        await requireRubberband();
         const faster = await synthesize(
             jobId,
             request,
             model,
-            speedups.map(item => speedUp(segments[item.index], item.result.duration / item.slot)),
+            speedups.map(item => speedUp(segments[item.index], item.factor)),
             path.join(dir, 'fast'),
-            fraction => progress(60 + fraction * 30)
+            fraction => progress(60 + fraction * 25)
         );
+        // 間 (break) を含む行は、話速を上げても声の部分がまだ長い (ライブラリの話速が倍率どおりに速くならない) 場合、
+        // 足りない分だけ倍率を上げて合成し直す。残りを時間伸縮で詰めると間も一緒に縮むため、詰める量を小さくする
+        const retry = speedups
+            .map((item, i) => {
+                const silence = silenceSeconds(segments[item.index]);
+                const available = item.slot - silence;
+                const speech = faster[i].duration - silence;
+                return {
+                    i,
+                    factor: item.factor * (speech / available),
+                    needed: silence > 0 && available > 0.05 && speech > available * 1.01,
+                };
+            })
+            .filter(entry => entry.needed);
+        if (retry.length > 0) {
+            const again = await synthesize(
+                jobId,
+                request,
+                model,
+                retry.map(entry => speedUp(segments[speedups[entry.i].index], entry.factor)),
+                path.join(dir, 'fast2'),
+                fraction => progress(85 + fraction * 5)
+            );
+            retry.forEach((entry, k) => {
+                faster[entry.i] = again[k];
+                speedups[entry.i] = { ...speedups[entry.i], factor: entry.factor };
+            });
+        }
+        progress(90);
         voicePhase(jobId, 'stretch', { fraction: 0 });
         for (let i = 0; i < speedups.length; i++) {
             const item = speedups[i];
             let result = faster[i];
-            voicePhase(jobId, 'stretch', { fraction: i / speedups.length });
-            if (result.duration > item.slot + 0.005) {
-                const stretched = path.join(dir, 'fast', `${result.id}-fit.wav`);
-                await timeStretch(result.path, stretched, result.duration / item.slot, jobId);
-                result = { ...result, path: stretched, duration: item.slot };
-            }
+            if (result.duration > item.slot + 0.005) result = await fitIntoSlot(jobId, model, result, item.slot);
             finalResults[item.index] = result;
-            adjusted.push({ index: item.cue.index, factor: item.result.duration / item.slot });
+            adjusted.push({ index: item.cue.index, factor: item.factor });
+            voicePhase(jobId, 'stretch', { fraction: (i + 1) / speedups.length });
+            progress(90 + ((i + 1) / speedups.length) * 5);
         }
     }
 
@@ -461,7 +656,7 @@ async function placeTimeline(
         end = Math.max(end, cue.end + offset, start + result.duration);
     });
     await assemble(jobId, model, placements, output, end);
-    for (const sub of ['first', 'fast']) discardLater(path.join(dir, sub));
+    for (const sub of ['first', 'fast', 'fast2']) discardLater(path.join(dir, sub));
     progress(100);
     return {
         status: 'done',
@@ -469,7 +664,7 @@ async function placeTimeline(
             id,
             voiceId: request.voiceId,
             voiceName: model.voiceName,
-            engine: request.engine,
+            modelType: request.modelType,
             language: request.language,
             params: request.params,
             media: await mediaRef(output),
