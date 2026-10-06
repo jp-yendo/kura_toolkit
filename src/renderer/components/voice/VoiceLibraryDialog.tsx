@@ -40,6 +40,7 @@ import {
 import { formatBytes } from './voiceFormat';
 import { voiceErrorMessage } from './voiceErrors';
 import { useJobRunner } from '../../hooks/useJobRunner';
+import { useRemainingTime } from '../../hooks/useRemainingTime';
 import { showNotice } from '../../stores/noticeStore';
 import { notifyVoiceLibraryChanged, useVoiceLibraryStore } from '../../stores/voiceLibraryStore';
 import type {
@@ -74,6 +75,8 @@ export default function VoiceLibraryDialog() {
     // タブごとのスクロール枠 (タブを切り替えても、それぞれのタブのスクロール位置を保つ)
     const panelRefs = React.useRef<Partial<Record<VoiceFeatureId, HTMLDivElement | null>>>({});
     const { job, run, cancel } = useJobRunner();
+    // 全体の進み具合はダウンロードしたバイト数に比例するため、そこから残り時間を見積もる
+    const remaining = useRemainingTime(job?.jobId ?? null, job?.percent);
 
     const refresh = React.useCallback(async () => {
         setStatus(await window.kuraToolkit.voice.library.getStatus());
@@ -539,6 +542,7 @@ export default function VoiceLibraryDialog() {
                 open={job !== null}
                 title={job?.title ?? ''}
                 percent={job?.percent}
+                remaining={remaining}
                 status={currentItem ? itemLabel(t, currentItem) : undefined}
                 message={current ? `${t(`voice.library.progress.${current.state}`)} ${current.detail ?? ''}` : ''}
                 details={progressDetails}

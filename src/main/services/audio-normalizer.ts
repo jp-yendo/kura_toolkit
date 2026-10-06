@@ -4,6 +4,8 @@ import { probeJson } from './ffmpeg/ffprobe';
 import { isCancelledError, runFfmpeg } from './ffmpeg/ffmpeg';
 import { emitJobEvent, finishJob, isCancelled, startJob } from './job-manager';
 import type {
+    AudioProbeItem,
+    AudioNormalizeInput,
     AudioAnalyzeItem,
     AudioAnalyzeResult,
     AudioNormalizeItem,
@@ -95,12 +97,83 @@ function firstAudioStream(probe: FfprobeStreamsResult): FfprobeStream | undefine
     return probe.streams?.find(stream => stream.codec_type === 'audio');
 }
 
-// 各ファイルのチャンネル数と実測ラウドネス (LUFS) を取得する
-export async function analyzeFiles(jobId: string, files: string[]): Promise<AudioAnalyzeResult> {
+// 一覧に加えたファイルの長さとチャンネル数 (画面の一覧に示し、全体の進み具合の配分に使う)。調べられないものは null
+export async function probeFiles(files: string[]): Promise<AudioProbeItem[]> {
+    const items: AudioProbeItem[] = [];
+    for (const filePath of files) {
+        try {
+            const probe = await probeJson<FfprobeStreamsResult>(['-show_streams', '-show_format', filePath]);
+            const duration = Number.parseFloat(probe.format?.duration ?? '');
+            items.push({
+                path: filePath,
+                durationSec: Number.isFinite(duration) && duration > 0 ? duration : null,
+                channels: firstAudioStream(probe)?.channels ?? null,
+            });
+        } catch {
+            // 読めないファイルは、解析・正規化のときにエラーとして示す
+            items.push({ path: filePath, durationSec: null, channels: null });
+        }
+    }
+    return items;
+}
+
+// 全体の進み具合の配分 (ファイルごとの長さ、秒)。全体の進み具合を長さの合計で決め、ファイルが終わるたびにその
+// 長さを足す (ファイルの長さが違っても進み方がずれず、残り時間を見積もれるように)。長さは一覧に加えたときに調べた
+// もので、分からないファイルは分かったファイルの平均 (どれも分からなければ 1) とする
+function durationWeights(files: string[], durations: (number | null)[]): number[] {
+    const known = durations.filter((value): value is number => typeof value === 'number' && value > 0);
+    const fallback = known.length > 0 ? known.reduce((sum, value) => sum + value, 0) / known.length : 1;
+    return files.map((_, index) => {
+        const value = durations[index];
+        return typeof value === 'number' && value > 0 ? value : fallback;
+    });
+}
+
+// 終わったファイルの長さの合計と、ファイルの中の進み具合 (0-100) から、全体の進み具合 (%) を求める
+function weightedPercent(weights: number[], index: number, filePercent = 0): number {
+    const total = weights.reduce((sum, value) => sum + value, 0);
+    const done = weights.slice(0, index).reduce((sum, value) => sum + value, 0);
+    return total > 0 ? ((done + (weights[index] ?? 0) * (filePercent / 100)) / total) * 100 : 0;
+}
+
+// 正規化で上げたあとの True Peak の上限 (dBTP)。非可逆圧縮での書き出しやサンプリング周波数の変換でピークが少し
+// 上がるための余白
+const TRUE_PEAK_LIMIT = -1.5;
+
+type Loudness = { lufs: number | null; truePeak: number | null };
+
+function finiteOrNull(value: string | undefined): number | null {
+    const parsed = value === undefined ? Number.NaN : Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
+// 曲全体の実測値 (ラウドネスと True Peak)。loudnorm の測定 (結果を出力しない 1 回目) の結果から取る
+// (目標値は実測値に影響しない)。無音などで測れないものは null
+async function measureLoudness(
+    filePath: string,
+    jobId: string,
+    totalSec: number | undefined,
+    onProgress: (percent: number) => void
+): Promise<Loudness> {
+    const result = await runFfmpeg(
+        ['-hide_banner', '-i', filePath, '-af', 'loudnorm=I=-16:LRA=11:TP=-1.5:print_format=json', '-f', 'null', '-'],
+        { jobId, totalSec, onProgress }
+    );
+    const loudnorm = extractLoudnormJson(result.stderr);
+    return { lufs: finiteOrNull(loudnorm?.input_i), truePeak: finiteOrNull(loudnorm?.input_tp) };
+}
+
+// 各ファイルのチャンネル数と実測値 (ラウドネスと True Peak) を取得する
+export async function analyzeFiles(
+    jobId: string,
+    files: string[],
+    durations: (number | null)[]
+): Promise<AudioAnalyzeResult> {
     startJob(jobId);
     const items: AudioAnalyzeItem[] = [];
     let cancelled = false;
     try {
+        const weights = durationWeights(files, durations);
         for (let i = 0; i < files.length; i++) {
             if (isCancelled(jobId)) {
                 cancelled = true;
@@ -112,31 +185,32 @@ export async function analyzeFiles(jobId: string, files: string[]): Promise<Audi
                 kind: 'progress',
                 current: i + 1,
                 total: files.length,
-                percent: (i / files.length) * 100,
+                percent: weightedPercent(weights, i),
                 message: path.basename(filePath),
             });
-            const item: AudioAnalyzeItem = { path: filePath, channels: null, lufs: null };
+            const item: AudioAnalyzeItem = { path: filePath, channels: null, lufs: null, truePeak: null };
             try {
                 const probe = await probeAudio(filePath, jobId);
                 item.channels = firstAudioStream(probe)?.channels ?? null;
-
-                // loudnorm の 1 パス目 (実測値の取得のみ。ターゲット値は実測結果に影響しない)
-                const result = await runFfmpeg(
-                    [
-                        '-hide_banner',
-                        '-i',
-                        filePath,
-                        '-af',
-                        'loudnorm=I=-16:LRA=11:TP=-1.5:print_format=json',
-                        '-f',
-                        'null',
-                        '-',
-                    ],
-                    { jobId }
+                const durationSec = Number.parseFloat(probe.format?.duration ?? '');
+                const fileIndex = i;
+                // ファイルの中の進み具合も全体の進み具合に足す (ファイルが 1 つでも進み、残り時間を見積もれるように)
+                const loudness = await measureLoudness(
+                    filePath,
+                    jobId,
+                    Number.isFinite(durationSec) ? durationSec : undefined,
+                    percent =>
+                        emitJobEvent({
+                            jobId,
+                            kind: 'progress',
+                            current: fileIndex + 1,
+                            total: files.length,
+                            percent: weightedPercent(weights, fileIndex, percent),
+                            message: path.basename(filePath),
+                        })
                 );
-                const loudnorm = extractLoudnormJson(result.stderr);
-                const inputI = loudnorm ? Number.parseFloat(loudnorm.input_i) : Number.NaN;
-                item.lufs = Number.isFinite(inputI) ? inputI : null;
+                item.lufs = loudness.lufs;
+                item.truePeak = loudness.truePeak;
             } catch (error) {
                 if (isCancelledError(error)) {
                     cancelled = true;
@@ -222,12 +296,17 @@ export function checkOutputs(files: string[], outputDir: string): AudioOutputChe
     return { existing: [...existing.values()], duplicated: findDuplicatedOutputs(files, outputDir) };
 }
 
-// 指定ターゲット LUFS へ正規化し、出力先ディレクトリへ同名で書き出す
+// 指定ターゲット LUFS へ正規化し、出力先ディレクトリへ同名で書き出す。
+// 曲全体に一定量の音量をかけるだけにする (曲の中の強弱を保つ)。かける量は「目標 - 実測のラウドネス」で、上げた後の
+// True Peak が上限を超える場合は、上限に収まる量までにする (その曲は目標に届かない)。実測値は解析で求めたものを使い、
+// 解析していないファイルは先に測る。loudnorm の 2 回目は使わない (条件を満たさないと曲の中の音量を細かく調整する
+// 方式に切り替わり、強弱が変わるため)
 export async function normalizeFiles(
     jobId: string,
-    files: string[],
+    inputs: AudioNormalizeInput[],
     options: AudioNormalizerSettings
 ): Promise<AudioNormalizeResult> {
+    const files = inputs.map(input => input.path);
     // 出力パスが重複する指定は必ず互いを上書きするため、1 件も処理せずに失敗させる
     if (findDuplicatedOutputs(files, options.outputDir).length > 0) {
         throw new Error('DUPLICATE_OUTPUTS');
@@ -236,6 +315,12 @@ export async function normalizeFiles(
     const items: AudioNormalizeItem[] = [];
     let cancelled = false;
     try {
+        // 測る必要があるファイルは、測る分 (読み込み 1 回分) を足して配分する
+        const needsMeasure = inputs.map(input => input.lufs === null || input.truePeak === null);
+        const weights = durationWeights(
+            files,
+            inputs.map(input => input.durationSec)
+        ).map((weight, index) => (needsMeasure[index] ? weight * 2 : weight));
         for (let i = 0; i < files.length; i++) {
             if (isCancelled(jobId)) {
                 cancelled = true;
@@ -254,7 +339,7 @@ export async function normalizeFiles(
                 kind: 'progress',
                 current: i + 1,
                 total: files.length,
-                percent: (i / files.length) * 100,
+                percent: weightedPercent(weights, i),
                 message: path.basename(filePath),
             });
             try {
@@ -277,6 +362,37 @@ export async function normalizeFiles(
                 const durationSec = Number.parseFloat(probe.format?.duration ?? '');
                 const totalSec = Number.isFinite(durationSec) ? durationSec : undefined;
                 const fileIndex = i;
+                // ファイルの中の進み具合 (測る場合は前半を測定、後半を書き出しに当てる)
+                const report = (filePercent: number) =>
+                    emitJobEvent({
+                        jobId,
+                        kind: 'progress',
+                        current: fileIndex + 1,
+                        total: files.length,
+                        percent: weightedPercent(weights, fileIndex, filePercent),
+                        message: path.basename(filePath),
+                    });
+                let { lufs, truePeak } = inputs[i];
+                if (needsMeasure[i]) {
+                    ({ lufs, truePeak } = await measureLoudness(filePath, jobId, totalSec, percent =>
+                        report(percent / 2)
+                    ));
+                    item.lufs = lufs;
+                    item.truePeak = truePeak;
+                }
+                if (lufs === null || truePeak === null) {
+                    // 無音などで測れないファイルは、かける量を決められないため書き出さない
+                    item.error = 'LOUDNESS_UNKNOWN';
+                    items.push(item);
+                    continue;
+                }
+                let gain = options.targetLufs - lufs;
+                if (truePeak + gain > TRUE_PEAK_LIMIT) {
+                    gain = TRUE_PEAK_LIMIT - truePeak;
+                    item.limitedLufs = lufs + gain;
+                }
+                const encodeOffset = needsMeasure[i] ? 50 : 0;
+                const encodeShare = needsMeasure[i] ? 0.5 : 1;
                 const args = [
                     '-hide_banner',
                     '-loglevel',
@@ -285,7 +401,7 @@ export async function normalizeFiles(
                     '-i',
                     filePath,
                     '-af',
-                    `loudnorm=I=${options.targetLufs}:LRA=11:TP=-1.5:linear=true`,
+                    `volume=${gain.toFixed(2)}dB`,
                     '-ar',
                     String(resolveSampleRate(encoder, options.sampleRate)),
                     '-map_metadata',
@@ -304,19 +420,11 @@ export async function normalizeFiles(
                 await runFfmpeg(args, {
                     jobId,
                     totalSec,
-                    onProgress: percent => {
-                        emitJobEvent({
-                            jobId,
-                            kind: 'progress',
-                            current: fileIndex + 1,
-                            total: files.length,
-                            percent: ((fileIndex + percent / 100) / files.length) * 100,
-                            message: path.basename(filePath),
-                        });
-                    },
+                    onProgress: percent => report(encodeOffset + percent * encodeShare),
                 });
                 fs.renameSync(writePath, outputPath);
                 item.ok = true;
+                item.inputReplaced = pathKey(outputPath) === pathKey(filePath);
             } catch (error) {
                 // 書きかけの出力ファイルを削除 (別の名前に書いているため、上書きする元のファイルは残る)
                 try {

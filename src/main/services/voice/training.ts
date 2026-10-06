@@ -34,21 +34,18 @@ import { voicePhase } from './job-progress';
 
 // --- 学習の実行 ---
 
-// 学習処理の段階ごとの進捗の配分 (%)
-const STAGE_RANGES: Record<TrainingStage, [number, number]> = {
-    prepare: [0, 2],
-    preprocess: [2, 10],
-    extract: [10, 22],
-    train: [22, 96],
-    index: [96, 99],
-    finalize: [99, 100],
-};
+// 学習の手順 (駆動スクリプトが知らせる段階の順)。手順ごとの重さは学習する音声の量や環境で大きく変わり、
+// 全体の割合は決められないため、進捗は手順ごとに示す (「手順 2 / 5」と、その手順の中の進み具合)
+const RVC_STEPS: TrainingStage[] = ['preprocess', 'extract', 'train', 'index', 'finalize'];
+const TTS_STEPS: TrainingStage[] = ['prepare', 'preprocess', 'extract', 'train', 'finalize'];
 
 type DriverEvent = {
     kind?: string;
     stage?: TrainingStage;
     epoch?: number;
     totalEpochs?: number;
+    // 手順の中の進み具合 (0-1。上流のスクリプトの進捗バーから。分からない手順では無い)
+    fraction?: number;
     code?: string;
     message?: string;
 };
@@ -58,6 +55,7 @@ async function runDriver(
     jobId: string,
     component: 'converter' | 'tts',
     script: string,
+    steps: TrainingStage[],
     job: Record<string, unknown>,
     extraEnv: Record<string, string>,
     tempDir: string
@@ -90,16 +88,24 @@ async function runDriver(
                 if (event.kind === 'error') failure = event;
                 if (event.kind === 'done') done = true;
                 if (event.kind === 'stage' && event.stage) {
-                    const [start, end] = STAGE_RANGES[event.stage];
+                    // 手順の中の進み具合: 学習は回数、ほかは上流のスクリプトの進捗バー。分からない間は不定にする
                     const counted = !!(event.epoch && event.totalEpochs);
-                    const fraction = counted ? event.epoch! / event.totalEpochs! : 0;
-                    emitJobEvent({ jobId, kind: 'progress', percent: start + (end - start) * fraction });
-                    // 回数で数えられる段階 (学習) は、回数の進み具合から残り時間を見積もる
-                    voicePhase(
+                    const fraction = counted
+                        ? event.epoch! / event.totalEpochs!
+                        : typeof event.fraction === 'number'
+                          ? event.fraction
+                          : undefined;
+                    emitJobEvent({
                         jobId,
-                        `training.${event.stage}`,
-                        counted ? { fraction, current: event.epoch, total: event.totalEpochs } : {}
-                    );
+                        kind: 'progress',
+                        percent: fraction !== undefined ? fraction * 100 : null,
+                    });
+                    const step = steps.indexOf(event.stage) + 1;
+                    voicePhase(jobId, `training.${event.stage}`, {
+                        ...(fraction !== undefined ? { fraction } : {}),
+                        ...(counted ? { current: event.epoch, total: event.totalEpochs } : {}),
+                        ...(step > 0 ? { step, steps: steps.length } : {}),
+                    });
                 }
             },
         }
@@ -149,6 +155,7 @@ async function trainRvc(jobId: string, audios: TrainingSetAudio[], name: string)
                 jobId,
                 'converter',
                 'rvc_train.py',
+                RVC_STEPS,
                 {
                     applioDir: applio,
                     modelName,
@@ -242,6 +249,7 @@ async function trainTts(
                 jobId,
                 'tts',
                 'sbv2_train.py',
+                TTS_STEPS,
                 {
                     repoDir: repo,
                     modelName,

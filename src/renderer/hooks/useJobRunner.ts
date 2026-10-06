@@ -52,9 +52,14 @@ export function formatEta(t: TFunction, seconds: number): string {
 // 段階の文言 (回数で数えられる段階は回数を添える) と、見積もった残り時間
 function phaseStatus(t: TFunction, phase: PhaseState, now: number): string {
     const counted = phase.current !== undefined && phase.total !== undefined;
-    const text = counted
+    const label = counted
         ? t(`jobPhasesCounted.${phase.id}`, { current: phase.current, total: phase.total })
         : t(`jobPhases.${phase.id}`);
+    // 手順で進む処理は、何番目の手順かを前に付ける (「手順 2 / 5: 特徴を抽出しています」)
+    const text =
+        phase.step !== undefined && phase.steps !== undefined
+            ? t('jobPhaseStep', { step: phase.step, steps: phase.steps, text: label })
+            : label;
     const elapsed = (now - phase.startedAt) / 1000;
     const done = (phase.fraction ?? 0) - phase.startFraction;
     if (phase.fraction === undefined || phase.fraction >= 1 || done <= 0 || elapsed < ETA_MIN_ELAPSED_SEC) return text;
@@ -68,6 +73,7 @@ function nextPhase(previous: PhaseState | undefined, phase: JobPhase): PhaseStat
     const restart =
         !previous ||
         previous.id !== phase.id ||
+        (phase.step !== undefined && phase.step !== previous.step) ||
         (phase.current !== undefined && phase.current !== previous.current) ||
         (phase.fraction !== undefined && previous.fraction !== undefined && phase.fraction < previous.fraction);
     if (restart) return { ...phase, startedAt: Date.now(), startFraction: phase.fraction ?? 0 };
@@ -96,7 +102,8 @@ export function useJobRunner() {
                 previous && previous.jobId === event.jobId
                     ? {
                           ...previous,
-                          percent: event.percent ?? previous.percent,
+                          // null は、進み具合が分からない状態に戻す (不定の進捗バーにする)
+                          percent: event.percent === null ? undefined : (event.percent ?? previous.percent),
                           current: event.current ?? previous.current,
                           total: event.total ?? previous.total,
                           message: event.message ?? previous.message,

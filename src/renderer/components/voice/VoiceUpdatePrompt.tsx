@@ -7,6 +7,7 @@ import { itemLabel } from './libraryItems';
 import { formatBytes } from './voiceFormat';
 import { isCancelledError, voiceErrorMessage } from './voiceErrors';
 import { useJobRunner } from '../../hooks/useJobRunner';
+import { useRemainingTime } from '../../hooks/useRemainingTime';
 import { showNotice } from '../../stores/noticeStore';
 import { notifyVoiceLibraryChanged } from '../../stores/voiceLibraryStore';
 import type { LibraryItem } from '@shared/voice/types';
@@ -17,6 +18,8 @@ export default function VoiceUpdatePrompt() {
     const { t } = useTranslation();
     const [items, setItems] = React.useState<LibraryItem[] | null>(null);
     const { job, run, cancel } = useJobRunner();
+    // 全体の進み具合はダウンロードしたバイト数に比例するため、そこから残り時間を見積もる
+    const remaining = useRemainingTime(job?.jobId ?? null, job?.percent);
 
     React.useEffect(() => {
         let cancelled = false;
@@ -78,7 +81,13 @@ export default function VoiceUpdatePrompt() {
                     </Button>
                 </DialogActions>
             </AppDialog>
-            <ProgressDialog open={job !== null} title={job?.title ?? ''} percent={job?.percent} onCancel={cancel} />
+            <ProgressDialog
+                open={job !== null}
+                title={job?.title ?? ''}
+                percent={job?.percent}
+                remaining={remaining}
+                onCancel={cancel}
+            />
         </>
     );
 }

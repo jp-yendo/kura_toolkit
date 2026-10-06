@@ -25,6 +25,8 @@ type Props = {
     total?: number;
     // 処理状況を表す短い一行 (件数など)
     status?: string;
+    // 残り時間 (「残り 約 …」)。件数があるときは件数と同じ行に、間を空けて並べる
+    remaining?: string;
     // 現在の処理対象。長さが変わってもダイアログの高さは変えない
     message?: string;
     // message に確保する行数。処理対象が変わるたびに高さが動くとちらつくため常に固定で確保する。
@@ -64,6 +66,7 @@ export default function ProgressDialog({
     current,
     total,
     status,
+    remaining,
     message,
     messageLines = DEFAULT_MESSAGE_LINES,
     details,
@@ -96,10 +99,19 @@ export default function ProgressDialog({
                         )}
                     </Box>
                 )}
-                {current !== undefined && total !== undefined && (
-                    <Typography variant='body2' color='text.secondary'>
-                        {current} / {total}
-                    </Typography>
+                {((current !== undefined && total !== undefined) || remaining !== undefined) && (
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', columnGap: 2 }}>
+                        {current !== undefined && total !== undefined && (
+                            <Typography variant='body2' color='text.secondary'>
+                                {current} / {total}
+                            </Typography>
+                        )}
+                        {remaining !== undefined && (
+                            <Typography variant='body2' color='text.secondary'>
+                                {remaining}
+                            </Typography>
+                        )}
+                    </Box>
                 )}
                 {status !== undefined && (
                     <Typography variant='body2' color='text.secondary'>

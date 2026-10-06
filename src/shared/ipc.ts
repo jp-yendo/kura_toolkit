@@ -4,6 +4,8 @@ import type {
     AppSettings,
     AppTheme,
     AudioAnalyzeResult,
+    AudioProbeItem,
+    AudioNormalizeInput,
     AudioNormalizeResult,
     AudioNormalizerSettings,
     AudioOutputCheck,
@@ -259,8 +261,15 @@ export type IpcApi = {
     };
     // オーディオ正規化
     audio: {
-        analyze(jobId: string, files: string[]): Promise<AudioAnalyzeResult>;
-        normalize(jobId: string, files: string[], options: AudioNormalizerSettings): Promise<AudioNormalizeResult>;
+        // 一覧に加えたファイルの長さとチャンネル数
+        probe(files: string[]): Promise<AudioProbeItem[]>;
+        // durations は files と同じ順の長さ (秒。分からないものは null)。全体の進み具合の配分に使う
+        analyze(jobId: string, files: string[], durations: (number | null)[]): Promise<AudioAnalyzeResult>;
+        normalize(
+            jobId: string,
+            inputs: AudioNormalizeInput[],
+            options: AudioNormalizerSettings
+        ): Promise<AudioNormalizeResult>;
         // 実行前の出力先チェック (上書きになるファイルと、出力パスの重複)
         checkOutputs(files: string[], outputDir: string): Promise<AudioOutputCheck>;
     };

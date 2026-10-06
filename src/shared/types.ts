@@ -44,8 +44,8 @@ export type FfmpegDetectResult = {
 export type JobEvent = {
     jobId: string;
     kind: 'progress' | 'log' | 'item' | 'scan' | 'wait';
-    // 全体進捗 (0-100)。不定の場合は省略
-    percent?: number;
+    // 全体進捗 (0-100)。不定の場合は省略。null は、進み具合が分からない状態に戻す (手順が変わったときなど)
+    percent?: number | null;
     // 複数アイテム処理時の現在位置 (1 始まり) と総数
     current?: number;
     total?: number;
@@ -70,6 +70,9 @@ export type JobPhase = {
     // 回数で数えられる段階 (学習の回数など) の現在の回数と総数
     current?: number;
     total?: number;
+    // 手順で進む処理 (学習など) の何番目の手順か (1 から) と手順の数
+    step?: number;
+    steps?: number;
 };
 
 // ディレクトリ走査の進捗。走査スレッドごとの現在位置を含む
@@ -107,8 +110,25 @@ export type AudioOutputCheck = {
 export type AudioAnalyzeItem = {
     path: string;
     channels: number | null;
+    // 曲全体の実測値。ラウドネス (LUFS) と True Peak (dBTP)。測れなかったもの (無音など) は null
     lufs: number | null;
+    truePeak: number | null;
     error?: string;
+};
+
+// 正規化するファイル。実測値は解析で求めたもの (解析していないものは null。正規化の中で測る)
+export type AudioNormalizeInput = {
+    path: string;
+    durationSec: number | null;
+    lufs: number | null;
+    truePeak: number | null;
+};
+
+// 一覧に加えたときに調べる、ファイルの長さとチャンネル数 (調べられなかったものは null)
+export type AudioProbeItem = {
+    path: string;
+    durationSec: number | null;
+    channels: number | null;
 };
 
 export type AudioAnalyzeResult = {
@@ -122,6 +142,13 @@ export type AudioNormalizeItem = {
     ok: boolean;
     skipped?: boolean;
     error?: string;
+    // 正規化の中で測った実測値 (解析していなかったファイル。一覧に反映する)
+    lufs?: number | null;
+    truePeak?: number | null;
+    // ピークの上限のため目標まで上げられなかった場合の、仕上がりのラウドネス (LUFS)
+    limitedLufs?: number;
+    // 出力が入力のファイルを置き換えた (入力の実測値は使えなくなる)
+    inputReplaced?: boolean;
 };
 
 export type AudioNormalizeResult = {

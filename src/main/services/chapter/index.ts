@@ -178,6 +178,15 @@ export async function chapterSplit(jobId: string, request: ChapterSplitRequest):
         const media = await probeMedia(request.input, jobId);
         const { ranges, outputs } = planSplit(request, chapters, media.streams, line => emitLog(jobId, line));
         logContainerChange(jobId, request.input, outputs[0]);
+        // 全体の進み具合は、切り出す範囲の長さの合計で決める (範囲の長さが違っても進み方がずれず、残り時間を
+        // 見積もれるように)。終わった範囲の長さと、切り出し中の範囲の進み具合から求める
+        const lengths = ranges.map(([first, last]) => Math.max(0, chapters[last].end - chapters[first].start));
+        const totalLength = lengths.reduce((sum, value) => sum + value, 0);
+        const overall = (number: number, percent: number) => {
+            if (totalLength <= 0) return ((number + percent / 100) / ranges.length) * 100;
+            const done = lengths.slice(0, number).reduce((sum, value) => sum + value, 0);
+            return ((done + lengths[number] * (percent / 100)) / totalLength) * 100;
+        };
         for (let number = 0; number < ranges.length; number++) {
             if (isCancelled(jobId)) {
                 return { outputs: outputsDone, cancelled: true };
@@ -189,7 +198,7 @@ export async function chapterSplit(jobId: string, request: ChapterSplitRequest):
                 kind: 'progress',
                 current: number + 1,
                 total: ranges.length,
-                percent: (number / ranges.length) * 100,
+                percent: overall(number, 0),
             });
             await cutRange({
                 inputPath: request.input,
@@ -208,7 +217,7 @@ export async function chapterSplit(jobId: string, request: ChapterSplitRequest):
                         kind: 'progress',
                         current: number + 1,
                         total: ranges.length,
-                        percent: ((number + percent / 100) / ranges.length) * 100,
+                        percent: overall(number, percent),
                     }),
             });
             outputsDone.push(outputs[number]);

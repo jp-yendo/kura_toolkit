@@ -62,6 +62,7 @@ export default {
             train: '学習しています ({{current}} / {{total}} 回目)',
         },
     },
+    jobPhaseStep: '手順 {{step}} / {{steps}}: {{text}}',
     jobEta: {
         left: '残り 約 {{time}}',
         seconds: '{{seconds}} 秒',
@@ -119,6 +120,7 @@ export default {
         normalize: '正規化',
         colFile: 'ファイル名',
         colDir: 'ディレクトリ',
+        colDuration: '長さ',
         colChannels: 'チャンネル',
         colLufs: 'LUFS',
         mono: 'モノラル',
@@ -150,6 +152,9 @@ export default {
         doneWithErrors: '完了 (エラーあり)',
         resultSummary: '完了しました。成功: {{ok}} 件 / 失敗: {{failed}} 件 / スキップ: {{skipped}} 件',
         failedFiles: '失敗またはスキップしたファイル:',
+        loudnessUnknown: '音量を測れません (無音など)',
+        limitedFiles: 'ピークの上限 (-1.5 dBTP) のため、目標まで上げられなかったファイル:',
+        limitedTo: '{{lufs}} LUFS まで',
         unsupportedCodec: '未対応のコーデックのためスキップしました',
     },
     chapterPage: {

@@ -62,6 +62,7 @@ export default {
             train: 'Training (epoch {{current}} / {{total}})',
         },
     },
+    jobPhaseStep: 'Step {{step}} of {{steps}}: {{text}}',
     jobEta: {
         left: 'About {{time}} left',
         seconds: '{{seconds}} s',
@@ -119,6 +120,7 @@ export default {
         normalize: 'Normalize',
         colFile: 'File Name',
         colDir: 'Directory',
+        colDuration: 'Length',
         colChannels: 'Channels',
         colLufs: 'LUFS',
         mono: 'Mono',
@@ -150,6 +152,9 @@ export default {
         doneWithErrors: 'Done (with errors)',
         resultSummary: 'Finished. Succeeded: {{ok}} / Failed: {{failed}} / Skipped: {{skipped}}',
         failedFiles: 'Failed or skipped files:',
+        loudnessUnknown: 'loudness could not be measured (silence, for example)',
+        limitedFiles: 'Files not raised to the target because of the peak limit (-1.5 dBTP):',
+        limitedTo: 'up to {{lufs}} LUFS',
         unsupportedCodec: 'Skipped due to unsupported codec',
     },
     chapterPage: {

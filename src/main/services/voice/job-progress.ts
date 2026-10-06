@@ -7,7 +7,7 @@ import type { VoicePhaseId } from '../../../shared/voice/types';
 export function voicePhase(
     jobId: string,
     id: VoicePhaseId,
-    progress: { fraction?: number; current?: number; total?: number } = {}
+    progress: { fraction?: number; current?: number; total?: number; step?: number; steps?: number } = {}
 ): void {
     emitPhase(jobId, id, progress);
 }

@@ -30,6 +30,7 @@ import AppDialog from '../../components/common/AppDialog';
 import FileDropZone from '../../components/common/FileDropZone';
 import PathField from '../../components/common/PathField';
 import ProgressDialog from '../../components/common/ProgressDialog';
+import { useRemainingTime } from '../../hooks/useRemainingTime';
 import LogView from '../../components/common/LogView';
 import PageContainer from '../../components/common/PageContainer';
 import SectionLabel from '../../components/common/SectionLabel';
@@ -125,6 +126,8 @@ export default function ChapterCutPage() {
         });
         return unsubscribe;
     }, [activeJobId]);
+    // 全体の進み具合は切り出す範囲の長さに比例するため、そこから残り時間を見積もる (再エンコードは時間がかかる)
+    const remaining = useRemainingTime(activeJobId ?? null, job?.percent);
 
     const formatError = (error: unknown): string => {
         const message = error instanceof Error ? error.message : String(error);
@@ -510,6 +513,7 @@ export default function ChapterCutPage() {
                 percent={job?.percent}
                 current={job?.current}
                 total={job?.total}
+                remaining={remaining}
                 // チャプター解析中 (ジョブ未開始) はキャンセルできないためボタンを出さない
                 onCancel={
                     job

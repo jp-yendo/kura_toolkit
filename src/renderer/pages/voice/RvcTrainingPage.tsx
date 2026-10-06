@@ -36,6 +36,7 @@ import { audioInputFilters } from '../../components/voice/audioInput';
 import { formatDuration } from '../../components/voice/voiceFormat';
 import { isCancelledError, voiceErrorMessage } from '../../components/voice/voiceErrors';
 import { useJobRunner } from '../../hooks/useJobRunner';
+import { useRemainingTime } from '../../hooks/useRemainingTime';
 import { showNotice } from '../../stores/noticeStore';
 import type { TrainingAudio, TrainingSetDetail, VoiceModelInfo } from '@shared/voice/types';
 
@@ -56,6 +57,8 @@ export default function RvcTrainingPage() {
     const [created, setCreated] = React.useState<VoiceModelInfo | null>(null);
     const [recording, setRecording] = React.useState(false);
     const { job, run, cancel } = useJobRunner();
+    // 学習用の音声の追加は件数で進むため、そこから残り時間を見積もる
+    const remaining = useRemainingTime(job?.jobId ?? null, job?.percent);
     const ready = readiness.readiness?.ready ?? false;
 
     // 選んでいる学習セット (読み直しの途中で学習セットを切り替えた場合に、前の学習セットの内容で上書きしないため)
@@ -268,6 +271,7 @@ export default function RvcTrainingPage() {
                 percent={job?.percent}
                 current={job?.current}
                 total={job?.total}
+                remaining={job?.phase ? undefined : remaining}
                 status={job?.status}
                 message={job?.message ?? ''}
                 onCancel={cancel}

@@ -168,7 +168,10 @@ async function separateInto(
     const { durationSec } = await probeAudio(request.input, jobId);
     const padded = path.join(raw, 'input.wav');
     fs.mkdirSync(raw, { recursive: true });
-    await padEnd(request.input, padded, SEPARATION_PAD_SECONDS, jobId);
+    await padEnd(request.input, padded, SEPARATION_PAD_SECONDS, jobId, {
+        totalSec: durationSec,
+        onProgress: ffmpegPhase(jobId, 'prepare'),
+    });
     const worker = getWorker('separator');
     const result = await withGpu(jobId, 'separator', () =>
         worker.request<{ stems: { name: string; path: string }[] }>(

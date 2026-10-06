@@ -45,6 +45,7 @@ import { audioInputFilters } from '../../components/voice/audioInput';
 import { formatDuration } from '../../components/voice/voiceFormat';
 import { isCancelledError, voiceErrorMessage } from '../../components/voice/voiceErrors';
 import { useJobRunner } from '../../hooks/useJobRunner';
+import { useRemainingTime } from '../../hooks/useRemainingTime';
 import { showNotice } from '../../stores/noticeStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { LANGUAGE_DEFINITIONS, ttsTrainingItems, type TtsModelType } from '@shared/voice/languages';
@@ -81,6 +82,8 @@ export default function TtsTrainingPage() {
     const [recordingTarget, setRecordingTarget] = React.useState<RecordingTarget | null>(null);
     const recordingActive = recordingTarget !== null;
     const { job, run, cancel } = useJobRunner();
+    // 学習用の音声の追加は件数で進むため、そこから残り時間を見積もる
+    const remaining = useRemainingTime(job?.jobId ?? null, job?.percent);
 
     const extra = ttsTrainingItems(modelType, language);
     const readiness = useFeatureReadiness('ttsTraining', extra);
@@ -402,6 +405,9 @@ export default function TtsTrainingPage() {
                 open={job !== null}
                 title={job?.title ?? ''}
                 percent={job?.percent}
+                current={job?.current}
+                total={job?.total}
+                remaining={job?.phase ? undefined : remaining}
                 status={job?.status}
                 message={job?.message ?? ''}
                 onCancel={cancel}

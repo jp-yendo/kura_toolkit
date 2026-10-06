@@ -28,6 +28,7 @@ import AppDialog from '../../components/common/AppDialog';
 import FileDropZone from '../../components/common/FileDropZone';
 import PathField from '../../components/common/PathField';
 import ProgressDialog from '../../components/common/ProgressDialog';
+import { useRemainingTime } from '../../hooks/useRemainingTime';
 import PageContainer from '../../components/common/PageContainer';
 import SectionLabel from '../../components/common/SectionLabel';
 import Panel from '../../components/common/Panel';
@@ -47,6 +48,18 @@ const NO_WRAP_CELL_SX = { whiteSpace: 'nowrap' } as const;
 // 収まらない文字列は末尾を省略する (全文は title 属性で表示する)
 const ELLIPSIS_CELL_SX = { ...NO_WRAP_CELL_SX, overflow: 'hidden', textOverflow: 'ellipsis' } as const;
 const CHANNELS_WIDTH = 112;
+const DURATION_WIDTH = 96;
+
+// 長さの表記 (時:分:秒。1 時間未満は分:秒)
+function formatDuration(seconds: number): string {
+    const total = Math.round(seconds);
+    const h = Math.floor(total / 3600);
+    const m = Math.floor(total / 60) % 60;
+    const s = total % 60;
+    return h > 0
+        ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+        : `${m}:${String(s).padStart(2, '0')}`;
+}
 const LUFS_WIDTH = 88;
 const SAMPLE_RATES = [8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000];
 const BITRATES = [320, 256, 224, 192, 160, 144, 128, 112, 96, 80, 64, 56, 48, 40, 32, 24, 16, 8];
@@ -80,7 +93,7 @@ export default function AudioNormalizerPage() {
         { name: t('common.fileTypes.audio'), extensions: AUDIO_EXTENSIONS },
         { name: t('common.fileTypes.all'), extensions: ['*'] },
     ];
-    const { files, addFiles, clearFiles, applyAnalysis } = useAudioStore();
+    const { files, addFiles, applyProbe, clearFiles, applyAnalysis, applyNormalize } = useAudioStore();
     const { settings, update } = useSettingsStore();
     const [job, setJob] = React.useState<RunningJob | null>(null);
     const [result, setResult] = React.useState<{
@@ -88,6 +101,8 @@ export default function AudioNormalizerPage() {
         failed: number;
         skipped: number;
         details: AudioNormalizeItem[];
+        // ピークの上限のため目標まで上げられなかったファイル
+        limited: AudioNormalizeItem[];
     } | null>(null);
     // 入力途中の文字列を保持する (空文字や "-" だけの状態を設定値にしないため)
     const [lufsText, setLufsText] = React.useState<string | null>(null);
@@ -121,6 +136,8 @@ export default function AudioNormalizerPage() {
         });
         return unsubscribe;
     }, [activeJobId]);
+    // 全体の進み具合はファイルの音声の長さに比例するため、そこから残り時間を見積もる
+    const remaining = useRemainingTime(activeJobId ?? null, job?.percent);
 
     if (!settings || !draft) return null;
     const audioSettings = draft;
@@ -154,7 +171,9 @@ export default function AudioNormalizerPage() {
                 showNotice('warning', t('audioPage.noAudioFiles'));
                 return;
             }
-            addFiles(collected);
+            // 加えたファイルの長さとチャンネル数を調べて一覧に示す
+            const added = addFiles(collected);
+            if (added.length > 0) applyProbe(await window.kuraToolkit.audio.probe(added));
         } catch (error) {
             showNotice('warning', formatError(error));
         }
@@ -181,7 +200,8 @@ export default function AudioNormalizerPage() {
         try {
             const analyzeResult = await window.kuraToolkit.audio.analyze(
                 jobId,
-                files.map(file => file.path)
+                files.map(file => file.path),
+                files.map(file => file.durationSec)
             );
             // 中断時も解析できた分は反映し、中断したことを伝える
             applyAnalysis(analyzeResult.items);
@@ -236,14 +256,21 @@ export default function AudioNormalizerPage() {
         try {
             const normalizeResult = await window.kuraToolkit.audio.normalize(
                 jobId,
-                files.map(file => file.path),
+                files.map(file => ({
+                    path: file.path,
+                    durationSec: file.durationSec,
+                    lufs: file.lufs,
+                    truePeak: file.truePeak,
+                })),
                 audioSettings
             );
+            applyNormalize(normalizeResult.items);
             const ok = normalizeResult.items.filter(item => item.ok).length;
             const skipped = normalizeResult.items.filter(item => item.skipped).length;
             // 中断されたファイルはエラーを持たないため、失敗には数えない
             const details = normalizeResult.items.filter(item => !item.ok && item.error);
-            setResult({ ok, failed: details.length - skipped, skipped, details });
+            const limited = normalizeResult.items.filter(item => item.ok && item.limitedLufs !== undefined);
+            setResult({ ok, failed: details.length - skipped, skipped, details, limited });
             if (normalizeResult.cancelled) {
                 showNotice('warning', t('audioPage.cancelled'));
             }
@@ -316,6 +343,9 @@ export default function AudioNormalizerPage() {
                                     <TableCell sx={{ ...ELLIPSIS_CELL_SX, width: '40%' }}>
                                         {t('audioPage.colDir')}
                                     </TableCell>
+                                    <TableCell align='right' sx={{ ...NO_WRAP_CELL_SX, width: DURATION_WIDTH }}>
+                                        {t('audioPage.colDuration')}
+                                    </TableCell>
                                     <TableCell align='center' sx={{ ...NO_WRAP_CELL_SX, width: CHANNELS_WIDTH }}>
                                         {t('audioPage.colChannels')}
                                     </TableCell>
@@ -334,6 +364,9 @@ export default function AudioNormalizerPage() {
                                             </TableCell>
                                             <TableCell sx={ELLIPSIS_CELL_SX} title={dir}>
                                                 {dir}
+                                            </TableCell>
+                                            <TableCell align='right' sx={NO_WRAP_CELL_SX}>
+                                                {file.durationSec !== null ? formatDuration(file.durationSec) : ''}
                                             </TableCell>
                                             <TableCell align='center' sx={NO_WRAP_CELL_SX}>
                                                 {formatChannels(file.channels)}
@@ -455,6 +488,7 @@ export default function AudioNormalizerPage() {
                 percent={job?.percent}
                 current={job?.current}
                 total={job?.total}
+                remaining={remaining}
                 message={job?.message ?? ''}
                 onCancel={() => {
                     if (job) void window.kuraToolkit.jobs.cancel(job.jobId);
@@ -488,7 +522,26 @@ export default function AudioNormalizerPage() {
                                     {item.path}
                                     {item.error?.startsWith('UNSUPPORTED_CODEC')
                                         ? ` (${t('audioPage.unsupportedCodec')})`
-                                        : ''}
+                                        : item.error === 'LOUDNESS_UNKNOWN'
+                                          ? ` (${t('audioPage.loudnessUnknown')})`
+                                          : ''}
+                                </Typography>
+                            ))}
+                        </>
+                    )}
+                    {result && result.limited.length > 0 && (
+                        <>
+                            <Typography variant='body2' sx={{ mt: 1, mb: 0.5 }}>
+                                {t('audioPage.limitedFiles')}
+                            </Typography>
+                            {result.limited.map(item => (
+                                <Typography
+                                    key={item.path}
+                                    variant='body2'
+                                    color='text.secondary'
+                                    sx={{ wordBreak: 'break-all' }}
+                                >
+                                    {item.path} ({t('audioPage.limitedTo', { lufs: item.limitedLufs?.toFixed(1) })})
                                 </Typography>
                             ))}
                         </>

@@ -11,6 +11,7 @@ import ProgressDialog from '../common/ProgressDialog';
 import SectionLabel from '../common/SectionLabel';
 import { parseVoiceError, voiceErrorMessage } from '../voice/voiceErrors';
 import { useJobRunner } from '../../hooks/useJobRunner';
+import { useRemainingTime } from '../../hooks/useRemainingTime';
 import { showNotice } from '../../stores/noticeStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { notifyVoiceLibraryChanged, openVoiceLibrary } from '../../stores/voiceLibraryStore';
@@ -85,6 +86,8 @@ export default function StorageSection() {
     // 移動先を調べている間 (中身を数えるため、ライブラリでは時間がかかる)
     const [checking, setChecking] = React.useState(false);
     const { job, run, cancel } = useJobRunner();
+    // 別のドライブへの移動の進み具合はコピーしたバイト数に比例するため、そこから全体の残り時間を見積もる
+    const remaining = useRemainingTime(job?.jobId ?? null, job?.percent);
 
     const refresh = React.useCallback(async () => {
         setInfo(await window.kuraToolkit.storage.getInfo());
@@ -260,7 +263,13 @@ export default function StorageSection() {
                 onRun={decisions => void move(decisions)}
             />
             <ProgressDialog open={checking} title={t('settingsPage.storage.checking')} />
-            <ProgressDialog open={job !== null} title={job?.title ?? ''} percent={job?.percent} onCancel={cancel} />
+            <ProgressDialog
+                open={job !== null}
+                title={job?.title ?? ''}
+                percent={job?.percent}
+                remaining={remaining}
+                onCancel={cancel}
+            />
         </Box>
     );
 }

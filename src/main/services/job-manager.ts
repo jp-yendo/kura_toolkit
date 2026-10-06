@@ -119,7 +119,7 @@ export function emitJobEvent(event: JobEvent): void {
 export function emitPhase(
     jobId: string,
     id: string,
-    progress: { fraction?: number; current?: number; total?: number } = {}
+    progress: { fraction?: number; current?: number; total?: number; step?: number; steps?: number } = {}
 ): void {
     emitJobEvent({ jobId, kind: 'progress', phase: { id, ...progress } });
 }

@@ -22,6 +22,8 @@ from kura_voice.runtime import ERROR_MARKER, describe_exit_code
 RUNNER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "script_runner.py")
 # The last line of a Python traceback ("RuntimeError: ...", "torch.OutOfMemoryError: ...")
 ERROR_LINE = re.compile(r"^[A-Za-z_][\w.]*(Error|Exception)\b")
+# A tqdm progress bar ("45%|####5     | 45/100 [00:10<00:12, 4.50it/s]"): the items done and the total
+TQDM_LINE = re.compile(r"(\d+)/(\d+) \[")
 
 
 def run_step(
@@ -39,7 +41,8 @@ def run_step(
     ``root`` is the upstream source folder (put on the import path) and ``cwd`` the folder the
     script runs in (the upstream scripts read some files relative to it).
     The script's output is copied to stderr, and lines matching ``epoch_line`` report the epoch
-    reached. A KuraError the script reported (runtime.report_error) is raised again here. Otherwise
+    reached. In a step without ``epoch_line``, the upstream script's tqdm bars report how far the step
+    has got (``fraction``; a script can run several bars in turn, each from 0). A KuraError the script reported (runtime.report_error) is raised again here. Otherwise
     the last error line the script printed is returned: a script can fail in a child process
     (Applio's training) and still exit normally, so the caller reports that line when the step's
     result is missing.
@@ -51,6 +54,7 @@ def run_step(
     process = subprocess.Popen(command, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     assert process.stdout is not None
     buffer = b""
+    last_fraction = -1.0
     while True:
         chunk = process.stdout.read1(4096)
         if not chunk:
@@ -71,6 +75,14 @@ def run_step(
             match = epoch_line.search(line) if epoch_line is not None else None
             if match:
                 context.event(kind="stage", stage=stage, epoch=int(match.group(1)), totalEpochs=total_epochs)
+            elif epoch_line is None:
+                bar = TQDM_LINE.search(line)
+                if bar and int(bar.group(2)) > 0:
+                    fraction = min(1.0, int(bar.group(1)) / int(bar.group(2)))
+                    # Report in steps of 1% (and every new bar, which starts again from 0)
+                    if fraction < last_fraction or fraction - last_fraction >= 0.01 or fraction == 1.0:
+                        last_fraction = fraction
+                        context.event(kind="stage", stage=stage, fraction=fraction)
     code = process.wait()
     if reported is not None:
         raise reported

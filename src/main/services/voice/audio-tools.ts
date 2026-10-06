@@ -161,10 +161,16 @@ export async function extractSamples(
 
 // 末尾に無音を足す (分離の入力。モデルによっては末尾の数ミリ秒を処理せずに短く返すため、
 // 無音を足した入力で分離し、結果を元の長さに切りそろえる)
-export async function padEnd(input: string, output: string, seconds: number, jobId?: string): Promise<void> {
+export async function padEnd(
+    input: string,
+    output: string,
+    seconds: number,
+    jobId?: string,
+    progress?: { totalSec: number; onProgress: ProgressHandler }
+): Promise<void> {
     await runFfmpeg(
         ['-hide_banner', '-nostdin', '-y', '-i', input, '-af', `apad=pad_dur=${seconds}`, '-c:a', 'pcm_f32le', output],
-        { jobId }
+        { jobId, ...(progress ? { totalSec: progress.totalSec + seconds, onProgress: progress.onProgress } : {}) }
     );
 }
 
