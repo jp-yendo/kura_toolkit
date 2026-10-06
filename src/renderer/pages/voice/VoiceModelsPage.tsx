@@ -91,8 +91,8 @@ export default function VoiceModelsPage({ feature }: Props) {
 
     const exportVoice = async (voice: VoiceModelInfo) => {
         const dest = await window.kuraToolkit.dialog.saveFile({
-            defaultPath: `${sanitizeFileName(voiceLabel(voice))}.kuravoice`,
-            filters: [{ name: t('voice.fileFilters.voiceModel'), extensions: ['kuravoice'] }],
+            defaultPath: `${sanitizeFileName(voiceLabel(voice))}.zip`,
+            filters: [{ name: t('voice.fileFilters.voiceModel'), extensions: ['zip'] }],
         });
         if (!dest) return;
         try {

@@ -352,6 +352,34 @@ def rpc_sanitize_model(params: dict, context: Context) -> dict:
     return {"safe": safe, "meta": _public(meta)}
 
 
+def rpc_export_model(params: dict, context: Context) -> dict:
+    """Write a stored model as a standard RVC model file (.pth), as Applio writes a trained model.
+
+    The file holds only the weights and the settings (tensors, numbers and strings), so it loads with the
+    restricted loader as well, and RVC tools (Applio, RVC WebUI) read it as their own models.
+    """
+    import torch
+    from safetensors.torch import load_file
+
+    weights_path = params["weights"]
+    with open(os.path.join(os.path.dirname(weights_path), "model.json"), "r", encoding="utf-8") as handle:
+        meta = _plain(json.load(handle))
+    sample_rate = int(meta["sr"])
+    checkpoint = {
+        "weight": load_file(weights_path),
+        "config": meta["config"],
+        # Applio and RVC WebUI write the sampling rate as "40k" and so on
+        "sr": f"{sample_rate // 1000}k" if sample_rate % 1000 == 0 else str(sample_rate),
+        "f0": int(meta["f0"]),
+        "version": meta["version"],
+        "vocoder": meta["vocoder"],
+        "embedder_model": meta["embedder_model"],
+        "model_name": str(params.get("name") or meta.get("model_name") or ""),
+    }
+    torch.save(checkpoint, params["output"])
+    return {"path": params["output"]}
+
+
 # --- final mix ------------------------------------------------------------------------
 
 

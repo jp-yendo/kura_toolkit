@@ -41,8 +41,8 @@ type Props = {
 type Stage = 'notice' | 'select' | 'inspecting' | 'review' | 'choosing' | 'saving';
 
 const MODEL_EXTENSIONS: Record<VoiceModelFeature, string[]> = {
-    converter: ['pth', 'index', 'zip', 'kuravoice'],
-    tts: ['safetensors', 'json', 'npy', 'zip', 'kuravoice'],
+    converter: ['pth', 'index', 'zip'],
+    tts: ['safetensors', 'json', 'npy', 'zip'],
 };
 
 // 取り込むファイルを選ぶダイアログの種類

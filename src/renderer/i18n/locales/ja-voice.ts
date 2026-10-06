@@ -709,8 +709,8 @@ export default {
         next: '同意してファイルを選択',
         selectHint: {
             converter:
-                'このアプリで書き出したファイル (.kuravoice)、または RVC のモデル (.pth、検索用インデックス .index は任意) を選んでください。zip のままでも取り込めます。',
-            tts: 'このアプリで書き出したファイル (.kuravoice)、または Style-Bert-VITS2 のモデル (*.safetensors) を選んでください。同じフォルダの config.json と style_vectors.npy も一緒に取り込みます。モデルの入ったフォルダや zip も選べます。',
+                'このアプリで書き出したファイル (.zip)、または RVC のモデル (.pth、検索用インデックス .index は任意) を選んでください。zip のままでも取り込めます。',
+            tts: 'このアプリで書き出したファイル (.zip)、または Style-Bert-VITS2 のモデル (*.safetensors) を選んでください。同じフォルダの config.json と style_vectors.npy も一緒に取り込みます。モデルの入ったフォルダや zip も選べます。',
         },
         chooseFiles: 'ファイルを選択',
         chooseFolder: 'フォルダを選択',

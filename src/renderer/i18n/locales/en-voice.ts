@@ -719,8 +719,8 @@ export default {
         next: 'Agree and Choose Files',
         selectHint: {
             converter:
-                'Choose a file exported by this app (.kuravoice) or an RVC model (.pth; the search index .index is optional). Zip archives are accepted as well.',
-            tts: 'Choose a file exported by this app (.kuravoice) or a Style-Bert-VITS2 model (*.safetensors). The config.json and style_vectors.npy in the same folder are imported with it. A folder or zip containing the model also works.',
+                'Choose a file exported by this app (.zip) or an RVC model (.pth; the search index .index is optional). Zip archives are accepted as well.',
+            tts: 'Choose a file exported by this app (.zip) or a Style-Bert-VITS2 model (*.safetensors). The config.json and style_vectors.npy in the same folder are imported with it. A folder or zip containing the model also works.',
         },
         chooseFiles: 'Choose Files',
         chooseFolder: 'Choose Folder',

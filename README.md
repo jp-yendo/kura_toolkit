@@ -2,94 +2,77 @@
 
 ## 1. Overview
 
-Kura Toolkit is a desktop application that bundles utilities for audio, voice, video, image and file cleanup into a single app. Each feature is accessible from the dashboard or from the category menus in the title bar.
+Kura Toolkit is a desktop application that brings together audio, video and image tools and file cleanup in one app. Each feature can be opened from the dashboard or from the menus in the title bar.
 
 ### Audio: Audio Normalizer
 
-- Analyze the loudness (LUFS) and channel layout of audio files (wav / mp3 / aac / flac)
-- Normalize files to a target LUFS while keeping the original format, tags and album art
-- Configurable sample rate, bitrate mode (CBR/VBR) and bitrate
+- Make the loudness of audio files (wav / mp3 / aac / flac) even and save them
+- The original format, tags and album art are kept
+- Choose the sample rate and bitrate of the output
 
 ### Audio: Audio Separation
 
-- Split songs and recordings into vocals and accompaniment, instruments (drums, bass, guitar, piano and more), or lead and backing vocals, and remove reverb, echo and noise (powered by audio-separator and the Ultimate Vocal Remover models)
-- Choose a model from the list provided by audio-separator, a verified ensemble combination, your own combination of models, or the classic center-channel cancellation for comparison
-- Every result is listed as a candidate. Compare the candidates with synchronized playback (switching keeps the playback position) and adopt the one you like
-- Separate the adopted results further, stage by stage (for example vocals, then lead and backing vocals, then de-reverb)
-- Export the results as MP3 or FLAC
+- Split songs and recordings into vocals and accompaniment, instruments (drums, bass, guitar, piano and more), or lead and backing vocals
+- Remove reverb, echo and noise
+- Compare the results of different methods and models, and choose the one to use
+- Separate a result further (for example vocals, then lead and backing vocals, then reverb removal)
+- Export as MP3 or FLAC
 
 ### Audio: Voice Conversion
 
-- Convert singing or speaking voices into the voice of a chosen voice model (RVC, powered by Applio)
-- For songs, separate the accompaniment on the same screen, convert only the vocals and mix them back with adjustable volume balance, reverb and a limiter. When the key changes, the accompaniment is transposed by the same amount
-- Compare conversion candidates made with different settings (key, pitch extraction, index influence, volume envelope, consonant protection)
-- The screen has three tabs - Convert, Voice Models and Model Training - so voice models can be managed and trained at any time, without loading any audio to convert
-- Manage voice models: import RVC models (.pth / .index) with safe loading, export and import models as `.kuravoice` files, and search for models on Hugging Face
-- Train your own voice model from recordings made in the app or from audio files (Windows and macOS). Training audio is kept in named training sets, so recording can continue after restarting the app
+- Convert a singing or speaking voice into the voice of a chosen voice model
+- For songs, only the vocals are converted and then mixed back with the accompaniment, with adjustable volume balance, reverb and more. Changing the key transposes the accompaniment as well
+- Compare the results of different settings, and choose the one to use
+- Import and export voice models, and search for models on Hugging Face
+- Create a voice model of your own voice from recordings made in the app or from audio files
 
 ### Audio: Text to Speech
 
-- Read text aloud in Japanese, English or Chinese (powered by Style-Bert-VITS2, with JP-Extra and multilingual voice models). Text can also be entered as rows with start and end times (subtitle files in SRT, WebVTT, ASS, SSA or SBV can be opened, and rows are saved as SRT)
-- Control pauses, speed, pitch, volume and readings with control tags (a subset of SSML) checked as you type, set Japanese pitch accents with an accent notation, English pronunciations with IPA and Chinese pronunciations with pinyin
-- In timed input, each row is placed at its start time. Rows that do not fit between their start and end times can be sped up, overlapped with the next row, push the following rows back, or just be reported, and a control tag changes this for a single row
-- Like Voice Conversion, the screen has Read Aloud, Voice Models and Model Training tabs
-- Download ready-to-use voice models (JVNV corpus models) or import Style-Bert-VITS2 models
-- Train your own voice by reading the presented sentences aloud, in any order and skipping sentences you do not want to read, kept in named training sets (Windows with an NVIDIA GPU only)
+- Read text aloud in Japanese, English or Chinese
+- Read rows at their own start and end times (subtitle files can be opened)
+- Set pauses, speed, pitch, volume and readings with control tags
+- Download, import and export voice models
+- Create a voice model of your own voice by reading presented sentences aloud (Windows or Linux with an NVIDIA GPU)
 
 ### Voice Feature Downloads
 
-Audio Separation, Voice Conversion and Text to Speech need a Python runtime, package sets and models, which are not bundled with the app.
-
-- Open "Downloads" at the top right of each voice feature screen. When something is missing, the screen lists it and opens the downloads with it already selected
-- Items are arranged in a tab per feature, in tables labeled "Required", "At least one" or "Optional". Each item shows what it is and which items it depends on. For separation models, recommended combinations for each purpose are shown first
-- They are large, so nothing is downloaded until you select items and start the download, and their sizes are shown beforehand
-- Shows per-item and overall progress; downloads can be interrupted and retried, and every item can be removed individually
-- When an app update needs some items to be downloaded again, the app asks once at startup
+Audio Separation, Voice Conversion and Text to Speech need items (Python, packages and models) that are downloaded from within the app. Open "Downloads" on each screen and choose what to download. The download size is shown beforehand.
 
 ### Video: Chapter Cut
 
-- Show the chapter list of a video file
-- Cut a chapter range without re-encoding (stream copy). The start position automatically snaps to the nearest preceding keyframe, and chapter information is preserved in the output
-- Split a file into multiple parts right before the selected chapters
-- Frame-accurate mode: re-encodes while keeping the original codecs and bitrates where possible, cutting exactly at the chapter boundary
-- Text subtitles in mkv files are re-timed and carried over correctly
+- Show the chapters of a video
+- Cut out a range of chapters (without re-encoding, or re-encoded to cut exactly at the chapter positions)
+- Split a video into several files at the chosen chapters
 
 ### Image: SVG Converter
 
-- Convert raster images (PNG / JPEG / BMP / GIF / TIFF) into vector SVG files (powered by the VTracer engine)
-- Adjustable clustering and curve fitting parameters
-- Side-by-side preview of the original image and the conversion result, with SVG export
+- Convert images (PNG / JPEG / BMP / GIF / TIFF) into vector SVG files
+- Adjust the conversion settings and check the result next to the original before saving
 
 ### Tools: Cleanup
 
-- Search for 11 kinds of junk files such as Windows Zone.Identifier, Thumbs.db, .DS_Store and other macOS metadata files/directories
-- Zone.Identifier is detected as an alternate data stream on Windows, and as a regular `filename:Zone.Identifier` file on macOS/Linux where it appears after copying from Windows or extracting an archive
-- Search targets can be selected from the home directory, drives/volumes and custom directories (system directories are excluded automatically). Read-only media such as CD/DVD is not listed
-- Selected items are moved to the trash (Zone.Identifier streams are deleted directly)
+- Find and remove junk files such as Zone.Identifier, Thumbs.db and .DS_Store
+- Choose where to search: the home directory, drives or any folder
+- Found items are moved to the trash
 
-On macOS, Full Disk Access is required to search folders such as Desktop, Documents and Downloads. When it has not been granted, the Cleanup screen shows a notice with a shortcut to System Settings (the app must be restarted after granting it).
+On macOS, Full Disk Access is required to search folders such as Desktop, Documents and Downloads. When it has not been granted, the Cleanup screen shows how to grant it.
 
 ### App Settings
 
 - Theme (light / dark / system) and language (Japanese / English)
-- Number of threads used to search directories (1-100). It starts at half of the CPU cores (up to 4);
-  raising it speeds up the Cleanup search on SSDs, but may slow it down on HDDs or network drives
-- Paths to the ffmpeg / ffprobe executables (auto-detected from PATH when not set)
-- Storage locations (library, model, cache and work directories), each changed independently. Changing the library, model or cache directory moves its contents to the chosen folder. A folder that already holds a library or model directory (for example, one copied from another computer) can be chosen too: its contents are merged, and for items in both you choose whether to overwrite after comparing their last modified time, file count and size
-- Cache retention period (30 days by default). Cache files not used for longer than this are removed at startup
-- Settings are stored in `~/.kura_toolkit/settings.json`
+- Number of threads used for searching
+- Location of ffmpeg / ffprobe (found automatically when not set)
+- Storage locations (library, model, cache and work directories) and how long the cache is kept
 
 ### Required External Tools
 
-Audio Normalizer, Chapter Cut and the voice features (Audio Separation, Voice Conversion, Text to Speech) require [FFmpeg](https://ffmpeg.org/) (ffmpeg / ffprobe). It is not bundled with the app, so install it separately. The app auto-detects it from PATH as well as from common install locations (such as Homebrew on macOS); if it is still not found, set its path in App Settings. SVG Converter and Cleanup do not require any external tools.
+Audio Normalizer, Chapter Cut and the voice features (Audio Separation, Voice Conversion, Text to Speech) require [FFmpeg](https://ffmpeg.org/). It is not included with the app, so install it separately.
 
-The voice features have these additional requirements:
-
-- Transposing the accompaniment (Voice Conversion) and fitting timed rows into their time (Text to Speech) need an FFmpeg build that includes the rubberband filter, such as Gyan.FFmpeg from winget on Windows, the Homebrew `ffmpeg` on macOS or your distribution's `ffmpeg` on Linux. The app tells you when the configured FFmpeg lacks it
-- An Internet connection to download Python, the packages and the models (several GB in total; the CUDA build of PyTorch alone is about 1.9-2.8 GB)
+- Changing the key in Voice Conversion and timed rows in Text to Speech need an FFmpeg build that includes rubberband (such as Gyan.FFmpeg from winget on Windows or the Homebrew `ffmpeg` on macOS)
+- The voice feature downloads need an Internet connection and several GB of free space
 - Windows: the [Microsoft Visual C++ Redistributable](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist) (x64)
-- macOS: the Xcode Command Line Tools (`xcode-select --install`) to install the Audio Separation package set
-- Linux: a C/C++ compiler (such as `build-essential`) to install the Audio Separation package set
+- macOS: the Xcode Command Line Tools (`xcode-select --install`, needed for Audio Separation)
+- Linux: a C/C++ compiler (such as `build-essential`, needed for Audio Separation)
 
 ## 2. Supported OS
 
@@ -97,7 +80,7 @@ The voice features have these additional requirements:
 - macOS 12 (Monterey) or later
 - Linux (Debian-based / RHEL-based)
 
-Audio Separation, Voice Conversion and Text to Speech are available on Windows 10/11 (x64), on macOS 14 or later with Apple Silicon and on Linux (x64). They use an NVIDIA GPU (CUDA) on Windows and Linux and the Apple Silicon GPU (MPS) on macOS when available, and the CPU otherwise. Training Text to Speech models requires Windows or Linux with an NVIDIA GPU; models trained there can be exported and imported on a Mac.
+Audio Separation, Voice Conversion and Text to Speech are available on Windows 10/11 (x64), macOS 14 or later on Apple Silicon, and Linux (x64). They use the GPU when there is one (NVIDIA on Windows and Linux, Apple Silicon on macOS) and the CPU otherwise.
 
 Note: Windows builds are not code-signed. If SmartScreen shows a warning, choose "More info" then "Run anyway".
 
@@ -240,7 +223,7 @@ The voice features use the following components. Except for the training sentenc
 | WavLM Base+                                                          | Text to Speech training (JP-Extra)           | CC BY-SA 3.0                                                                                               | https://huggingface.co/microsoft/wavlm-base-plus                  |
 | wespeaker-voxceleb-resnet34-LM                                       | Text to Speech training (style vectors)      | CC BY 4.0                                                                                                  | https://huggingface.co/pyannote/wespeaker-voxceleb-resnet34-LM    |
 | pyannote.audio                                                       | Text to Speech training                      | MIT                                                                                                        | https://github.com/pyannote/pyannote-audio                        |
-| JVNV voice models                                                    | Text to Speech ready-to-use models           | CC BY-SA 4.0 (inherited from the JVNV corpus)                                                              | https://huggingface.co/litagin/style_bert_vits2_jvnv              |
+| JVNV voice models                                                    | Text to Speech voice models                  | CC BY-SA 4.0 (inherited from the JVNV corpus)                                                              | https://huggingface.co/litagin/style_bert_vits2_jvnv              |
 | ITA corpus (bundled)                                                 | Text to Speech training sentences (Japanese) | Public domain                                                                                              | https://github.com/mmorise/ita-corpus                             |
 | CMU ARCTIC prompts (bundled, converted to JSON)                      | Text to Speech training sentences (English)  | CMU ARCTIC license, see [third_party/cmu-arctic/LICENSE.txt](third_party/cmu-arctic/LICENSE.txt) | http://www.festvox.org/cmu_arctic/                                |
 | Common Voice zh-CN sentences (bundled, 400 selected)                 | Text to Speech training sentences (Chinese)  | CC0 1.0, see [third_party/common-voice-zh/LICENSE.txt](third_party/common-voice-zh/LICENSE.txt) | https://github.com/common-voice/common-voice                      |

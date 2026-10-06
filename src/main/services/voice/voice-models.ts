@@ -7,8 +7,8 @@ import { writeJsonFile } from './json-file';
 import { modelPaths } from './paths';
 import { readReadyModelOverrides, writeReadyModelOverrides, type ReadyModelOverride } from './ready-model-overrides';
 import { getWorker, stopWorker } from './python-worker';
-import { JVNV_MODEL_NAMES, readyItemId, RVC_EMBEDDER_ITEMS, RVC_VERSIONS, RVC_VOCODERS, TTS_READY_DIR } from './spec';
-import { discardLater } from '../work-dir';
+import { JVNV_MODEL_NAMES, readyItemId, TTS_READY_DIR } from './spec';
+import { discardLater, newTempDir } from '../work-dir';
 import { renameWithRetry } from '../../utils/rename-retry';
 import { moveToTrash } from '../../utils/trash';
 import { languagesForEngine, type TtsEngineId, type VoiceLanguage } from '../../../shared/voice/languages';
@@ -30,7 +30,6 @@ import type {
 // <ID>/ に名前を変える (作りかけのものを声のモデルとして扱わないため)。
 // 読み上げのすぐに使えるモデル (JVNV) はダウンロード物として audio/tts/ready/ に置き、名前と言語の変更だけをここで記録する。
 
-const VOICE_FILE_EXTENSION = 'kuravoice';
 const VOICE_FILE_FORMAT = 'kura-voice';
 const VOICE_FILE_MANIFEST = 'kura-voice.json';
 const META_FILE = 'meta.json';
@@ -187,14 +186,6 @@ export function readRvcModelJson(file: string, hasIndex: boolean): RvcModelMeta 
         throw new Error(`INVALID_RVC_MODEL: ${file}`);
     }
     return { version, sampleRate: sr, f0: Boolean(f0), vocoder, embedder, speakers, hasIndex };
-}
-
-// 変換に使える版・ボコーダー・埋め込みモデルのモデルか (補助プロセスがモデルを調べるときと同じ確認)。
-// 設定 (model.json) をそのまま使う取り込み (本アプリの書き出しファイル) で、変換するときまで失敗が分からないことを防ぐ
-function checkRvcSupported(meta: RvcModelMeta): void {
-    if (!RVC_VERSIONS.includes(meta.version)) throw new Error(`RVC_VERSION_UNSUPPORTED: ${meta.version}`);
-    if (!RVC_VOCODERS.includes(meta.vocoder)) throw new Error(`RVC_VOCODER_UNSUPPORTED: ${meta.vocoder}`);
-    if (!(meta.embedder in RVC_EMBEDDER_ITEMS)) throw new Error(`EMBEDDER_UNSUPPORTED: ${meta.embedder}`);
 }
 
 // safetensors の見出し (先頭 8 バイトの長さ + JSON) を確かめる。プログラムを含められない形式だが、
@@ -365,30 +356,49 @@ type VoiceManifest = {
     tts?: { languages?: unknown };
 };
 
+// 書き出し: 各ツールの標準のファイルを zip にまとめる。読み上げは Style-Bert-VITS2 のモデルのファイル一式、
+// 音声変換は RVC のモデル (.pth。Applio が学習したモデルを書き出すのと同じ形) とインデックス (.index)。
+// 本アプリに取り込み直したときに名前などを戻すための kura-voice.json も入れる (他のツールは使わない)
 export async function exportVoice(feature: VoiceModelFeature, id: string, destPath: string): Promise<void> {
     const voice = getVoice(feature, id);
-    const files: { name: string; filePath: string }[] = [];
-    if (feature === 'tts') {
-        const model = ttsModelFiles(voice);
-        files.push(
-            { name: 'config.json', filePath: model.config },
-            { name: 'model.safetensors', filePath: model.weights },
-            { name: 'style_vectors.npy', filePath: model.style }
-        );
-    } else {
-        for (const name of MODEL_FILES.converter) {
-            const filePath = path.join(voice.dir, name);
-            if (fs.existsSync(filePath)) files.push({ name, filePath });
-        }
-    }
+    const name = voice.info.name || voice.info.distributedName || id;
     const manifest: VoiceManifest = {
         format: VOICE_FILE_FORMAT,
         feature,
-        name: voice.info.name || voice.info.distributedName || id,
+        name,
         origin: voice.info.origin,
         ...(voice.info.tts ? { tts: { languages: voice.info.tts.languages } } : {}),
     };
-    await writeZip(destPath, [...files, { name: VOICE_FILE_MANIFEST, text: JSON.stringify(manifest, null, 2) }]);
+    const manifestEntry = { name: VOICE_FILE_MANIFEST, text: JSON.stringify(manifest, null, 2) };
+    if (feature === 'tts') {
+        const model = ttsModelFiles(voice);
+        await writeZip(destPath, [
+            { name: 'config.json', filePath: model.config },
+            { name: 'model.safetensors', filePath: model.weights },
+            { name: 'style_vectors.npy', filePath: model.style },
+            manifestEntry,
+        ]);
+        return;
+    }
+    // zip の中のファイル名は、書き出し先として選んだファイルの名前にする
+    const baseName = path.parse(destPath).name;
+    const temp = newTempDir();
+    try {
+        const pth = path.join(temp, 'model.pth');
+        await getWorker('converter').request('export_model', {
+            weights: path.join(voice.dir, 'model.safetensors'),
+            output: pth,
+            name,
+        });
+        const index = path.join(voice.dir, 'model.index');
+        await writeZip(destPath, [
+            { name: `${baseName}.pth`, filePath: pth },
+            ...(fs.existsSync(index) ? [{ name: `${baseName}.index`, filePath: index }] : []),
+            manifestEntry,
+        ]);
+    } finally {
+        discardLater(temp);
+    }
 }
 
 // --- 取り込み ---
@@ -397,8 +407,11 @@ type PendingImport = {
     inspection: ImportInspection;
     feature: VoiceModelFeature;
     staging: string;
-    // 取り込むファイル (外部: 元の場所、本アプリの書き出し: 展開先)
+    // 取り込むファイル (選んだファイルは元の場所、zip の中のものは展開先)
     files: Record<string, string>;
+    // files の持ち方。stored: 声のモデルの置き場と同じファイル名 (本アプリが書き出した読み上げのモデル)、
+    // chosen: 選んだモデルのファイル (pth / index、または config / weights / style)
+    layout: 'stored' | 'chosen';
 };
 
 const pendingImports = new Map<string, PendingImport>();
@@ -443,54 +456,57 @@ async function collectCandidates(paths: string[], staging: string): Promise<Impo
     return files;
 }
 
+// 本アプリで書き出した zip か (中に書き出しの情報 kura-voice.json があるか)
+async function isAppExport(file: string): Promise<boolean> {
+    if (!file.toLowerCase().endsWith('.zip') || !fs.statSync(file).isFile()) return false;
+    return (await readZipText(file, VOICE_FILE_MANIFEST)) !== null;
+}
+
 async function inspectKuraFile(feature: VoiceModelFeature, file: string, staging: string): Promise<PendingImport> {
     const text = await readZipText(file, VOICE_FILE_MANIFEST);
     if (!text) throw new Error('IMPORT_INVALID_FILE');
     const manifest = parseImportJson<VoiceManifest>(text, VOICE_FILE_MANIFEST);
     if (manifest.format !== VOICE_FILE_FORMAT) throw new Error('IMPORT_INVALID_FILE');
     if (manifest.feature !== feature) throw new Error('IMPORT_WRONG_FEATURE');
-    const allowed = new Set(MODEL_FILES[feature]);
+    const restore = {
+        source: 'kura' as const,
+        suggestedName: manifest.name ?? path.basename(file, path.extname(file)),
+        // 本アプリで書き出したファイルは、元の区分 (ユーザーモデルか) を復元する
+        origin: manifest.origin === 'user' ? ('user' as const) : ('existing' as const),
+    };
+    if (feature === 'converter') {
+        // 音声変換のモデルは標準の RVC のモデル (.pth) で書き出しているため、外部のモデルと同じ検査を通す
+        const pending = await inspectExternal(feature, [file], staging);
+        pending.inspection = { ...pending.inspection, ...restore };
+        return pending;
+    }
+    const allowed = new Set(MODEL_FILES.tts);
     const extracted = await extractZip(file, staging, name => allowed.has(name));
     const files: Record<string, string> = {};
     for (const filePath of extracted) files[path.basename(filePath)] = filePath;
-    for (const required of feature === 'tts' ? MODEL_FILES.tts : ['model.safetensors', 'model.json']) {
+    for (const required of MODEL_FILES.tts) {
         if (!files[required]) throw new Error(`IMPORT_FILES_MISSING: ${required}`);
     }
     verifySafetensors(files['model.safetensors']);
-    let rvc: RvcModelMeta | undefined;
-    let tts: TtsModelMeta | undefined;
-    let safe = true;
-    let unsafeDetail: string | undefined;
-    if (feature === 'converter') {
-        rvc = readRvcModelJson(files['model.json'], !!files['model.index']);
-        checkRvcSupported(rvc);
-    } else {
-        tts = ttsMetaFromConfig(
-            parseImportJson<SbvConfig>(fs.readFileSync(files['config.json'], 'utf-8'), 'config.json')
-        );
-        if (manifest.tts?.languages !== undefined && tts.engine === 'multilingual') {
-            tts.languages = manifestLanguages(manifest.tts.languages, tts.engine);
-        }
-        const result = await getWorker('tts').request<{ safe: boolean; detail?: string }>('inspect_style_vectors', {
-            path: files['style_vectors.npy'],
-        });
-        safe = result.safe;
-        unsafeDetail = result.detail;
+    const tts = ttsMetaFromConfig(
+        parseImportJson<SbvConfig>(fs.readFileSync(files['config.json'], 'utf-8'), 'config.json')
+    );
+    if (manifest.tts?.languages !== undefined && tts.engine === 'multilingual') {
+        tts.languages = manifestLanguages(manifest.tts.languages, tts.engine);
     }
-    const token = crypto.randomUUID();
+    const result = await getWorker('tts').request<{ safe: boolean; detail?: string }>('inspect_style_vectors', {
+        path: files['style_vectors.npy'],
+    });
     return {
         feature,
         staging,
         files,
+        layout: 'stored',
         inspection: {
-            token,
-            source: 'kura',
-            suggestedName: manifest.name ?? path.basename(file, path.extname(file)),
-            // 本アプリで書き出したファイルは、元の区分 (ユーザーモデルか) を復元する
-            origin: manifest.origin === 'user' ? 'user' : 'existing',
-            safe,
-            unsafeDetail,
-            rvc,
+            token: crypto.randomUUID(),
+            ...restore,
+            safe: result.safe,
+            unsafeDetail: result.detail,
             tts,
         },
     };
@@ -557,12 +573,16 @@ async function applyChoice(pending: PendingImport, choices: ImportChoices): Prom
             ? await inspectRvcChoice(choices.model, choices.index)
             : await inspectTtsChoice(choices.model);
     pending.files = files;
+    pending.layout = 'chosen';
+    const { token, source, origin, suggestedName } = pending.inspection;
     pending.inspection = {
-        token: pending.inspection.token,
-        source: 'external',
-        origin: 'existing',
+        token,
+        source,
+        origin,
         choices,
         ...fields,
+        // 本アプリで書き出したファイルは、書き出したときの名前を使う
+        ...(source === 'kura' ? { suggestedName } : {}),
     };
 }
 
@@ -599,6 +619,7 @@ async function inspectExternal(feature: VoiceModelFeature, paths: string[], stag
         feature,
         staging,
         files: {},
+        layout: 'chosen',
         inspection: {
             token: crypto.randomUUID(),
             source: 'external',
@@ -632,7 +653,7 @@ export async function inspectImport(feature: VoiceModelFeature, paths: string[])
     fs.mkdirSync(staging, { recursive: true });
     try {
         const pending =
-            paths.length === 1 && paths[0].toLowerCase().endsWith(`.${VOICE_FILE_EXTENSION}`)
+            paths.length === 1 && (await isAppExport(paths[0]))
                 ? await inspectKuraFile(feature, paths[0], staging)
                 : await inspectExternal(feature, paths, staging);
         pendingImports.set(pending.inspection.token, pending);
@@ -657,7 +678,7 @@ export async function commitImport(
 ): Promise<VoiceModelInfo> {
     const pending = pendingImports.get(token);
     if (!pending) throw new Error('IMPORT_EXPIRED');
-    const { inspection, feature, files, staging } = pending;
+    const { inspection, feature, files, staging, layout } = pending;
     if (!inspection.safe && !options.allowUnsafe) throw new Error('IMPORT_UNSAFE_NOT_ALLOWED');
     const name = options.name.trim();
     if (!name) throw new Error('VOICE_NAME_EMPTY');
@@ -674,29 +695,24 @@ export async function commitImport(
         let rvc = inspection.rvc;
         let tts = inspection.tts;
         if (feature === 'converter') {
-            if (inspection.source === 'kura') {
-                for (const fileName of MODEL_FILES.converter) {
-                    if (files[fileName]) place(files[fileName], path.join(dir, fileName));
-                }
-            } else {
-                // 重みと設定値だけを取り出して安全な形式で保存する。以降の変換や書き出しで危険な読み込みは起きない
-                try {
-                    await getWorker('converter').request('sanitize_model', {
-                        path: files.pth,
-                        outDir: dir,
-                        allowUnsafe: options.allowUnsafe,
-                    });
-                } finally {
-                    // 制限なしで読み込んだプロセスは、成否を問わず念のため使い続けない
-                    if (!inspection.safe) stopWorker('converter');
-                }
-                if (files.index) place(files.index, path.join(dir, 'model.index'));
-                rvc = readRvcModelJson(path.join(dir, 'model.json'), !!files.index);
+            // 重みと設定値だけを取り出して安全な形式で保存する。以降の変換や書き出しで危険な読み込みは起きない
+            try {
+                await getWorker('converter').request('sanitize_model', {
+                    path: files.pth,
+                    outDir: dir,
+                    allowUnsafe: options.allowUnsafe,
+                });
+            } finally {
+                // 制限なしで読み込んだプロセスは、成否を問わず念のため使い続けない
+                if (!inspection.safe) stopWorker('converter');
             }
+            if (files.index) place(files.index, path.join(dir, 'model.index'));
+            rvc = readRvcModelJson(path.join(dir, 'model.json'), !!files.index);
         } else {
-            const config = inspection.source === 'kura' ? files['config.json'] : files.config;
-            const weights = inspection.source === 'kura' ? files['model.safetensors'] : files.weights;
-            const style = inspection.source === 'kura' ? files['style_vectors.npy'] : files.style;
+            const stored = layout === 'stored';
+            const config = stored ? files['config.json'] : files.config;
+            const weights = stored ? files['model.safetensors'] : files.weights;
+            const style = stored ? files['style_vectors.npy'] : files.style;
             place(config, path.join(dir, 'config.json'));
             place(weights, path.join(dir, 'model.safetensors'));
             // スタイルベクトルは数値の配列として読み直して保存する (制限なしで読んだ場合も、保存し直したものは安全)

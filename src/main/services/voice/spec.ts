@@ -443,10 +443,6 @@ function jvnvSpec(model: JvnvModel): ModelSpec {
 
 export const JVNV_MODEL_NAMES = JVNV_MODELS.map(model => model.name);
 
-// 変換に使える RVC モデルの版とボコーダー (補助プロセスの converter_service.py と同じもの)
-export const RVC_VERSIONS: readonly string[] = ['v1', 'v2'];
-export const RVC_VOCODERS: readonly string[] = ['HiFi-GAN', 'MRF HiFi-GAN', 'RefineGAN'];
-
 // 変換に使える埋め込みモデルの名前 (補助プロセスの runtime.py の APPLIO_EMBEDDERS と同じもの) -> ダウンロード項目
 export const RVC_EMBEDDER_ITEMS: Record<string, string> = {
     contentvec: 'model:converter:contentvec',
