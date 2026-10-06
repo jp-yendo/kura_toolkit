@@ -23,13 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - App Settings: "Search threads" no longer has an upper limit.
 - Chapter Cut: intermediate files are created in the work directory set in App Settings and are
   deleted when the cut or split ends.
-- Audio Normalizer shows the length and channels of each file as soon as it is added to the list.
-- Audio Normalizer, Chapter Cut and moving a storage location in App Settings show the estimated time
-  left. The progress bar of Audio Normalizer and of splitting by chapters advances by the length of the
-  audio or video processed, so files and chapters of different lengths no longer make it uneven.
-- Model training shows which step it is on (for example "Step 2 of 5") with the progress and the time left
-  of that step, including preprocessing and feature extraction. Downloads and adding audio for training
-  show the estimated time left.
+- Audio Normalizer: the length and channels of each file are shown as soon as it is added to the list.
+  The progress bar advances by the length of the audio processed, also while a file is being processed,
+  and the estimated time left is shown next to the file count.
+- Chapter Cut: the estimated time left is shown, and when splitting, the progress bar advances by the
+  length of each part.
 
 ### Fixed
 
