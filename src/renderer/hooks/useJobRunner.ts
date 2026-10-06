@@ -67,16 +67,20 @@ function phaseStatus(t: TFunction, phase: PhaseState, now: number): string {
     return `${text}  ${t('jobEta.left', { time: formatEta(t, remaining) })}`;
 }
 
-// 新しい段階の通知を反映する。段階が変わったとき、同じ段階の何回目かが変わったとき (アンサンブルの次のモデルなど)、
-// または同じ段階で進み具合が戻ったときは、そこから見積もり直す
+// 新しい段階の通知を反映する。段階や手順が変わったとき、または同じ段階で進み具合が戻ったとき (アンサンブルの次の
+// モデルなど) は、そこから見積もり直す (回数が変わるだけ (学習の回数) では見積もり直さない)
 function nextPhase(previous: PhaseState | undefined, phase: JobPhase): PhaseState {
     const restart =
         !previous ||
         previous.id !== phase.id ||
         (phase.step !== undefined && phase.step !== previous.step) ||
-        (phase.current !== undefined && phase.current !== previous.current) ||
         (phase.fraction !== undefined && previous.fraction !== undefined && phase.fraction < previous.fraction);
     if (restart) return { ...phase, startedAt: Date.now(), startFraction: phase.fraction ?? 0 };
+    // 段階に入ってから最初に進み具合が届いた時点を、見積もりの起点にする (段階の始めのモデルの読み込みなど、
+    // 進み具合に表れない準備の時間を含めると、学習の 1 回目などで残り時間が大きく外れるため)
+    if (previous.fraction === undefined && phase.fraction !== undefined) {
+        return { ...previous, ...phase, startedAt: Date.now(), startFraction: phase.fraction };
+    }
     return { ...previous, ...phase };
 }
 
