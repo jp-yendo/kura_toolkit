@@ -22,7 +22,8 @@ function presetPath(kind: PresetKind): string {
     return path.join(getAppRootDir(), 'voice-presets', `${kind}.json`);
 }
 
-// 初期の合成プリセット。名前は renderer で翻訳するため翻訳キーで持つ
+// 初期の合成プリセット。名前は renderer で翻訳するため翻訳キーで持つ。リバーブの原音の量は 1 (元の大きさのまま) にし、
+// 残響音の量で響きの強さを分ける
 const BUILTIN_MIX_PRESETS: PresetRecord<MixParams>[] = [
     {
         id: 'builtin-standard',
@@ -33,8 +34,7 @@ const BUILTIN_MIX_PRESETS: PresetRecord<MixParams>[] = [
             vocalGainDb: 0,
             accompanimentGainDb: 0,
             masterGainDb: 0,
-            reverb: { enabled: true, roomSize: 0.3, damping: 0.5, wetLevel: 0.12, dryLevel: 0.9, width: 1 },
-            limiter: true,
+            reverb: { enabled: true, roomSize: 0.3, damping: 0.5, wetLevel: 0.2, dryLevel: 1, width: 1 },
         },
     },
     {
@@ -46,8 +46,7 @@ const BUILTIN_MIX_PRESETS: PresetRecord<MixParams>[] = [
             vocalGainDb: 0,
             accompanimentGainDb: 0,
             masterGainDb: 0,
-            reverb: { enabled: false, roomSize: 0.3, damping: 0.5, wetLevel: 0.12, dryLevel: 0.9, width: 1 },
-            limiter: true,
+            reverb: { enabled: false, roomSize: 0.3, damping: 0.5, wetLevel: 0.2, dryLevel: 1, width: 1 },
         },
     },
     {
@@ -59,8 +58,7 @@ const BUILTIN_MIX_PRESETS: PresetRecord<MixParams>[] = [
             vocalGainDb: 0,
             accompanimentGainDb: -1,
             masterGainDb: 0,
-            reverb: { enabled: true, roomSize: 0.75, damping: 0.4, wetLevel: 0.28, dryLevel: 0.8, width: 1 },
-            limiter: true,
+            reverb: { enabled: true, roomSize: 0.75, damping: 0.4, wetLevel: 0.53, dryLevel: 1, width: 1 },
         },
     },
     {
@@ -72,8 +70,7 @@ const BUILTIN_MIX_PRESETS: PresetRecord<MixParams>[] = [
             vocalGainDb: 3,
             accompanimentGainDb: -2,
             masterGainDb: 0,
-            reverb: { enabled: true, roomSize: 0.25, damping: 0.6, wetLevel: 0.08, dryLevel: 0.95, width: 0.8 },
-            limiter: true,
+            reverb: { enabled: true, roomSize: 0.25, damping: 0.6, wetLevel: 0.13, dryLevel: 1, width: 0.8 },
         },
     },
 ];

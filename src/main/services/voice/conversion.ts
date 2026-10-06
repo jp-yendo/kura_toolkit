@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { emitJobEvent, finishJob, startJob } from '../job-manager';
 import { runFfmpeg } from '../ffmpeg/ffmpeg';
-import { decodeToWav, measureLoudness, mixFiles, pitchShift, probeAudio } from './audio-tools';
+import { decodeToWav, measureLoudness, pitchShift, probeAudio } from './audio-tools';
 import { isItemInstalled } from './library';
 import { mediaRef } from './media';
 import { getWorker } from './python-worker';
@@ -16,6 +16,7 @@ import type {
     ConversionCandidate,
     ConversionRunRequest,
     MediaRef,
+    MixParams,
     MixRenderRequest,
 } from '../../../shared/voice/types';
 
@@ -39,7 +40,7 @@ function accompanimentShift(workKey: string, accompaniment: string, pitch: numbe
 }
 
 // 伴奏をキーの変更量に合わせる。同じ伴奏を別のキーに移調したときは、それまでのキーのものを消す
-// (伴奏と重ねた試聴用の音は、候補ごとに自分の分を持っている)
+// (伴奏と重ねた試聴用の音や合成結果は、移調した伴奏とは別のファイルのため影響しない)
 async function shiftedAccompaniment(workKey: string, accompaniment: string, pitch: number, jobId: string) {
     const output = accompanimentShift(workKey, accompaniment, pitch);
     if (!output) return accompaniment;
@@ -80,12 +81,11 @@ export async function runConversion(jobId: string, request: ConversionRunRequest
 
         const vocalsInfo = await probeAudio(request.vocals, jobId);
         const accompanimentInfo = request.accompaniment ? await probeAudio(request.accompaniment, jobId) : null;
-        const sampleRate = accompanimentInfo?.sampleRate ?? vocalsInfo.sampleRate;
         const channels = vocalsInfo.channels >= 2 || (accompanimentInfo?.channels ?? 1) >= 2 ? 2 : 1;
         const id = newId();
         const dir = sessionDir(request.workKey, 'conversions', id);
         try {
-            return await convertInto(jobId, request, model, id, dir, sampleRate, channels);
+            return await convertInto(jobId, request, model, id, dir, channels);
         } catch (error) {
             // 失敗・キャンセルした場合は作りかけの候補を消す
             discardLater(dir);
@@ -104,7 +104,6 @@ async function convertInto(
     { weights, index, info, rvc }: ConversionModel,
     id: string,
     dir: string,
-    sampleRate: number,
     channels: number
 ): Promise<ConversionCandidate> {
     const vocalsOut = path.join(dir, 'vocals.wav');
@@ -170,24 +169,6 @@ async function convertInto(
         }
     });
 
-    let withAccompaniment: MediaRef | null = null;
-    if (request.accompaniment) {
-        const accompaniment = await shiftedAccompaniment(
-            request.workKey,
-            request.accompaniment,
-            request.params.pitch,
-            jobId
-        );
-        const output = path.join(dir, 'with-accompaniment.wav');
-        await mixFiles(
-            [vocalsOut, accompaniment],
-            output,
-            { channels, sampleRate },
-            jobId,
-            ffmpegPhase(jobId, 'mixPreview')
-        );
-        withAccompaniment = await mediaRef(output);
-    }
     emitJobEvent({ jobId, kind: 'progress', percent: 100 });
     return {
         id,
@@ -196,12 +177,23 @@ async function convertInto(
         params: request.params,
         vocals: await mediaRef(vocalsOut),
         channels,
-        withAccompaniment,
+        // 伴奏と重ねた試聴用の音は、変換の段階で求められたときに作る (renderMix の params: null)
+        withAccompaniment: null,
         createdAt: Date.now(),
     };
 }
 
-// 合成 (音量バランス・リバーブ・全体の音量)。プレビューと書き出しの両方でこの結果を使う
+// 変換の段階の試聴用に、変換後のボーカルと伴奏をそのまま重ねるときのパラメーター (音量は変えず、リバーブなし)
+const PLAIN_MIX_PARAMS: MixParams = {
+    vocalGainDb: 0,
+    accompanimentGainDb: 0,
+    masterGainDb: 0,
+    reverb: { enabled: false, roomSize: 0, damping: 0, wetLevel: 0, dryLevel: 1, width: 1 },
+};
+
+// 合成 (音量バランス・リバーブ・全体の音量)。合成の段階の確認と書き出しの両方でこの結果を使う。
+// params が null の場合は、変換の段階の試聴用にそのまま重ねたものを作る (合成結果とは置き場所を分ける)。
+// どちらも、重ねた結果のピークが上限を超える場合は全体を一律に下げる (converter_service.rpc_mix)
 export async function renderMix(jobId: string, request: MixRenderRequest): Promise<MediaRef> {
     startJob(jobId);
     try {
@@ -214,6 +206,7 @@ export async function renderMix(jobId: string, request: MixRenderRequest): Promi
         const accompaniment = request.accompaniment
             ? (accompanimentShift(request.workKey, request.accompaniment, request.pitch) ?? request.accompaniment)
             : null;
+        const params = request.params ?? PLAIN_MIX_PARAMS;
         const key = crypto
             .createHash('sha1')
             .update(
@@ -221,12 +214,12 @@ export async function renderMix(jobId: string, request: MixRenderRequest): Promi
                     vocals: request.vocals,
                     accompaniment,
                     channels: request.channels,
-                    params: request.params,
+                    params,
                 })
             )
             .digest('hex')
             .slice(0, 16);
-        const output = path.join(sessionDir(request.workKey, 'mix'), `${key}.wav`);
+        const output = path.join(sessionDir(request.workKey, request.params ? 'mix' : 'previews'), `${key}.wav`);
         await produceShared(output, async target => {
             // 変換結果 (モデルの周波数のモノラル) を、元の音源のチャンネル数と伴奏の周波数に合わせて重ねる
             const vocalsInfo = await probeAudio(request.vocals, jobId);
@@ -251,7 +244,7 @@ export async function renderMix(jobId: string, request: MixRenderRequest): Promi
                     output: target,
                     sampleRate,
                     channels,
-                    params: request.params,
+                    params,
                 },
                 { jobId, onEvent: workerEvents(jobId) }
             );

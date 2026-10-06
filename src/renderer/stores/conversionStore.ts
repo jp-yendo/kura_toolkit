@@ -17,8 +17,7 @@ const DEFAULT_MIX_PARAMS: MixParams = {
     vocalGainDb: 0,
     accompanimentGainDb: 0,
     masterGainDb: 0,
-    reverb: { enabled: true, roomSize: 0.3, damping: 0.5, wetLevel: 0.12, dryLevel: 0.9, width: 1 },
-    limiter: true,
+    reverb: { enabled: true, roomSize: 0.3, damping: 0.5, wetLevel: 0.2, dryLevel: 1, width: 1 },
 };
 
 type ConversionState = {
@@ -45,6 +44,8 @@ type ConversionState = {
     setVoiceId(id: string): void;
     setParams(params: ConversionParams): void;
     addCandidate(candidate: ConversionCandidate, inputKey: string): void;
+    // 候補の、伴奏と重ねた試聴用の音を差し替える
+    setCandidatePreview(id: string, media: MediaRef): void;
     removeCandidate(id: string): void;
     setAdopted(id: string | null): void;
     setMixParams(params: MixParams): void;
@@ -90,6 +91,11 @@ export const useConversionStore = create<ConversionState>((set, get) => ({
             candidates: [...get().candidates, candidate],
             candidatesInput: inputKey,
             adoptedId: get().adoptedId ?? candidate.id,
+        });
+    },
+    setCandidatePreview(id, media) {
+        set({
+            candidates: get().candidates.map(item => (item.id === id ? { ...item, withAccompaniment: media } : item)),
         });
     },
     removeCandidate(id) {

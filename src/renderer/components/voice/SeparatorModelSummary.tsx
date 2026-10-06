@@ -21,7 +21,8 @@ export default function SeparatorModelSummary({ filename, arch, stems, sdr }: Pr
     const outputs = separatorFileOutputs(filename, stems).join(t('voice.common.listSeparator'));
     const quality = Object.entries(sdr)
         .filter(([, value]) => value !== null)
-        .map(([stem, value]) => `${stem} ${Number(value).toFixed(1)}`)
+        // 配布元の一覧にある値を丸めずにそのまま示す
+        .map(([stem, value]) => `${stem} ${String(value)}`)
         .join(' / ');
     return (
         <>

@@ -127,17 +127,16 @@ export default {
         separatorNoMatch: '条件に合うモデルはありません。',
         separatorEnsemblePartial: '{{installed}} / {{total}} 個取得済み',
         separatorEnsembleDescriptions: {
-            instrumental_clean: '伴奏にボーカルが残るのを最も抑えます。代わりに、楽器の音が少しやせることがあります。',
-            instrumental_full:
-                '楽器の音をできるだけ欠けずに残します。代わりに、ボーカルの残りやノイズが少し入ることがあります。',
-            instrumental_balanced: '伴奏に残るノイズの少なさと、楽器の音の厚みの釣り合いを取ります。',
-            instrumental_low_resource: 'GPU のメモリが少ない場合や、速さを優先する場合に使います。',
-            vocal_balanced: 'ボーカルの品質が全体として最も高い組み合わせです。',
-            vocal_clean: 'ボーカルに伴奏の音が混ざるのを最も抑えます。代わりに、声の一部が欠けることがあります。',
-            vocal_full:
-                'ハーモニーやコーラスまで含めて、声をできるだけ残します。代わりに、伴奏の音が少し混ざることがあります。',
-            vocal_rvc: '音声変換 (RVC) の学習に使う声を作る場合に向けた組み合わせです。',
-            karaoke: 'ボーカルを、メインボーカルとバックコーラスに分けます。単体のモデルより品質が高くなります。',
+            instrumental_clean: '伴奏にボーカルが混ざるのを、最も抑えることを狙った組み合わせです。',
+            instrumental_full: '楽器の音を、できるだけ残すことを狙った組み合わせです。',
+            instrumental_balanced: 'ノイズの少なさと、楽器の音の厚みの釣り合いを取った組み合わせです。',
+            instrumental_low_resource: 'GPU のメモリが少ない環境向けの、速く動く組み合わせです。',
+            vocal_balanced: 'ボーカルの品質が、全体として最も高くなることを狙った組み合わせです。',
+            vocal_clean: 'ボーカルに楽器の音が混ざるのを、最も抑えることを狙った組み合わせです。',
+            vocal_full: 'ハーモニーまで含めて、ボーカルをできるだけ残すことを狙った組み合わせです。',
+            vocal_rvc: '音声変換 (RVC) などの学習に使う声を作ることに向けた組み合わせです。',
+            karaoke:
+                'メインボーカルを分ける、3 つのモデルの組み合わせです。単体のモデルより分離の品質 (SDR) が高くなります (約 10.6。単体は約 10.2)。',
         },
         separatorPurposes: {
             vocals: { title: 'ボーカル取り出し' },
@@ -153,120 +152,297 @@ export default {
             step2: '2 回目: ボーカルをメインボーカルとバックコーラスに分ける',
         },
         separatorModelNotes: {
-            vrHp: '伴奏を取り出すことを主にした、VR 方式の高品質版 (HP) のモデルです。',
-            vrHp2: '伴奏を取り出すことを主にした、VR 方式の高品質版の改良版 (HP2) のモデルです。',
-            vrHpVocal: 'ボーカルを取り出すことを主にした、VR 方式の高品質版のモデルです。',
-            vrKaraoke: 'メインボーカルと、それ以外 (バックコーラスと伴奏) に分ける VR 方式のモデルです。',
-            vrSp: '旧世代の VR 方式のモデル (SP) です。名前の数値は扱うサンプリング周波数です。一般に、HP 以降や MDX-Net 以降のモデルの方が高品質です。',
-            vrWind: '木管楽器 (フルート・サックスなど) と、それ以外の音に分けるモデルです。',
-            vrDeEcho: 'エコー (遅れて繰り返し聞こえる反響) を取り除くモデルです。',
-            vrDeEchoAggressive: 'エコーを取り除くモデルのうち、Normal より強く取り除く版です。',
-            vrDeEchoDeReverb: 'エコーと残響をまとめて取り除くモデルです。',
-            vrDeNoise: 'ノイズを取り除くモデルです。',
-            vrDeNoiseLite: 'ノイズを取り除くモデルの軽量版です。',
-            vrBve: 'ボーカルを、メインボーカルとバックコーラスに分けるモデルです (BVE: バックコーラスの抽出)。先にボーカルだけを取り出してから使います。',
-            vrMgmHigh: '高い音域の分離を重視した、旧世代 (v4) の VR 方式のモデルです。',
-            vrMgmLow: '低い音域の分離を重視した、旧世代 (v4) の VR 方式のモデルです。',
-            vrMgmMain: '旧世代 (v4) の VR 方式のモデルです。',
-            vrDeReverb: '残響を取り除く VR 方式のモデルです。',
-            mdxInstHq:
-                '伴奏を取り出すことを主にした、MDX-Net の高品質版 (HQ) のモデルです。数字が大きいほど新しい版です。',
-            mdxVocalEarly: 'ボーカルを取り出すことを主にした、初期の MDX-Net のモデルです。',
-            mdxInstEarly: '伴奏を取り出すことを主にした、初期の MDX-Net のモデルです。',
-            mdxKaraoke: 'メインボーカルと、それ以外 (バックコーラスと伴奏) に分ける MDX-Net のモデルです。',
-            mdxVocFt:
-                'ボーカルを取り出す MDX-Net のモデルを調整した版で、MDX-Net の中ではボーカルの品質が高いモデルです。',
-            mdxKimVocal: 'ボーカルを取り出すことを主にした MDX-Net のモデル (Kim 氏の作) です。2 は 1 の改良版です。',
-            mdxKimInst: '伴奏を取り出すことを主にした MDX-Net のモデル (Kim 氏の作) です。',
-            mdxReverb: '残響と、残響を除いた音に分けるモデルです。',
-            crowd: 'ライブ音源の歓声や拍手を取り除くモデルです。',
-            kuielabVocals:
-                '音楽の分離の競技会 (Music Demixing Challenge) 向けに作られた、ボーカルとそれ以外に分けるモデルです。a と b は別々に学習した版です。',
-            kuielabOther:
-                '音楽の分離の競技会向けに作られた、ボーカル・ドラム・ベース以外の楽器を分けるモデルです。a と b は別々に学習した版です。',
-            kuielabBass:
-                '音楽の分離の競技会向けに作られた、ベースとそれ以外に分けるモデルです。a と b は別々に学習した版です。',
-            kuielabDrums:
-                '音楽の分離の競技会向けに作られた、ドラムとそれ以外に分けるモデルです。a と b は別々に学習した版です。',
-            demucs: 'ボーカル・ドラム・ベース・その他の 4 つに分ける、Demucs v4 の既定のモデル (htdemucs) です。',
-            demucsFt:
-                'Demucs v4 の既定のモデル (htdemucs) を調整した版です。処理に約 4 倍の時間がかかり、少し良くなる場合があります。',
-            demucsMmi: 'ボーカル・ドラム・ベース・その他の 4 つに分ける、1 つ前の世代 (Hybrid Demucs) のモデルです。',
-            demucs6s:
-                'ボーカル・ドラム・ベース・ギター・ピアノ・その他の 6 つに分ける Demucs v4 のモデルです。ピアノの分離は品質が低めです。',
-            mdx23cInstVoc: 'ボーカルと伴奏に分ける MDX23C のモデルです。',
-            viperxBsRoformer:
-                'ボーカルと伴奏に分ける BS-Roformer のモデル (viperx 氏の作) です。Roformer の初期の高品質なモデルです。',
-            viperxMelRoformer: 'ボーカルと伴奏に分ける Mel-Roformer のモデル (viperx 氏の作) です。',
-            drumBass: 'ドラムとベースをまとめて、それ以外の音と分けるモデルです。',
-            unwaInst: '伴奏を取り出すことを主にした Mel-Roformer のモデル (unwa 氏の作) です。V2 は V1 の改良版です。',
-            unwaInstPlus: 'unwa 氏の伴奏向けのモデル (Inst V1) の改良版です。',
-            unwaInstE:
-                'unwa 氏の伴奏向けのモデルのうち、楽器の音の厚みを残すことを重視した版 (E) です。ノイズが残りやすくなります。Plus はその改良版です。',
-            unwaDuality:
-                'ボーカルと伴奏の両方を同じようにきれいに取り出すことを狙ったモデル (unwa 氏の作) です。V2 は V1 の改良版です。',
-            mdx23cDeReverb: '残響を取り除く MDX23C のモデルです。',
-            drumSep:
-                'ドラムを、キック・スネア・タム・ハイハット・ライド・クラッシュの 6 つに分けるモデルです。先にドラムだけを取り出してから使います。',
-            roformerKaraoke:
-                'メインボーカルと、それ以外 (バックコーラスと伴奏) に分ける Roformer のモデルです。作者ごとに調整が異なります。',
-            melDenoise: 'ノイズを取り除く Mel-Roformer のモデルです。',
-            melDenoiseAggressive: 'ノイズを取り除く Mel-Roformer のモデルのうち、より強く取り除く版です。',
-            denoiseDebleed:
-                '伴奏に残ったノイズと、混ざり込んだボーカルの音を取り除くモデルです。伴奏を取り出した後に使います。',
-            bsDeReverb: '残響を取り除く BS-Roformer のモデルです。',
-            kimVocals:
-                'ボーカルを取り出す Mel-Roformer のモデル (Kimberley Jensen 氏の作) です。多くの調整版の元になっています。',
-            kimFt: 'Kim 氏のボーカル向けのモデルを unwa 氏が調整した版です。数字が大きいほど新しい版です。',
-            kimFtBleedless:
-                'Kim 氏のボーカル向けのモデルの調整版 (FT 2) のうち、ボーカルに楽器の音が混ざりにくくした版です。',
-            revive: 'ボーカルを取り出す BS-Roformer のモデル (unwa 氏の作) です。',
-            reviveV2: 'unwa 氏のボーカル向けのモデル (Revive) のうち、ボーカルに楽器の音が混ざりにくくした版です。',
-            reviveV3e:
-                'unwa 氏のボーカル向けのモデル (Revive) のうち、ハーモニーを含めてボーカルをより多く残す版です。',
-            becruilyVocals: 'ボーカルを取り出す Mel-Roformer のモデル (becruily 氏の作) です。',
-            becruilyInst:
-                '伴奏を取り出す Mel-Roformer のモデル (becruily 氏の作) です。伴奏の分離の品質が特に高いモデルです。',
-            vocalFullness: 'ハーモニーを含めて、ボーカルをできるだけ多く残すことを重視したモデル (Aname 氏の作) です。',
-            gaboxBsVocals: 'ボーカルを取り出す BS-Roformer のモデル (Gabox 氏の作) です。',
-            gaboxVocals: 'ボーカルを取り出す Mel-Roformer のモデル (Gabox 氏の作) です。V2 は改良版です。',
-            gaboxVocalsFv:
-                'Gabox 氏のボーカル向けのモデルのうち、ボーカルの厚みを残すことを重視した版 (FV) です。数字が大きいほど新しい版です。',
-            gaboxInst: '伴奏を取り出す Mel-Roformer のモデル (Gabox 氏の作) です。数字が大きいほど新しい版です。',
-            gaboxInstBleedless:
-                'Gabox 氏の伴奏向けのモデルのうち、伴奏にボーカルが残りにくいことを重視した版です。数字が大きいほど新しい版です。',
-            gaboxInstFullness:
-                'Gabox 氏の伴奏向けのモデルのうち、楽器の音の厚みを残すことを重視した版です。ボーカルがわずかに残ることがあります。数字が大きいほど新しい版です。',
-            gaboxInstFullnessNoisy:
-                'Gabox 氏の伴奏向けのモデル (Fullness V4) より、さらに楽器の音を残す版です。ノイズが残りやすくなります。',
-            gaboxInstV: 'Gabox 氏の伴奏向けのモデルの新しい版 (INSTV) です。数字が大きいほど新しい版です。',
-            gaboxInstVN:
-                'Gabox 氏の伴奏向けのモデル (INSTV) のうち、楽器の音の厚みを優先した版 (N) です。ノイズが残りやすくなります。',
-            gaboxInstFv7z: 'Gabox 氏の伴奏向けのモデルのうち、伴奏にボーカルが特に残りにくい版です。',
-            gaboxInstFv: 'Gabox 氏の伴奏向けのモデルの新しい版 (FV) です。',
-            anvuewDeReverb: '残響を取り除く Mel-Roformer のモデル (anvuew 氏の作) です。',
-            anvuewDeReverbLess: '残響を取り除く anvuew 氏のモデルのうち、控えめに取り除く版です。',
-            anvuewDeReverbMono: '残響を取り除く anvuew 氏のモデルのうち、モノラルの音源向けの版です。',
-            sucialDeReverbBig:
-                '残響を取り除く大型の Mel-Roformer のモデル (Sucial 氏の作) です。Super Big はさらに大型の版です。',
-            sucialDeReverbEcho: '残響とエコーをまとめて取り除くモデル (Sucial 氏の作) です。V2 は改良版です。',
-            sucialDeReverbEchoFused: '残響とエコーを取り除く Sucial 氏のモデルを、1 つに統合した版です。',
-            syhft: 'Kim 氏のボーカル向けのモデルを SYH99999 氏が調整した版です。数字が大きいほど新しく、Big は大型の版です。',
-            bigBeta:
-                'ボーカルを取り出す大型の Mel-Roformer のモデル (unwa 氏の作) です。数字が大きいほど新しい版です。',
-            chorusMaleFemale: '合唱を、男声と女声に分けるモデル (Sucial 氏の作) です。',
-            maleFemale: '声を、男性の声と女性の声に分けるモデル (aufr33 氏の作) です。',
-            aspiration:
-                'ボーカルから息の音 (ブレス) を分けるモデル (Sucial 氏の作) です。Less Aggressive は控えめに分ける版です。',
-            bleedSuppressor: '伴奏に残ったボーカルなどの漏れを取り除くモデルです。伴奏を取り出した後に使います。',
-            resurrectionVocals:
-                'ボーカルを取り出す BS-Roformer のモデル (unwa 氏の作) です。ボーカルの品質が高いモデルです。',
-            resurrectionInst:
-                '伴奏を取り出す BS-Roformer のモデル (unwa 氏の作) です。ファイルが小さく、処理が軽めです。',
-            resurrectionInstGabox:
-                'unwa 氏の伴奏向けのモデル (Instrumental Resurrection) を Gabox 氏が調整した版です。',
-            bsRoformerSw:
-                'ボーカル・ドラム・ベース・ギター・ピアノ・その他の 6 つに分ける BS-Roformer のモデル (jarredou 氏の作) です。',
+            m_10_SP_UVR_2B_32000_1:
+                '少ない計算で動く、旧来の標準精度版 (SP) のモデルです。扱う帯域が狭く (高音は約 16 kHz まで)、新しいモデルより品質は劣ります。',
+            m_11_SP_UVR_2B_32000_2:
+                '少ない計算で動く、旧来の標準精度版 (SP) のモデルです。扱う帯域が狭く (高音は約 16 kHz まで)、新しいモデルより品質は劣ります。',
+            m_12_SP_UVR_3B_44100:
+                '少ない計算で動く、旧来の標準精度版 (SP) のモデルです。新しいモデルより品質は劣ります。',
+            m_13_SP_UVR_4B_44100_1:
+                '少ない計算で動く、旧来の標準精度版 (SP) のモデルです。抽出が控えめで、ボーカルが残りやすくなります。',
+            m_14_SP_UVR_4B_44100_2:
+                '少ない計算で動く、旧来の標準精度版 (SP) のモデルです。抽出が控えめで、ボーカルが残りやすくなります。',
+            m_15_SP_UVR_MID_44100_1:
+                '少ない計算で動く、旧来の標準精度版 (SP) のモデルです。明瞭さは劣りますが、ノイズは少なめです。',
+            m_16_SP_UVR_MID_44100_2:
+                '少ない計算で動く、旧来の標準精度版 (SP) のモデルです。明瞭さは劣りますが、ノイズは少なめです。',
+            m_17_HP_Wind_Inst_UVR:
+                '木管楽器 (フルート・サックスなど) と、それ以外の音に分けるモデルです。先に伴奏を取り出してから使います。弦楽器を木管楽器として拾うことがあります。',
+            m_1_HP_UVR:
+                '伴奏を取り出すことを主にした高精度版 (HP) のモデルです。安定した結果になり、2_HP よりドラムを強めに残します。',
+            m_2_HP_UVR:
+                '伴奏を取り出すことを主にした高精度版 (HP) のモデルです。1_HP よりかなり速く、くっきりした音になりますが、ボーカルが残りやすくなります。',
+            m_3_HP_Vocal_UVR: 'ボーカルを取り出すことを主にした高精度版 (HP) のモデルです。',
+            m_4_HP_Vocal_UVR: 'ボーカルを取り出すことを主にした高精度版 (HP) のモデルです。',
+            m_5_HP_Karaoke_UVR:
+                'メインボーカルを取り除き、バックコーラスを伴奏側に残すモデルです。曲全体より、先に取り出したボーカルにかけた方がうまくいきます。新しいモデルより品質は劣ります。',
+            m_6_HP_Karaoke_UVR:
+                'メインボーカルを取り除き、バックコーラスを伴奏側に残すモデルです。曲全体より、先に取り出したボーカルにかけた方がうまくいきます。新しいモデルより品質は劣ります。',
+            m_7_HP2_UVR:
+                '伴奏を取り出す大型 (HP2) のモデルです。VR のモデルの中でボーカルが最も残りにくい代わりに、伴奏の厚みが減り、高音も弱くなります。処理はとても遅いモデルです。',
+            m_8_HP2_UVR:
+                '9_HP2 を軽く調整した大型 (HP2) のモデルです。単体では 9_HP2 に劣ることが多く、組み合わせ (アンサンブル) の相手に向きます。',
+            m_9_HP2_UVR:
+                '伴奏を取り出す大型 (HP2) のモデルです。いろいろな曲で最も安定した結果になります。処理が重いモデルです。',
+            m_aspiration_mel_band_roformer_less_aggr_sdr_18_1201:
+                'ボーカルから息の音 (ブレス) を分けるモデルの、控えめに分ける版です。',
+            m_aspiration_mel_band_roformer_sdr_18_9845:
+                'ボーカルから息の音 (ブレス) を分けるモデルで、ミックスの作業向けです。息以外の音も多めに取ります。',
+            m_BS_Roformer_SW:
+                'ボーカル・ドラム・ベース・ギター・ピアノ・その他の 6 つに分けるモデルです。ボーカル以外のパートは単体のモデルで最高水準の品質で、ギターとピアノに特に強い一方、打楽器的な音はすべてドラムに入り、指を鳴らす音や足踏みをボーカルに入れることがあります。',
+            m_bs_roformer_instrumental_resurrection_gabox:
+                '伴奏を取り出す Resurrection のモデルを、厚みを増すよう調整した版 (Inst V1e なみ) です。',
+            m_bs_roformer_instrumental_resurrection_unwa:
+                '伴奏を取り出す小型で速いモデルです。厚みは Inst V1e と V1e Plus の間で、伴奏へのボーカルの混ざりを抑えますが、V1e Plus よりこもり気味です。',
+            m_bs_roformer_karaoke_anvuew:
+                'メインボーカルと、それ以外 (バックコーラスと伴奏) に分けるモデルです。メインボーカルが厚く明るい一方、メインボーカルが伴奏側に漏れることがあります。先にボーカルだけを取り出してから使うと防げます。',
+            m_bs_roformer_karaoke_frazer_becruily:
+                'メインボーカルと、それ以外 (バックコーラスと伴奏) に分けるモデルです。ハーモニーの区別が特に上手で、アドリブや複数のメインボーカルはメイン側になります。ラジオのような加工をした声は取りこぼすことがあります。',
+            m_bs_roformer_male_female_by_aufr33_sdr_7_2889:
+                '声を、男性の声と女性の声に分ける試験版 (ベータ) のモデルです。先にボーカルだけを取り出してから使います。',
+            m_bs_roformer_vocals_gabox: 'ボーカルを取り出すモデルです。公開されている説明は見つかりませんでした。',
+            m_bs_roformer_vocals_resurrection_unwa:
+                'ボーカルを取り出す小型のモデルで、混ざりにくさと品質がどちらも高い水準です。',
+            m_bs_roformer_vocals_revive_unwa:
+                'ボーカルを取り出すモデル (BS-Roformer 1297 の調整版) で、ボーカルへの楽器の混ざりが少なくなっています。試験的なモデルです。',
+            m_bs_roformer_vocals_revive_v2_unwa:
+                'ボーカルへの楽器の混ざりにくさが、公開されているボーカルのモデルの中で最も高い版です。処理は遅めです。',
+            m_bs_roformer_vocals_revive_v3e_unwa:
+                'ボーカルの厚みを最大限に重視した版です。ハーモニーの扱いに難があり、ノイズが乗りやすくなります。',
+            m_denoise_mel_band_roformer_aufr33_aggr_sdr_27_9768:
+                'ノイズを強めに取り除く版です。スネアなど、曲の一部まで消すことがあります。',
+            m_denoise_mel_band_roformer_aufr33_sdr_27_9959:
+                'ノイズを取り除くモデルで、VR の DeNoise より控えめです。歓声の除去にも使えます。',
+            m_dereverb_echo_mel_band_roformer_sdr_10_0169:
+                '残響とエコー (ディレイ) をまとめて取り除くモデルです (ボーカル専用)。ハーモニーの一部も取り除きます。',
+            m_dereverb_echo_mel_band_roformer_sdr_13_4843_v2:
+                '残響とエコーを取り除くモデル (V1) を、多くの曲で学習し直した改良版です (ボーカル専用)。ハーモニーの多くも取り除きます。',
+            m_dereverb_big_mbr_ep_362:
+                '大きな残響を取り除くモデルです (ボーカル専用)。ハーモニーの多くも取り除きます。',
+            m_dereverb_echo_mbr_fused:
+                'V2・Big・Super Big を 1 つに合わせた版で、小さな残響と大きな残響を同時に取り除けます (ボーカル専用)。作者が勧めている版です。',
+            m_dereverb_mel_band_roformer_anvuew_sdr_19_1729:
+                'ボーカルの残響を強めに取り除くモデルです (ボーカル専用)。出力がモノラル寄りになり、中央にないハーモニーや楽器の残りも取り除きます。',
+            m_dereverb_mel_band_roformer_less_aggressive_anvuew_sdr_18_8050:
+                'ボーカルの残響を取り除くモデルの控えめな版です (ボーカル専用)。ステレオのボーカルや、重ねたボーカル向けに選ばれています。',
+            m_dereverb_mel_band_roformer_mono_anvuew:
+                'ボーカルの残響を取り除くモデルで、取り除く力がより強い版です (ボーカル専用)。モノラルや話し声にも使えますが、楽器の残りやハーモニーを取り除く働きは弱くなっています。',
+            m_dereverb_super_big_mbr_ep_346:
+                '非常に大きな残響向けのモデルで、使う場面は限られます (ボーカル専用)。ハーモニーの多くも取り除きます。',
+            m_deverb_bs_roformer_8_384dim_10depth:
+                'ボーカルの残響を取り除くモデルです。中央にないハーモニーや声の効果も取り除くため、1 人の歌声や話し声に向き、合唱には向きません。エコーが少し残ることがあります。',
+            m_hdemucs_mmi:
+                'ボーカル・ドラム・ベース・その他の 4 つに分ける、1 つ前の世代 (Hybrid Demucs) のモデルです。Demucs の中で最も速い一方、品質は劣ります。',
+            m_htdemucs:
+                'ボーカル・ドラム・ベース・その他の 4 つに分ける、Demucs v4 の既定のモデルです。標準の学習用データ (MusDB) に加え、800 曲で学習されています。',
+            m_htdemucs_6s:
+                'ボーカル・ドラム・ベース・ギター・ピアノ・その他の 6 つに分けるモデルです。ギターはまずまずですが、ピアノは品質が低く、4 つに分けるモデルより全体に混ざりやすくなります。',
+            m_htdemucs_ft:
+                'Demucs v4 の既定のモデルを調整した版で、4 つに分けます。処理に約 4 倍の時間がかかる代わりに、少し良くなる場合があります。',
+            m_Kim_Inst:
+                '伴奏を取り出すモデルです。Inst 3 よりきれいで品質も高い一方、ノイズは多めです。高音は約 17.7 kHz までです。',
+            m_Kim_Vocal_1: 'ボーカルを取り出すモデルです。',
+            m_Kim_Vocal_2:
+                'ボーカルを取り出すモデルで、Kim Vocal 1 より新しい版です。高音に上限があり、ノイズが出ることがあります。',
+            m_kuielab_a_bass:
+                '2021 年の音楽の分離の競技会 (Music Demixing Challenge) の上位のモデル (KUIELab) で、ベースとそれ以外に分けます。決められた学習用のデータだけで学習する部門 (A) の版で、この部門で 2 位でした。',
+            m_kuielab_a_drums:
+                '2021 年の音楽の分離の競技会 (Music Demixing Challenge) の上位のモデル (KUIELab) で、ドラムとそれ以外に分けます。決められた学習用のデータだけで学習する部門 (A) の版で、この部門で 2 位でした。',
+            m_kuielab_a_other:
+                '2021 年の音楽の分離の競技会 (Music Demixing Challenge) の上位のモデル (KUIELab) で、ボーカル・ドラム・ベース以外の楽器を分けます。決められた学習用のデータだけで学習する部門 (A) の版で、この部門で 2 位でした。',
+            m_kuielab_a_vocals:
+                '2021 年の音楽の分離の競技会 (Music Demixing Challenge) の上位のモデル (KUIELab) で、ボーカルとそれ以外に分けます。決められた学習用のデータだけで学習する部門 (A) の版で、この部門で 2 位でした。',
+            m_kuielab_b_bass:
+                '2021 年の音楽の分離の競技会 (Music Demixing Challenge) の上位のモデル (KUIELab) で、ベースとそれ以外に分けます。ほかのデータも使って学習できる部門 (B) の版で、この部門で 3 位でした。速い一方、品質は並みです。',
+            m_kuielab_b_drums:
+                '2021 年の音楽の分離の競技会 (Music Demixing Challenge) の上位のモデル (KUIELab) で、ドラムとそれ以外に分けます。ほかのデータも使って学習できる部門 (B) の版で、この部門で 3 位でした。速い一方、品質は並みです。',
+            m_kuielab_b_other:
+                '2021 年の音楽の分離の競技会 (Music Demixing Challenge) の上位のモデル (KUIELab) で、ボーカル・ドラム・ベース以外の楽器を分けます。ほかのデータも使って学習できる部門 (B) の版で、この部門で 3 位でした。速い一方、品質は並みです。',
+            m_kuielab_b_vocals:
+                '2021 年の音楽の分離の競技会 (Music Demixing Challenge) の上位のモデル (KUIELab) で、ボーカルとそれ以外に分けます。ほかのデータも使って学習できる部門 (B) の版で、この部門で 3 位でした。速い一方、品質は並みです。',
+            m_MDX23C_8KFFT_InstVoc_HQ:
+                'ボーカルと伴奏に分ける、高音まで扱えるモデルです。多くの曲で良い結果になり、声の質をよく取り戻しますが、伴奏にボーカルが残りやすく、息の音が消えることがあります。',
+            m_MDX23C_De_Reverb_aufr33_jarredou:
+                'ボーカルの残響を取り除くモデルです。部屋の響きまで拾い、VR の残響除去よりきれいですが、音が詰まったように不自然になることがあります。合唱やバックコーラスにも向きます。',
+            m_MDX23C_DrumSep_aufr33_jarredou:
+                'ドラムを、キック・スネア・タム・ハイハット・ライド・クラッシュの 6 つに分けるモデルです。先にドラムだけを取り出してから使います。キック・スネア・タムはきれいに分かれますが、ライド・ハイハット・クラッシュの区別は苦手です。',
+            m_mel_band_roformer_bleed_suppressor_v1:
+                '取り出した伴奏に残ったボーカルなどの混ざりを取り除くモデルです。伴奏 (Inst V1 や V1e など) を取り出した後に使います。',
+            m_mel_band_roformer_crowd_aufr33_viperx_sdr_8_7144:
+                'ライブ音源の歓声を取り除くモデルです。MDX-Net の歓声のモデルより楽器やボーカルをよく残す代わりに、歓声が少し残ります。',
+            m_mel_band_roformer_denoise_debleed_gabox:
+                '厚みを重視した伴奏のモデルで出るノイズを取り除くモデルです。ボーカルの残りは取り除けません。先に曲全体にかけてから伴奏のモデル (INSTV6N など) を使うと、きれいで厚みのある結果になります。',
+            m_mel_band_roformer_instrumental_2_gabox:
+                '伴奏を取り出す基本のモデルの 2 版目で、厚みと混ざりにくさの釣り合いを取っています。',
+            m_mel_band_roformer_instrumental_3_gabox:
+                '伴奏を取り出す基本のモデルの 3 版目です。厚みは控えめで、ノイズが多めになり、ボーカルが少し残ることがあります。',
+            m_mel_band_roformer_instrumental_becruily:
+                '伴奏を取り出すモデルで、Inst V1 なみにきれいでノイズが少なく、ボイスチョップも残せます。ローパスをかけたボーカルは苦手です。',
+            m_mel_band_roformer_instrumental_bleedless_v1_gabox:
+                '伴奏へのボーカルの混ざりにくさ (B) を重視した版の 1 版目です。',
+            m_mel_band_roformer_instrumental_bleedless_v2_gabox:
+                '伴奏へのボーカルの混ざりにくさ (B) を重視した版です。',
+            m_mel_band_roformer_instrumental_bleedless_v3_gabox:
+                '伴奏へのボーカルの混ざりにくさ (B) を、B の版の中で最も重視した版です。こもることがあります。',
+            m_mel_band_roformer_instrumental_fullness_noise_v4_gabox:
+                'Fullness V4 より、さらに厚みを増した代わりに、ノイズがかなり多い版です。',
+            m_mel_band_roformer_instrumental_fullness_v1_gabox: '伴奏の厚み (F) を重視した版の 1 版目です。',
+            m_mel_band_roformer_instrumental_fullness_v2_gabox: '伴奏の厚み (F) を重視した版です。',
+            m_mel_band_roformer_instrumental_fullness_v3_gabox:
+                '伴奏の厚み (F) を重視した版で、Inst V1e なみの厚みがありながら、ボーカルの混ざりは少なめです。サックスをボーカル側に取ってしまうことがあります。',
+            m_mel_band_roformer_instrumental_fullness_v4_gabox:
+                '伴奏の厚み (F) を重視した版で、厚みがありながらノイズは多すぎません。曲によってはボーカルが混ざりやすくなります。',
+            m_mel_band_roformer_instrumental_fv7z_gabox:
+                '伴奏へのボーカルの混ざりにくさがとても高く、ノイズがほとんどない版です。曲によっては、ボーカルの残響やノイズが残ります。',
+            m_mel_band_roformer_instrumental_fv8_gabox:
+                '伴奏へのボーカルの混ざりにくさを重視した版で、厚みはやや減っています。',
+            m_mel_band_roformer_instrumental_fv8b_gabox:
+                'Inst V1e Plus よりこもる代わりに、きれいな版です。ボイスチョップも残します。',
+            m_mel_band_roformer_instrumental_fvx_gabox: 'INSTV7 と Instrumental 3 の中間にあたる版です。',
+            m_mel_band_roformer_instrumental_gabox:
+                '伴奏を取り出す基本のモデルで、厚みと混ざりにくさの釣り合いを取っています。',
+            m_mel_band_roformer_instrumental_instv5_gabox: '伴奏の厚みを重視した系統 (INSTV) の版です。',
+            m_mel_band_roformer_instrumental_instv5n_gabox:
+                'INSTV5 の、ノイズが増える代わりに厚みを増した版 (N) です。',
+            m_mel_band_roformer_instrumental_instv6_gabox:
+                'INSTV の版で、becruily と unwa のモデルの特徴を合わせています。Inst V1e より楽器をボーカルと取り違えにくい一方、厚みは劣ります。',
+            m_mel_band_roformer_instrumental_instv6n_gabox:
+                'INSTV6 の、ノイズが増える代わりに厚みを大きく増した版 (N) です。先に Denoise-Debleed をかけてから使うと、きれいな結果になります。',
+            m_mel_band_roformer_instrumental_instv7_gabox:
+                'INSTV の版で、厚みがある代わりにノイズが多めです。ボーカルが残ったり、一部の楽器が消えたりすることがあります。',
+            m_mel_band_roformer_instrumental_instv7n_gabox:
+                'INSTV7 の、ノイズが増える代わりに厚みを増した版 (N) です。',
+            m_mel_band_roformer_instrumental_instv8_gabox:
+                'INSTV7 より厚みは減る代わりに、ボーカルの残りとノイズが少ない版です。',
+            m_mel_band_roformer_instrumental_instv8n_gabox:
+                'INSTV8 の N 版です。ボーカルが残りやすいという報告があります。',
+            m_mel_band_roformer_karaoke_aufr33_viperx_sdr_10_1956:
+                'メインボーカルと、それ以外 (バックコーラスと伴奏) に分けるモデルです。新しいモデルに品質で劣るものの、結果は安定しています。効果音も少し多めに取り除きます。',
+            m_mel_band_roformer_karaoke_becruily:
+                'メインボーカルと、それ以外 (バックコーラスと伴奏) に分けるモデルです。音が厚く、メインとバックの区別が上手ですが、2 人が同時に歌う部分は両方ともメインボーカルになります。先にボーカルだけを取り出してから使うことが勧められています。',
+            m_mel_band_roformer_karaoke_gabox:
+                'メインボーカルと、それ以外 (バックコーラスと伴奏) に分けるモデルです。メインボーカルはきれいですが、バックコーラス側は音が欠けやすくなります。',
+            m_mel_band_roformer_karaoke_gabox_v2:
+                'メインボーカルと、それ以外 (バックコーラスと伴奏) に分けるモデルの 2 版目で、品質は 1 版目とほぼ同じです。',
+            m_mel_band_roformer_kim_ft2_bleedless_unwa:
+                'Kim のボーカルのモデルの調整版のうち、ボーカルに楽器の音が混ざりにくいことを最も重視した版です。ノイズはとても少ない代わりに、こもりやすくなります。',
+            m_mel_band_roformer_kim_ft2_unwa:
+                'Kim のボーカルのモデルの調整版の 2 版目で、ボーカルへの楽器の混ざりにくさがさらに良くなっています。伴奏がこもることがあります。',
+            m_mel_band_roformer_kim_ft3_unwa:
+                'Kim のボーカルのモデルの調整版 (FT3 の先行版) で、管楽器がボーカルに混ざるのを減らすことを狙っています。',
+            m_mel_band_roformer_kim_ft_unwa:
+                'Kim のボーカルのモデルの調整版です。ボーカルの混ざりにくさと厚みが、どちらも元より良くなっています。伴奏側にはボーカルが残ることがあります。',
+            m_mel_band_roformer_vocal_fullness_aname:
+                'ボーカルの厚みを重視したモデルで、ノイズとの釣り合いも取れています。ボーカルのない部分に、かすかな声が残ることがあります。',
+            m_mel_band_roformer_vocals_becruily:
+                'ボーカルの厚みが高いモデルです。シャウトやデスボイスもきれいに取れますが、ボーカル側に残響を多めに取ることがあります。',
+            m_mel_band_roformer_vocals_fv1_gabox: 'ボーカルの厚み (F) を重視した版の 1 版目です。',
+            m_mel_band_roformer_vocals_fv2_gabox: 'ボーカルの厚み (F) を重視した版です。',
+            m_mel_band_roformer_vocals_fv3_gabox: 'ボーカルの厚み (F) を重視した版です。',
+            m_mel_band_roformer_vocals_fv4_gabox:
+                'ボーカルの厚みを強く重視した版で、こもりのないきれいなボーカルになります。メインボーカルをよく取るので、音声変換 (RVC) の学習用の声づくりに向きますが、バックコーラスは苦手です。',
+            m_mel_band_roformer_vocals_fv5_gabox:
+                'FV4 より少し厚みのある版です。ボイスチョップ (細かく刻んだ声の素材) もボーカル側に残します。',
+            m_mel_band_roformer_vocals_fv6_gabox:
+                'ボーカルの厚みを最も重視した試験的な版です。バックコーラスもよく拾いますが、楽器をボーカルと取り違えることがあり、混ざりやすくなります。',
+            m_mel_band_roformer_vocals_fv7b_gabox:
+                'FV4 を改良した版で、混ざりにくさが上がり、バックコーラスもよく拾います。FV4 よりノイズが多く、シンセや楽器の一部が混ざることがあります。',
+            m_mel_band_roformer_vocals_gabox: 'ボーカルを取り出すモデルの初期の版です。',
+            m_mel_band_roformer_vocals_v2_gabox: 'ボーカルを取り出すモデルの初期の版 (2 版目) です。',
+            m_melband_roformer_big_beta4:
+                'ボーカルを取り出す大型のモデルです。明瞭で厚みのあるボーカルになり、音声変換 (RVC) の学習用の声づくりにも向きます。シンセが混ざることがあります。',
+            m_melband_roformer_big_beta5e:
+                'ボーカルの厚みを強く重視した大型のモデルです。ささやき声にも強い一方、伴奏が大きいとザラついたノイズが乗りやすくなります。音声変換の学習用の声づくりには Beta 4 が向きます。',
+            m_melband_roformer_big_beta6:
+                'ボーカルへの楽器の混ざりにくさを重視した、控えめな大型のモデルです。Beta 5e のノイズの問題がない代わりに、厚みは減り、こもり気味です。',
+            m_melband_roformer_big_beta6x:
+                '最も大きい Mel-Roformer のボーカルのモデルで、混ざりにくさを保ちつつ厚みも出します。バックコーラスもよく拾いますが、処理は遅く、ノイズが少し乗ります。',
+            m_melband_roformer_inst_v1: '伴奏を取り出すモデルです。こもりが少ない一方、特有のノイズが残ります。',
+            m_melband_roformer_inst_v1_plus: '伴奏を取り出すモデル (Inst V1) の改良版で、ノイズが減っています。',
+            m_melband_roformer_inst_v1e:
+                '伴奏の厚み (楽器の音の残り) を強く重視した版です。どの曲でも厚みが安定する一方、ノイズが多く、フルート・サックス・トランペットが苦手です。',
+            m_melband_roformer_inst_v1e_plus:
+                'Inst V1e の改良版です。ノイズが減った分、厚みは V1 と V1e の中間です。ボーカルの取り除き方は控えめです。',
+            m_melband_roformer_inst_v2:
+                'Inst V1 と同じ系統の大型版で、ボーカルの残りとノイズが少なくなっています。代わりにこもり気味で、フルートなどを取りこぼすことがあります。',
+            m_melband_roformer_instvoc_duality_v1:
+                'ボーカルと伴奏の両方を学習したモデルで、1 つで両方を取り出せます。ボーカルは Big Beta 4 に近い一方でノイズが多めです。伴奏はノイズが少ない代わりにこもり気味です。',
+            m_melband_roformer_instvox_duality_v2:
+                'ボーカルと伴奏の両方を取り出すモデル (Duality V1) の改良版で、品質がわずかに上がり、混ざりが少なくなっています。',
+            m_MelBandRoformerBigSYHFTV1:
+                'Kim のボーカルのモデルを調整した版で、ボーカルの厚みが増す代わりに、楽器が混ざりやすくなっています。',
+            m_MelBandRoformerSYHFT:
+                'Kim のボーカルのモデルを調整した試験版です。作者は、品質は耳で確かめるよう勧めています。',
+            m_MelBandRoformerSYHFTV2_5: 'Kim のボーカルのモデルを調整した版です。新しいモデルに品質で劣ります。',
+            m_MelBandRoformerSYHFTV2:
+                'Kim のボーカルのモデルを調整した試験版の 2 版目です。作者は、品質は耳で確かめるよう勧めています。',
+            m_MelBandRoformerSYHFTV3Epsilon:
+                'Kim のボーカルのモデルを調整した版で、ボーカルがこもりにくくなっています。背景のノイズがボーカルに混ざることがあります。',
+            m_MGM_HIGHEND_v4: '旧世代 (v4) のモデルで、高い音域を重視しています。',
+            m_MGM_LOWEND_A_v4: '旧世代 (v4) のモデルで、低い音域を重視しています (32 kHz で学習)。',
+            m_MGM_LOWEND_B_v4: '旧世代 (v4) のモデルで、低い音域を重視し、LOWEND_A と別の条件で学習されています。',
+            m_MGM_MAIN_v4: '旧世代 (v4) の、ボーカルを取り除く主力のモデルです。多くの曲でボーカルをよく取り除けます。',
+            m_model_bs_roformer_ep_317_sdr_12_9755:
+                'ボーカルと伴奏に分ける初期の BS-Roformer のモデルで、1296 よりボーカルの品質が高い版です。単体では伴奏がこもりがちで、サックスは苦手です。',
+            m_model_bs_roformer_ep_368_sdr_12_9628:
+                'ボーカルと伴奏に分ける初期の BS-Roformer のモデルで、1297 より伴奏がわずかに良い版です。単体では伴奏がこもりがちで、サックスは苦手です。',
+            m_model_bs_roformer_ep_937_sdr_10_5309:
+                'ドラムとベースをまとめて、それ以外の音と分けるモデルです。ボーカルが残らないよう、先に伴奏を取り出してから使います。',
+            m_model_chorus_bs_roformer_ep_267_sdr_24_1275:
+                '合唱を、男声と女声に分ける試験的なモデルです (中国語の曲で学習)。男女が交互に歌う部分は分けられません。',
+            m_model_mel_band_roformer_ep_3005_sdr_11_4360:
+                'ボーカルと伴奏に分ける、最初の Mel-Roformer のモデルです。バックコーラスもボーカル側によく取りますが、処理は遅めです。',
+            m_Reverb_HQ_By_FoxJoy:
+                '残響を取り除くモデルです。ボーカルだけでなく曲全体にも使えますが、ステレオの音源で、中央にある音にしか効きません。アカペラでは歌を傷めたり、ディレイやピアノを消したりすることがあります。',
+            m_UVR_BVE_4B_SN_44100_1:
+                'ボーカルを、メインボーカルとバックコーラスに分けるモデルです。先にボーカルだけを取り出してから使います。バックコーラスが中央にある曲では、抽出の強さを 0 にします。',
+            m_UVR_BVE_4B_SN_44100_2:
+                'ボーカルを、メインボーカルとバックコーラスに分けるモデルです。先にボーカルだけを取り出してから使います。バックコーラスが中央にある曲では、抽出の強さを 0 にします。',
+            m_UVR_De_Echo_Aggressive: 'エコーを、Normal 版より強く取り除くモデルです。',
+            m_UVR_De_Echo_Normal:
+                'エコーを取り除くモデルです。強く取り除く Aggressive 版より、うまくいく曲もあります。',
+            m_UVR_De_Reverb_aufr33_jarredou:
+                'ボーカルの残響を取り除くモデルです。MDX23C の De-Reverb より自然に聞こえる一方、残響が少し残ります。合唱やバックコーラスのあるボーカルにも向きます。',
+            m_UVR_DeEcho_DeReverb:
+                'エコーと残響をまとめて取り除くモデルです。モノラルの残響も取り除けるとされていますが、効きについては報告が分かれています。',
+            m_UVR_DeNoise_Lite: 'ノイズを控えめに取り除くモデルです。楽器を傷めにくくなっています。',
+            m_UVR_DeNoise:
+                'ノイズを強めに取り除くモデルです。音がこもったり、シンセやベースが消えたりすることがあります。',
+            m_UVR_MDX_NET_Inst_1: '伴奏を取り出すことを主にした初期のモデルです。高音は約 17.7 kHz までです。',
+            m_UVR_MDX_NET_Inst_2: '伴奏を取り出すことを主にした初期のモデルです。高音は約 17.7 kHz までです。',
+            m_UVR_MDX_NET_Inst_3:
+                '伴奏を取り出すことを主にした初期のモデルです。こもり気味ですが、ノイズは少なめです。高音は約 17.7 kHz までです。',
+            m_UVR_MDX_NET_Inst_HQ_1:
+                '伴奏を取り出すことを主にした高品質版 (HQ) のモデルです。高音まで (約 22 kHz) 扱えます。',
+            m_UVR_MDX_NET_Inst_HQ_2:
+                '伴奏を取り出すことを主にした高品質版 (HQ) のモデルです。HQ_1 より、ボーカルを取り除き損ねる問題が少なくなっています。',
+            m_UVR_MDX_NET_Inst_HQ_3:
+                '伴奏を取り出すことを主にした高品質版 (HQ) のモデルです。強めに取り除き、フルートをボーカル側に取ってしまうことがあります。',
+            m_UVR_MDX_NET_Inst_HQ_4:
+                '伴奏を取り出すことを主にした高品質版 (HQ) のモデルで、HQ_3 を改良した版です。HQ の中で最もこもりにくい一方、フェードアウトにボーカルが残ることがあります。',
+            m_UVR_MDX_NET_Inst_HQ_5:
+                '伴奏を取り出すことを主にした高品質版 (HQ) のモデルです。ボーカルが残りにくい代わりに、こもり気味です。HQ の中で最も軽く速く、ボーカルの取り出しにも向きます。',
+            m_UVR_MDX_NET_Inst_Main:
+                '伴奏を取り出すことを主にした初期のモデルです。控えめに取り除く分、ボーカルが残りやすくなります。',
+            m_UVR_MDX_NET_Voc_FT:
+                'ボーカルを取り出すモデル (Kim Vocal) を調整した版です。いろいろな曲のボーカルに広く使えます。高音は約 17.7 kHz までです。',
+            m_UVR_MDX_NET_Crowd_HQ_1:
+                'ライブ音源の歓声を取り除くモデルです。歓声の多くを取り除けますが、楽器の音も歓声側に混ざりやすく、こもりがちです。',
+            m_UVR_MDXNET_1_9703:
+                'ボーカルを取り出す初期のモデルです (高音は約 14.7 kHz まで)。新しいモデルより品質は劣ります。',
+            m_UVR_MDXNET_2_9682:
+                'ボーカルを取り出す初期のモデルです (高音は約 14.7 kHz まで)。新しいモデルより品質は劣ります。',
+            m_UVR_MDXNET_3_9662:
+                'ボーカルを取り出す初期のモデルです (高音は約 14.7 kHz まで)。新しいモデルより品質は劣ります。',
+            m_UVR_MDXNET_9482: 'ボーカルを取り出す、最も古い世代のモデルです。新しいモデルより品質は劣ります。',
+            m_UVR_MDXNET_KARA:
+                'メインボーカルを取り除き、バックコーラスを伴奏側に残すモデルです。強く取り除くため、バックコーラスも多く消えることがあります。バックコーラスが中央にある曲には、VR のカラオケのモデルが向きます。',
+            m_UVR_MDXNET_KARA_2:
+                'メインボーカルを取り除き、バックコーラスを伴奏側に残すモデルです。メインボーカルの細部をよく残し、きれいなメインボーカルになります。バックコーラスが中央にある曲には、VR のカラオケのモデルが向きます。',
+            m_UVR_MDXNET_Main:
+                'ボーカルを取り出す初期のモデルです。9703 のモデルより、ボーカルに伴奏が残りやすくなります。',
+            m_vocals_mel_band_roformer:
+                'ボーカルを取り出すモデルで、多くの調整版の元になっています。viperx のモデルよりこもりにくい一方、管楽器をボーカル側に取ったり、伴奏が残ったりすることがあります。',
         },
         separatorCategoryNotes: {
             vocals: '歌声と伴奏 (楽器の音) に分けます。歌声を変換する場合や、伴奏だけを使う場合に使います。',
@@ -333,63 +509,68 @@ export default {
         items: {
             python: 'Python 3.11 本体',
             pythonDesc:
-                '音声機能のプログラムを動かす実行環境です。アプリ専用の場所に置かれ、パソコンに入っている Python とは別に動きます。',
+                '音声機能 (音声分離・音声変換・読み上げ) のプログラムを動かす実行環境です。パソコンに入っている Python とは別に、アプリ専用の場所で動きます。',
             separatorPackages: '音声分離のパッケージ一式',
             separatorPackagesDesc:
-                '音声分離のプログラム (python-audio-separator) と、動作に必要なライブラリ (PyTorch など) の一式です。macOS では Xcode Command Line Tools を、Linux では C/C++ のコンパイラー (build-essential など) を、先にインストールしておく必要があります。',
+                '音声分離のプログラム (python-audio-separator) と、動作に必要なライブラリ (PyTorch など) の一式です。音声分離と、音声変換の画面での分離に使います。macOS では Xcode Command Line Tools を、Linux では C/C++ のコンパイラー (build-essential など) を、先にインストールしておく必要があります。',
             converterPackages: '音声変換のパッケージ一式',
             converterPackagesDesc:
-                '音声変換 (RVC) のプログラム (Applio) と、動作に必要なライブラリ (PyTorch など) の一式です。変換と、変換のモデルの学習に使います。',
+                '音声変換 (RVC) のプログラム (Applio) と、動作に必要なライブラリ (PyTorch など) の一式です。音声変換と、変換のモデルの学習に使います。',
             ttsPackages: '読み上げのパッケージ一式',
             ttsPackagesDesc:
-                '読み上げのプログラム (Style-Bert-VITS2) と、動作に必要なライブラリ (PyTorch など) の一式です。',
+                '読み上げのプログラム (Style-Bert-VITS2) と、動作に必要なライブラリ (PyTorch など) の一式です。読み上げに使います。',
             ttsTrainPackages: '読み上げの学習用パッケージ一式',
             ttsTrainPackagesDesc:
-                '読み上げのモデルの学習に追加で必要なプログラムと、声の調子 (スタイル) を計算する話者埋め込みモデルです。NVIDIA GPU を使える Windows と Linux でのみ使えます。',
+                '読み上げのモデルの学習に追加で必要なプログラムと、声の調子 (スタイル) を計算する話者埋め込みモデルの一式です。読み上げのモデルの学習に使います。NVIDIA GPU を使える Windows と Linux でのみ使えます。',
             rmvpe: 'ピッチ抽出モデル (RMVPE)',
             rmvpeDesc:
-                '声の高さ (ピッチ) の動きを推定するモデルです。元の声の抑揚を保ったまま別の声にするために、変換と学習で使います。',
+                '声の高さ (ピッチ) の動きを推定するモデルです。音声変換の変換と学習で、元の声の抑揚を保つために使います。',
             fcpe: 'ピッチ抽出モデル (FCPE)',
-            fcpeDesc: 'RMVPE とは別の方式で声の高さを推定するモデルです。RMVPE より軽く、速く動きます。',
+            fcpeDesc:
+                '声の高さ (ピッチ) の動きを推定するモデルです。音声変換の変換で、ピッチ抽出に FCPE を選んだときに使います。RMVPE より軽く、速く動きます。',
             contentvec: '音声の特徴抽出モデル (ContentVec)',
             contentvecDesc:
-                '声から発音の内容を表す特徴を取り出すモデルです。変換では、この特徴を声のモデルで読み直して別の声にします。アプリでの学習は常にこの方式を使い、配布されている声のモデルの多くもこの方式です。',
+                '声から、話している内容を表す特徴を取り出すモデルです。音声変換の変換と学習で使います。アプリでの学習は常にこのモデルを使い、配布されている声のモデルの多くもこのモデルで作られています。',
             rvcPretrained: '学習用の事前学習モデル (40kHz)',
             rvcPretrainedDesc:
-                '大量の声で学習済みのモデルです。変換のモデルの学習をこの状態から始めるため、少ない録音でも短い時間で学習できます。',
+                '大量の声で学習済みのモデルです。音声変換のモデルの学習をこの状態から始めるため、少ない録音でも短い時間で学習できます。',
             embedderSpin: '音声の特徴抽出モデル (SPIN)',
             embedderSpinDesc:
-                'ContentVec と同じ役割のモデルです。話者の違いに左右されにくい特徴を取り出すよう作られています。',
+                '声から、話している内容を表す特徴を取り出すモデルです (ContentVec と同じ役割)。このモデルで作られた声のモデルで変換するときに使います。話者の違いに左右されにくい特徴を取り出すよう作られています。',
             embedderSpinV2: '音声の特徴抽出モデル (SPIN v2)',
-            embedderSpinV2Desc: 'SPIN の改良版です。',
+            embedderSpinV2Desc:
+                '声から、話している内容を表す特徴を取り出すモデルです (ContentVec と同じ役割)。このモデルで作られた声のモデルで変換するときに使います。SPIN の改良版です。',
             embedderJapaneseHubert: '音声の特徴抽出モデル (日本語 HuBERT)',
-            embedderJapaneseHubertDesc: '日本語の音声で学習した、ContentVec と同じ役割のモデルです。',
+            embedderJapaneseHubertDesc:
+                '声から、話している内容を表す特徴を取り出すモデルです (ContentVec と同じ役割)。このモデルで作られた声のモデルで変換するときに使います。日本語の音声で学習されています。',
             embedderChineseHubert: '音声の特徴抽出モデル (中国語 HuBERT)',
-            embedderChineseHubertDesc: '中国語の音声で学習した、ContentVec と同じ役割のモデルです。',
+            embedderChineseHubertDesc:
+                '声から、話している内容を表す特徴を取り出すモデルです (ContentVec と同じ役割)。このモデルで作られた声のモデルで変換するときに使います。中国語の音声で学習されています。',
             embedderKoreanHubert: '音声の特徴抽出モデル (韓国語 HuBERT)',
-            embedderKoreanHubertDesc: '韓国語の音声で学習した、ContentVec と同じ役割のモデルです。',
+            embedderKoreanHubertDesc:
+                '声から、話している内容を表す特徴を取り出すモデルです (ContentVec と同じ役割)。このモデルで作られた声のモデルで変換するときに使います。韓国語の音声で学習されています。',
             languageModelJa: '日本語の言語モデル (DeBERTa)',
             languageModelJaDesc:
-                '日本語の文章の意味や文脈から、自然な抑揚を決める言語モデル (DeBERTa) です。日本語の読み上げに使います (JP-Extra 版・多言語版のどちらの声でも使います)。',
+                '日本語の文章の意味や文脈から、自然な抑揚を決めるモデルです。読み上げで日本語を読むときと、日本語の読み上げのモデルの学習に使います (JP-Extra 版・多言語版のどちらの声でも使います)。',
             languageModelEn: '英語の言語モデル (DeBERTa)',
             languageModelEnDesc:
-                '英語の文章の意味や文脈から、自然な抑揚を決める言語モデル (DeBERTa) です。英語の発音を調べる辞書 (CMUdict) なども含みます。英語の読み上げに使います。',
+                '英語の文章の意味や文脈から、自然な抑揚を決めるモデルです。読み上げで英語を読むときと、英語の読み上げのモデルの学習に使います。英語の発音を調べる辞書 (CMUdict) なども含みます。',
             languageModelZh: '中国語の言語モデル (RoBERTa)',
             languageModelZhDesc:
-                '中国語の文章の意味や文脈から、自然な抑揚を決める言語モデル (chinese-roberta-wwm-ext-large) です。中国語の読み上げに使います。',
+                '中国語の文章の意味や文脈から、自然な抑揚を決めるモデルです。読み上げで中国語を読むときと、中国語の読み上げのモデルの学習に使います。',
             ttsTrainJpExtra: '学習用の事前学習モデル (JP-Extra 版)',
             ttsTrainJpExtraDesc:
-                'JP-Extra 版の学習の出発点となる学習済みのモデルと、学習中に音声の自然さを判定するモデル (WavLM) です。',
+                'JP-Extra 版の読み上げのモデルの学習で、出発点にする学習済みのモデルです。学習中に音声の自然さを判定するモデル (WavLM) も含みます。',
             ttsTrainMultilingual: '学習用の事前学習モデル (多言語版)',
-            ttsTrainMultilingualDesc: '多言語版の学習の出発点となる学習済みのモデルです。',
+            ttsTrainMultilingualDesc: '多言語版の読み上げのモデルの学習で、出発点にする学習済みのモデルです。',
             jvnvFemaleJpExtraDesc:
-                '女性の声 (JP-Extra 版) です。感情を込めて話した日本語の音声 (JVNV コーパス) から作られた声で、そのまま読み上げに使えます。',
+                '女性の声 (JP-Extra 版) です。感情を込めて話した日本語の音声 (JVNV コーパス) から作られています。日本語を読めます。',
             jvnvMaleJpExtraDesc:
-                '男性の声 (JP-Extra 版) です。感情を込めて話した日本語の音声 (JVNV コーパス) から作られた声で、そのまま読み上げに使えます。',
+                '男性の声 (JP-Extra 版) です。感情を込めて話した日本語の音声 (JVNV コーパス) から作られています。日本語を読めます。',
             jvnvFemaleMultilingualDesc:
-                '女性の声 (多言語版) です。感情を込めて話した日本語の音声 (JVNV コーパス) から作られた声です。英語・中国語も読めますが、話者が日本語話者のため発音は日本語なまりになります。',
+                '女性の声 (多言語版) です。感情を込めて話した日本語の音声 (JVNV コーパス) から作られています。日本語のほか英語・中国語も読めますが、話者が日本語話者のため、英語・中国語の発音は日本語なまりになります。',
             jvnvMaleMultilingualDesc:
-                '男性の声 (多言語版) です。感情を込めて話した日本語の音声 (JVNV コーパス) から作られた声です。英語・中国語も読めますが、話者が日本語話者のため発音は日本語なまりになります。',
+                '男性の声 (多言語版) です。感情を込めて話した日本語の音声 (JVNV コーパス) から作られています。日本語のほか英語・中国語も読めますが、話者が日本語話者のため、英語・中国語の発音は日本語なまりになります。',
         },
     },
     update: {
@@ -433,7 +614,7 @@ export default {
         },
         verifiedEnsemble: '配布元が検証した組み合わせ ({{count}} モデル)',
         categoryEmpty: 'このまとまりのモデルは取得していません。「ダウンロード管理」から取得できます。',
-        quality: '分離の品質 (大きいほど良い): {{values}}',
+        quality: '分離の品質: {{values}}',
         algorithm: '結果の決め方',
         algorithmNotes: {
             avg_wave: '各モデルの結果の波形を平均します。どれかの結果にしか無い音は薄まります (配布元の既定)。',
@@ -563,7 +744,10 @@ export default {
         running: '変換中',
         candidates: '候補',
         noCandidates: '声のモデルとパラメーターを選んで変換を実行すると、結果が候補として並びます。',
-        preview: '試聴',
+        withAccompanimentCreate: '作成',
+        withAccompanimentRecreate: '作り直す',
+        withAccompanimentFor: '{{name}} の変換後 + 伴奏',
+        withAccompanimentRendering: '伴奏と重ねています',
         paramsSummary:
             'キー {{pitch}} / {{f0}} / インデックス {{index}} / エンベロープ {{envelope}} / 保護 {{protect}}',
         targets: {
@@ -588,14 +772,14 @@ export default {
         roomSize: '部屋の大きさ',
         damping: '高域の減衰',
         wetLevel: '残響音の量',
-        dryLevel: '原音の量',
+        dryLevel: '原音の量 (1 で元の大きさ)',
         width: 'ステレオの広がり',
         masterGain: '全体の音量',
-        limiter: '音割れを防ぐ (リミッター)',
-        preview: 'プレビューを作成',
+        preview: '合成を作成',
         rendering: '合成中',
-        hint: 'プレビューは書き出しと同じ処理で作るため、聞いたとおりの音で書き出されます。',
-        stale: '設定または採用した候補が変わっています。もう一度プレビューを作成してください (書き出し時は自動で作り直します)。',
+        notCreated: '「合成を作成」を押すと、合成結果がここに出ます。',
+        hint: '合成結果は書き出しと同じ処理で作るため、聞いたとおりの音で書き出されます。重ねた結果のピークが -1 dB を超える場合は、全体を一律に下げます。',
+        stale: '設定または採用した候補が変わっています。もう一度「合成を作成」を押してください (書き出し時は自動で作り直します)。',
         builtin: {
             standard: '軽いリバーブ',
             dry: 'リバーブなし',

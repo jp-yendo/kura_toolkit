@@ -19,11 +19,6 @@ import {
     Step,
     StepButton,
     Stepper,
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableRow,
     Tooltip,
     Typography,
 } from '@mui/material';
@@ -31,6 +26,8 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import RecordVoiceOverIcon from '@mui/icons-material/RecordVoiceOver';
 import TuneIcon from '@mui/icons-material/Tune';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import QueueMusicIcon from '@mui/icons-material/QueueMusic';
 import { useTranslation } from 'react-i18next';
 import PageContainer from '../../components/common/PageContainer';
 import Panel from '../../components/common/Panel';
@@ -42,7 +39,7 @@ import ReadinessAlert, { useFeatureReadiness } from '../../components/voice/Read
 import VoiceFeatureHeader from '../../components/voice/VoiceFeatureHeader';
 import UserModelIcon from '../../components/voice/UserModelIcon';
 import SeparationWorkbench from '../../components/voice/SeparationWorkbench';
-import SyncPlayer, { type PlayerSource } from '../../components/voice/SyncPlayer';
+import SyncPlayer from '../../components/voice/SyncPlayer';
 import SliderField from '../../components/voice/SliderField';
 import MixForm from '../../components/voice/MixForm';
 import PresetBar from '../../components/voice/PresetBar';
@@ -78,9 +75,6 @@ const F0_ITEMS: Record<F0Method, string | null> = {
     'crepe-tiny': null,
 };
 
-type Step1Target =
-    { kind: 'converted' | 'withAccompaniment'; candidateId: string } | { kind: 'originalVocals' } | { kind: 'source' };
-
 // 候補を破棄するときに消すファイル (変換した声と、伴奏と重ねたもの)
 function candidateFiles(candidate: ConversionCandidate): string[] {
     return candidate.withAccompaniment
@@ -96,8 +90,6 @@ export default function ConversionPage() {
     const conv = useConversionStore();
     const [voices, setVoices] = React.useState<VoiceModelInfo[]>([]);
     const [vocalsMedia, setVocalsMedia] = React.useState<MediaRef | null>(null);
-    const [target, setTarget] = React.useState<Step1Target>({ kind: 'originalVocals' });
-    const [mixTarget, setMixTarget] = React.useState<'mix' | 'source'>('mix');
     const [exportOpen, setExportOpen] = React.useState(false);
     const [confirmInvalidate, setConfirmInvalidate] = React.useState(false);
     const [resetConfirm, setResetConfirm] = React.useState(false);
@@ -130,8 +122,6 @@ export default function ConversionPage() {
         void window.kuraToolkit.voice.media.discardWork(separation.workKey);
         separation.reset();
         useConversionStore.getState().reset();
-        setTarget({ kind: 'originalVocals' });
-        setMixTarget('mix');
     };
 
     // --- 変換に使うボーカルと伴奏 (どちらも複数の音から成る場合は、使うときに 1 つに重ねる) ---
@@ -268,7 +258,6 @@ export default function ConversionPage() {
                 })
             );
             conv.addCandidate(candidate, inputKey);
-            setTarget({ kind: 'converted', candidateId: candidate.id });
         } catch (error) {
             handleError(error);
         }
@@ -299,34 +288,49 @@ export default function ConversionPage() {
         return media;
     };
 
-    const previewMix = async () => {
+    const createMix = async () => {
         try {
             await run(t('voice.mix.rendering'), renderMix);
-            setMixTarget('mix');
         } catch (error) {
             handleError(error);
         }
     };
 
-    // --- 再生対象 ---
-    let step1Source: PlayerSource | null = null;
-    if (target.kind === 'originalVocals' && vocalsMedia) {
-        step1Source = { key: 'original-vocals', url: vocalsMedia.url };
-    } else if (target.kind === 'source' && sourceMedia) {
-        step1Source = { key: 'source', url: sourceMedia.url };
-    } else if (target.kind === 'converted' || target.kind === 'withAccompaniment') {
-        const candidate = conv.candidates.find(item => item.id === target.candidateId);
-        const media = candidate ? (target.kind === 'converted' ? candidate.vocals : candidate.withAccompaniment) : null;
-        if (candidate && media) {
-            step1Source = { key: `${candidate.id}-${target.kind}`, url: media.url };
+    // 候補の変換後のボーカルと伴奏を、音量を変えずにそのまま重ねた試聴用の音を作る (押したときだけ作る手動の更新。
+    // 作り直したら前のものは消す)
+    const createWithAccompaniment = async (candidate: ConversionCandidate) => {
+        try {
+            const media = await run(t('voice.conversion.withAccompanimentRendering'), async jobId =>
+                window.kuraToolkit.voice.conversion.renderMix(jobId, {
+                    workKey,
+                    vocals: candidate.vocals.path,
+                    accompaniment: await singlePath(jobId, accompaniment),
+                    channels: candidate.channels,
+                    pitch: candidate.params.pitch,
+                    params: null,
+                })
+            );
+            const previous = candidate.withAccompaniment;
+            conv.setCandidatePreview(candidate.id, media);
+            if (previous && previous.path !== media.path)
+                void window.kuraToolkit.voice.media.discard(workKey, [previous.path]);
+        } catch (error) {
+            handleError(error);
         }
-    }
-    const step2Source: PlayerSource | null =
-        mixTarget === 'mix' && conv.mix
-            ? { key: `mix-${conv.mixSignature}`, url: conv.mix.url }
-            : sourceMedia
-              ? { key: 'source', url: sourceMedia.url }
-              : null;
+    };
+
+    // 名前と波形を 1 行に並べる行 (分離の画面と同じ形)
+    const playerRow = (key: string, label: string, url: string | null, action?: React.ReactNode) => (
+        <Stack key={key} spacing={0.5} sx={{ minWidth: 0 }}>
+            <Stack direction='row' spacing={1} sx={{ alignItems: 'center', minHeight: 30 }}>
+                <Typography variant='body2' sx={{ fontWeight: 600, flexGrow: 1, overflowWrap: 'anywhere' }}>
+                    {label}
+                </Typography>
+                {action}
+            </Stack>
+            {url && <SyncPlayer source={{ key, url }} keepPosition={false} />}
+        </Stack>
+    );
 
     const exportEntries: ExportEntry[] = adopted
         ? [
@@ -633,131 +637,114 @@ export default function ConversionPage() {
                         </Stack>
                     </Panel>
                     <Stack spacing={1.5} sx={{ minWidth: 0 }}>
-                        <Stack direction='row' spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
-                            <SectionLabel sx={{ flexGrow: 1 }}>{t('voice.conversion.candidates')}</SectionLabel>
-                            <Button
-                                size='small'
-                                variant={target.kind === 'originalVocals' ? 'contained' : 'outlined'}
-                                onClick={() => setTarget({ kind: 'originalVocals' })}
-                            >
-                                {t('voice.conversion.targets.originalVocals')}
-                            </Button>
-                            <Button
-                                size='small'
-                                variant={target.kind === 'source' ? 'contained' : 'outlined'}
-                                disabled={!sourceMedia}
-                                onClick={() => setTarget({ kind: 'source' })}
-                            >
-                                {t('voice.conversion.targets.source')}
-                            </Button>
-                        </Stack>
-                        <Panel disablePadding sx={{ overflow: 'auto' }}>
-                            {conv.candidates.length === 0 ? (
-                                <Typography variant='body2' color='text.secondary' sx={{ p: 2, lineHeight: 1.6 }}>
-                                    {t('voice.conversion.noCandidates')}
-                                </Typography>
-                            ) : (
-                                <Table size='small'>
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell padding='checkbox'>{t('voice.separation.adopt')}</TableCell>
-                                            <TableCell>{t('voice.conversion.voice')}</TableCell>
-                                            <TableCell>{t('voice.conversion.preview')}</TableCell>
-                                            <TableCell padding='checkbox' />
-                                        </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {conv.candidates.map(candidate => (
-                                            <TableRow key={candidate.id} hover>
-                                                <TableCell padding='checkbox'>
+                        {/* 元の音源・変換前のボーカルを上に置き、作った候補を作った順に下へ足していく */}
+                        <Panel>
+                            <Stack spacing={1.5}>
+                                {sourceMedia &&
+                                    playerRow('source', t('voice.conversion.targets.source'), sourceMedia.url)}
+                                {conv.inputMode === 'separate' &&
+                                    vocalsMedia &&
+                                    playerRow(
+                                        'original-vocals',
+                                        t('voice.conversion.targets.originalVocals'),
+                                        vocalsMedia.url
+                                    )}
+                            </Stack>
+                        </Panel>
+                        <SectionLabel>{t('voice.conversion.candidates')}</SectionLabel>
+                        {conv.candidates.length === 0 ? (
+                            <Typography variant='body2' color='text.secondary' sx={{ lineHeight: 1.6 }}>
+                                {t('voice.conversion.noCandidates')}
+                            </Typography>
+                        ) : (
+                            conv.candidates.map(candidate => (
+                                <Panel key={candidate.id}>
+                                    <Stack spacing={1.5}>
+                                        <Stack direction='row' spacing={1} sx={{ alignItems: 'center' }}>
+                                            <FormControlLabel
+                                                sx={{ m: 0 }}
+                                                control={
                                                     <Radio
                                                         size='small'
                                                         checked={conv.adoptedId === candidate.id}
                                                         onChange={() => conv.setAdopted(candidate.id)}
                                                         slotProps={{ input: { 'aria-label': candidate.voiceName } }}
                                                     />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Typography variant='body2' sx={{ fontWeight: 600 }}>
-                                                        {candidate.voiceName}
+                                                }
+                                                label={
+                                                    <Typography variant='body2' color='text.secondary'>
+                                                        {t('voice.separation.adopt')}
                                                     </Typography>
-                                                    <Typography variant='caption' color='text.secondary'>
-                                                        {t('voice.conversion.paramsSummary', {
-                                                            pitch: candidate.params.pitch,
-                                                            f0: candidate.params.f0Method,
-                                                            index: candidate.params.indexRate.toFixed(2),
-                                                            envelope: candidate.params.volumeEnvelope.toFixed(2),
-                                                            protect: candidate.params.protect.toFixed(2),
-                                                        })}
-                                                    </Typography>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Stack direction='row' spacing={0.5}>
-                                                        <Button
-                                                            size='small'
-                                                            variant={
-                                                                target.kind === 'converted' &&
-                                                                target.candidateId === candidate.id
-                                                                    ? 'contained'
-                                                                    : 'outlined'
-                                                            }
-                                                            onClick={() =>
-                                                                setTarget({
-                                                                    kind: 'converted',
-                                                                    candidateId: candidate.id,
-                                                                })
-                                                            }
-                                                        >
-                                                            {t('voice.conversion.targets.converted')}
-                                                        </Button>
-                                                        {candidate.withAccompaniment && (
-                                                            <Button
-                                                                size='small'
-                                                                variant={
-                                                                    target.kind === 'withAccompaniment' &&
-                                                                    target.candidateId === candidate.id
-                                                                        ? 'contained'
-                                                                        : 'outlined'
-                                                                }
-                                                                onClick={() =>
-                                                                    setTarget({
-                                                                        kind: 'withAccompaniment',
-                                                                        candidateId: candidate.id,
-                                                                    })
-                                                                }
-                                                            >
-                                                                {t('voice.conversion.targets.withAccompaniment')}
-                                                            </Button>
-                                                        )}
-                                                    </Stack>
-                                                </TableCell>
-                                                <TableCell padding='checkbox'>
-                                                    <Tooltip title={t('voice.common.deleteCandidate')}>
-                                                        <span>
-                                                            <IconButton
-                                                                size='small'
-                                                                aria-label={t('voice.common.deleteCandidate')}
-                                                                disabled={busy}
-                                                                onClick={() => {
-                                                                    conv.removeCandidate(candidate.id);
-                                                                    void window.kuraToolkit.voice.media.discard(
-                                                                        workKey,
-                                                                        candidateFiles(candidate)
-                                                                    );
-                                                                }}
-                                                            >
-                                                                <DeleteOutlineIcon fontSize='small' />
-                                                            </IconButton>
-                                                        </span>
-                                                    </Tooltip>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            )}
-                        </Panel>
-                        <SyncPlayer source={step1Source} />
+                                                }
+                                            />
+                                            <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                                                <Typography variant='body2' sx={{ fontWeight: 600 }}>
+                                                    {candidate.voiceName}
+                                                </Typography>
+                                                <Typography variant='caption' color='text.secondary'>
+                                                    {t('voice.conversion.paramsSummary', {
+                                                        pitch: candidate.params.pitch,
+                                                        f0: candidate.params.f0Method,
+                                                        index: candidate.params.indexRate.toFixed(2),
+                                                        envelope: candidate.params.volumeEnvelope.toFixed(2),
+                                                        protect: candidate.params.protect.toFixed(2),
+                                                    })}
+                                                </Typography>
+                                            </Box>
+                                            <Tooltip title={t('voice.common.deleteCandidate')}>
+                                                <span>
+                                                    <IconButton
+                                                        size='small'
+                                                        aria-label={t('voice.common.deleteCandidate')}
+                                                        disabled={busy}
+                                                        onClick={() => {
+                                                            conv.removeCandidate(candidate.id);
+                                                            void window.kuraToolkit.voice.media.discard(
+                                                                workKey,
+                                                                candidateFiles(candidate)
+                                                            );
+                                                        }}
+                                                    >
+                                                        <DeleteOutlineIcon fontSize='small' />
+                                                    </IconButton>
+                                                </span>
+                                            </Tooltip>
+                                        </Stack>
+                                        {playerRow(
+                                            `${candidate.id}-converted`,
+                                            t('voice.conversion.targets.converted'),
+                                            candidate.vocals.url
+                                        )}
+                                        {accompaniment.length > 0 &&
+                                            playerRow(
+                                                `${candidate.id}-with-accompaniment-${candidate.withAccompaniment?.path ?? ''}`,
+                                                t('voice.conversion.targets.withAccompaniment'),
+                                                candidate.withAccompaniment?.url ?? null,
+                                                <Button
+                                                    size='small'
+                                                    variant='outlined'
+                                                    startIcon={
+                                                        candidate.withAccompaniment ? (
+                                                            <RefreshIcon />
+                                                        ) : (
+                                                            <QueueMusicIcon />
+                                                        )
+                                                    }
+                                                    disabled={busy}
+                                                    aria-label={t('voice.conversion.withAccompanimentFor', {
+                                                        name: candidate.voiceName,
+                                                    })}
+                                                    onClick={() => void createWithAccompaniment(candidate)}
+                                                >
+                                                    {candidate.withAccompaniment
+                                                        ? t('voice.conversion.withAccompanimentRecreate')
+                                                        : t('voice.conversion.withAccompanimentCreate')}
+                                                </Button>
+                                            )}
+                                    </Stack>
+                                </Panel>
+                            ))
+                        )}
                         <Stack direction='row' spacing={1} sx={{ justifyContent: 'flex-end' }}>
                             <Button onClick={() => conv.setStep(0)}>{t('voice.common.back')}</Button>
                             <Button variant='contained' disabled={!adopted} onClick={() => conv.setStep(2)}>
@@ -791,6 +778,14 @@ export default function ConversionPage() {
                                 hasAccompaniment={accompaniment.length > 0}
                                 disabled={busy}
                             />
+                            <Button
+                                variant='contained'
+                                startIcon={<TuneIcon />}
+                                disabled={busy || !adopted}
+                                onClick={() => void createMix()}
+                            >
+                                {t('voice.mix.preview')}
+                            </Button>
                         </Stack>
                     </Panel>
                     <Stack spacing={1.5} sx={{ minWidth: 0 }}>
@@ -798,31 +793,22 @@ export default function ConversionPage() {
                             {t('voice.mix.hint')}
                         </Typography>
                         {mixStale && <Alert severity='info'>{t('voice.mix.stale')}</Alert>}
-                        <Stack direction='row' spacing={1}>
-                            <Button
-                                variant='contained'
-                                startIcon={<TuneIcon />}
-                                disabled={busy || !adopted}
-                                onClick={() => void previewMix()}
-                            >
-                                {t('voice.mix.preview')}
-                            </Button>
-                            <Button
-                                variant={mixTarget === 'mix' ? 'contained' : 'outlined'}
-                                disabled={!conv.mix}
-                                onClick={() => setMixTarget('mix')}
-                            >
-                                {t('voice.conversion.targets.mix')}
-                            </Button>
-                            <Button
-                                variant={mixTarget === 'source' ? 'contained' : 'outlined'}
-                                disabled={!sourceMedia}
-                                onClick={() => setMixTarget('source')}
-                            >
-                                {t('voice.conversion.targets.source')}
-                            </Button>
-                        </Stack>
-                        <SyncPlayer source={step2Source} />
+                        <Panel>
+                            <Stack spacing={1.5}>
+                                {sourceMedia &&
+                                    playerRow('mix-source', t('voice.conversion.targets.source'), sourceMedia.url)}
+                                {playerRow(
+                                    `mix-${conv.mixSignature ?? ''}`,
+                                    t('voice.conversion.targets.mix'),
+                                    conv.mix?.url ?? null
+                                )}
+                                {!conv.mix && (
+                                    <Typography variant='body2' color='text.secondary' sx={{ lineHeight: 1.6 }}>
+                                        {t('voice.mix.notCreated')}
+                                    </Typography>
+                                )}
+                            </Stack>
+                        </Panel>
                         <Stack direction='row' spacing={1} sx={{ justifyContent: 'flex-end' }}>
                             <Button onClick={() => conv.setStep(1)}>{t('voice.common.back')}</Button>
                             <Button variant='contained' disabled={!adopted || busy} onClick={() => setExportOpen(true)}>

@@ -358,7 +358,7 @@ export type ConversionCandidate = {
     vocals: MediaRef;
     // 合成で出力するチャンネル数 (元の音源がステレオなら 2。ボーカルは左右に同じ音を置いた中央定位にする)
     channels: number;
-    // 変換後のボーカルと伴奏を既定の音量で重ねた試聴用の音 (伴奏が無い場合は null)
+    // 変換後のボーカルと伴奏をそのまま重ねた試聴用の音。変換の段階で求められたときに作る (まだ無ければ null)
     withAccompaniment: MediaRef | null;
     createdAt: number;
 };
@@ -377,9 +377,9 @@ export type ReverbParams = {
     roomSize: number;
     // 高域の減衰 (0-1)
     damping: number;
-    // 残響音の量 (0-1)
+    // 残響音の量 (0-1。音量の倍率)
     wetLevel: number;
-    // 原音の量 (0-1)
+    // 原音の量 (0-1。音量の倍率で、1 で元の大きさのまま)
     dryLevel: number;
     // ステレオの広がり (0-1)
     width: number;
@@ -390,8 +390,6 @@ export type MixParams = {
     accompanimentGainDb: number;
     masterGainDb: number;
     reverb: ReverbParams;
-    // 音割れを防ぐリミッター
-    limiter: boolean;
 };
 
 export type MixRenderRequest = {
@@ -402,7 +400,8 @@ export type MixRenderRequest = {
     channels: number;
     // キーの変更量。オクターブ単位以外なら伴奏を同じだけ移調する
     pitch: number;
-    params: MixParams;
+    // null は変換の段階の試聴用 (音量を変えず、リバーブなしでそのまま重ねる)
+    params: MixParams | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -652,7 +651,6 @@ export type VoicePhaseId =
     | 'convert'
     | 'loudness'
     | 'pitchShift'
-    | 'mixPreview'
     | 'mix'
     | 'synthesize'
     | 'stretch'

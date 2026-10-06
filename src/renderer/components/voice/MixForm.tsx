@@ -116,17 +116,6 @@ export default function MixForm({ value, onChange, hasAccompaniment, disabled }:
                 disabled={disabled}
                 onChange={masterGainDb => onChange({ ...value, masterGainDb })}
             />
-            <FormControlLabel
-                disabled={disabled}
-                control={
-                    <Switch
-                        size='small'
-                        checked={value.limiter}
-                        onChange={(_e, limiter) => onChange({ ...value, limiter })}
-                    />
-                }
-                label={t('voice.mix.limiter')}
-            />
         </Stack>
     );
 }

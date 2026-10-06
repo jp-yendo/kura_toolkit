@@ -40,7 +40,6 @@ export default {
         convert: 'Converting the voice',
         loudness: 'Matching the volume',
         pitchShift: 'Changing the key of the accompaniment',
-        mixPreview: 'Mixing with the accompaniment',
         mix: 'Mixing',
         synthesize: 'Creating the audio',
         stretch: 'Adjusting the speed',

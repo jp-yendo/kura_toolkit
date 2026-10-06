@@ -40,7 +40,6 @@ export default {
         convert: '声を変換しています',
         loudness: '音量をそろえています',
         pitchShift: '伴奏の音程を変えています',
-        mixPreview: '伴奏と重ねています',
         mix: '合成しています',
         synthesize: '音声を作成しています',
         stretch: '話速を調整しています',

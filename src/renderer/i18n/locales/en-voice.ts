@@ -128,20 +128,16 @@ export default {
         separatorNoMatch: 'No models match the conditions.',
         separatorEnsemblePartial: '{{installed}} of {{total}} downloaded',
         separatorEnsembleDescriptions: {
-            instrumental_clean:
-                'Keeps vocals out of the accompaniment the most. In exchange, the instruments may sound slightly thinner.',
-            instrumental_full:
-                'Keeps the instruments as intact as possible. In exchange, a little vocal residue or noise may remain.',
-            instrumental_balanced:
-                'Balances little leftover noise in the accompaniment against the fullness of the instruments.',
-            instrumental_low_resource: 'For little GPU memory, or when speed comes first.',
-            vocal_balanced: 'The best overall vocal quality.',
-            vocal_clean:
-                'Keeps the accompaniment out of the vocals the most. In exchange, parts of the voice may be lost.',
-            vocal_full:
-                'Keeps as much of the voice as possible, including harmonies and chorus. In exchange, a little accompaniment may remain.',
-            vocal_rvc: 'Suited to making voices for Voice Conversion (RVC) training.',
-            karaoke: 'Splits vocals into lead vocals and backing vocals, with higher quality than a single model.',
+            instrumental_clean: 'Aims to keep vocals out of the accompaniment as much as possible.',
+            instrumental_full: 'Aims to keep as much of the instruments as possible.',
+            instrumental_balanced: 'Balances little noise against the fullness of the instruments.',
+            instrumental_low_resource: 'A fast combination for little GPU memory.',
+            vocal_balanced: 'Aims for the best overall vocal quality.',
+            vocal_clean: 'Aims to keep the instruments out of the vocals as much as possible.',
+            vocal_full: 'Aims to keep as much of the vocals as possible, including harmonies.',
+            vocal_rvc: 'Suited to making voices for training Voice Conversion (RVC) and similar models.',
+            karaoke:
+                'A combination of 3 models that separates the lead vocals. Its separation quality (SDR) is higher than a single model (about 10.6 against about 10.2).',
         },
         separatorPurposes: {
             vocals: { title: 'Vocal extraction' },
@@ -157,119 +153,287 @@ export default {
             step2: 'Second: split the vocals into lead and backing vocals',
         },
         separatorModelNotes: {
-            vrHp: 'A high-quality (HP) VR Arch model aimed mainly at extracting the accompaniment.',
-            vrHp2: 'An improved high-quality (HP2) VR Arch model aimed mainly at extracting the accompaniment.',
-            vrHpVocal: 'A high-quality VR Arch model aimed mainly at extracting vocals.',
-            vrKaraoke:
-                'A VR Arch model that separates the lead vocals from the rest (backing vocals and accompaniment).',
-            vrSp: 'An older-generation VR Arch model (SP). The number in the name is the sample rate it handles. HP and later models, or MDX-Net and later, generally give higher quality.',
-            vrWind: 'Separates woodwinds (flute, saxophone and the like) from the rest of the sound.',
-            vrDeEcho: 'Removes echo (delayed, repeated reflections).',
-            vrDeEchoAggressive: 'Removes echo more strongly than Normal.',
-            vrDeEchoDeReverb: 'Removes echo and reverb together.',
-            vrDeNoise: 'Removes noise.',
-            vrDeNoiseLite: 'A lighter version of the noise removal model.',
-            vrBve: 'Splits vocals into lead vocals and backing vocals (BVE: backing vocal extraction). Extract the vocals first, then use it on them.',
-            vrMgmHigh: 'An older-generation (v4) VR Arch model that focuses on the high frequency range.',
-            vrMgmLow: 'An older-generation (v4) VR Arch model that focuses on the low frequency range.',
-            vrMgmMain: 'An older-generation (v4) VR Arch model.',
-            vrDeReverb: 'A VR Arch model that removes reverb.',
-            mdxInstHq:
-                'A high-quality (HQ) MDX-Net model aimed mainly at extracting the accompaniment. Higher numbers are newer versions.',
-            mdxVocalEarly: 'An early MDX-Net model aimed mainly at extracting vocals.',
-            mdxInstEarly: 'An early MDX-Net model aimed mainly at extracting the accompaniment.',
-            mdxKaraoke:
-                'An MDX-Net model that separates the lead vocals from the rest (backing vocals and accompaniment).',
-            mdxVocFt: 'A tuned MDX-Net vocal model, with high vocal quality among MDX-Net models.',
-            mdxKimVocal: 'An MDX-Net model by Kim aimed mainly at extracting vocals. 2 is an improved version of 1.',
-            mdxKimInst: 'An MDX-Net model by Kim aimed mainly at extracting the accompaniment.',
-            mdxReverb: 'Splits the sound into the reverb and the sound without reverb.',
-            crowd: 'Removes crowd noise and applause from live recordings.',
-            kuielabVocals:
-                'Made for the Music Demixing Challenge; separates vocals from the rest. a and b were trained separately.',
-            kuielabOther:
-                'Made for the Music Demixing Challenge; separates the instruments other than vocals, drums and bass. a and b were trained separately.',
-            kuielabBass:
-                'Made for the Music Demixing Challenge; separates bass from the rest. a and b were trained separately.',
-            kuielabDrums:
-                'Made for the Music Demixing Challenge; separates drums from the rest. a and b were trained separately.',
-            demucs: 'The default Demucs v4 model (htdemucs), splitting into vocals, drums, bass and other.',
-            demucsFt:
-                'A fine-tuned version of the default Demucs v4 model (htdemucs). It takes about 4 times longer and might be a little better.',
-            demucsMmi: 'A previous-generation (Hybrid Demucs) model splitting into vocals, drums, bass and other.',
-            demucs6s:
-                'A Demucs v4 model splitting into vocals, drums, bass, guitar, piano and other. The piano separation is of lower quality.',
-            mdx23cInstVoc: 'An MDX23C model that splits into vocals and accompaniment.',
-            viperxBsRoformer:
-                'A BS-Roformer model by viperx that splits into vocals and accompaniment; an early high-quality Roformer model.',
-            viperxMelRoformer: 'A Mel-Roformer model by viperx that splits into vocals and accompaniment.',
-            drumBass: 'Separates drums and bass together from the rest of the sound.',
-            unwaInst:
-                'A Mel-Roformer model by unwa aimed mainly at extracting the accompaniment. V2 is an improved version of V1.',
-            unwaInstPlus: "An improved version of unwa's accompaniment model (Inst V1).",
-            unwaInstE:
-                "A version (E) of unwa's accompaniment model that focuses on keeping the fullness of the instruments; more noise tends to remain. Plus is its improved version.",
-            unwaDuality:
-                'A model by unwa that aims to extract both vocals and accompaniment equally cleanly. V2 is an improved version of V1.',
-            mdx23cDeReverb: 'An MDX23C model that removes reverb.',
-            drumSep:
-                'Splits drums into kick, snare, toms, hi-hat, ride and crash. Extract the drums first, then use it on them.',
-            roformerKaraoke:
-                'A Roformer model that separates the lead vocals from the rest (backing vocals and accompaniment). Each author tunes it differently.',
-            melDenoise: 'A Mel-Roformer model that removes noise.',
-            melDenoiseAggressive: 'A version of the Mel-Roformer noise removal model that removes noise more strongly.',
-            denoiseDebleed:
-                'Removes noise and vocal leakage left in the accompaniment. Use it after extracting the accompaniment.',
-            bsDeReverb: 'A BS-Roformer model that removes reverb.',
-            kimVocals: 'A Mel-Roformer vocal model by Kimberley Jensen; the base of many tuned versions.',
-            kimFt: "Versions of Kim's vocal model tuned by unwa. Higher numbers are newer versions.",
-            kimFtBleedless:
-                'A version of the tuned Kim vocal model (FT 2) that leaves less instrument sound in the vocals.',
-            revive: 'A BS-Roformer vocal model by unwa.',
-            reviveV2: "A version of unwa's vocal model (Revive) that leaves less instrument sound in the vocals.",
-            reviveV3e: "A version of unwa's vocal model (Revive) that keeps more of the vocals, including harmonies.",
-            becruilyVocals: 'A Mel-Roformer vocal model by becruily.',
-            becruilyInst: 'A Mel-Roformer accompaniment model by becruily, with especially high accompaniment quality.',
-            vocalFullness:
-                'A model by Aname that focuses on keeping as much of the vocals as possible, including harmonies.',
-            gaboxBsVocals: 'A BS-Roformer vocal model by Gabox.',
-            gaboxVocals: 'A Mel-Roformer vocal model by Gabox. V2 is an improved version.',
-            gaboxVocalsFv:
-                "Versions (FV) of Gabox's vocal model that focus on keeping the fullness of the vocals. Higher numbers are newer versions.",
-            gaboxInst: 'A Mel-Roformer accompaniment model by Gabox. Higher numbers are newer versions.',
-            gaboxInstBleedless:
-                "Versions of Gabox's accompaniment model that focus on leaving less vocals in the accompaniment. Higher numbers are newer versions.",
-            gaboxInstFullness:
-                "Versions of Gabox's accompaniment model that focus on keeping the fullness of the instruments; a little vocals may remain. Higher numbers are newer versions.",
-            gaboxInstFullnessNoisy:
-                "Keeps even more of the instruments than Gabox's Fullness V4; more noise tends to remain.",
-            gaboxInstV: "Newer versions (INSTV) of Gabox's accompaniment model. Higher numbers are newer versions.",
-            gaboxInstVN:
-                "Versions (N) of Gabox's INSTV accompaniment models that put the fullness of the instruments first; more noise tends to remain.",
-            gaboxInstFv7z:
-                "A version of Gabox's accompaniment model that leaves especially little vocals in the accompaniment.",
-            gaboxInstFv: "Newer versions (FV) of Gabox's accompaniment model.",
-            anvuewDeReverb: 'A Mel-Roformer model by anvuew that removes reverb.',
-            anvuewDeReverbLess: "A version of anvuew's reverb removal model that removes reverb more gently.",
-            anvuewDeReverbMono: "A version of anvuew's reverb removal model for mono recordings.",
-            sucialDeReverbBig:
-                'A large Mel-Roformer model by Sucial that removes reverb. Super Big is an even larger version.',
-            sucialDeReverbEcho: 'A model by Sucial that removes reverb and echo together. V2 is an improved version.',
-            sucialDeReverbEchoFused: "Sucial's reverb and echo removal models merged into one.",
-            syhft: "Versions of Kim's vocal model tuned by SYH99999. Higher numbers are newer, and Big is a larger version.",
-            bigBeta: 'A large Mel-Roformer vocal model by unwa. Higher numbers are newer versions.',
-            chorusMaleFemale: 'A model by Sucial that splits a chorus into male and female voices.',
-            maleFemale: 'A model by aufr33 that splits voices into male and female voices.',
-            aspiration:
-                'A model by Sucial that separates breath sounds from vocals. Less Aggressive separates them more gently.',
-            bleedSuppressor:
-                'Removes vocal and other leakage left in the accompaniment. Use it after extracting the accompaniment.',
-            resurrectionVocals: 'A BS-Roformer vocal model by unwa with high vocal quality.',
-            resurrectionInst:
-                'A BS-Roformer accompaniment model by unwa. The file is small and processing is relatively light.',
-            resurrectionInstGabox: "unwa's accompaniment model (Instrumental Resurrection) tuned by Gabox.",
-            bsRoformerSw:
-                'A BS-Roformer model by jarredou that splits into vocals, drums, bass, guitar, piano and other.',
+            m_10_SP_UVR_2B_32000_1:
+                'An older standard-precision (SP) model that needs little computation. Its bandwidth is narrow (up to about 16 kHz) and its quality is below newer models.',
+            m_11_SP_UVR_2B_32000_2:
+                'An older standard-precision (SP) model that needs little computation. Its bandwidth is narrow (up to about 16 kHz) and its quality is below newer models.',
+            m_12_SP_UVR_3B_44100:
+                'An older standard-precision (SP) model that needs little computation. Its quality is below newer models.',
+            m_13_SP_UVR_4B_44100_1:
+                'An older standard-precision (SP) model that needs little computation. It separates gently, so vocals tend to remain.',
+            m_14_SP_UVR_4B_44100_2:
+                'An older standard-precision (SP) model that needs little computation. It separates gently, so vocals tend to remain.',
+            m_15_SP_UVR_MID_44100_1:
+                'An older standard-precision (SP) model that needs little computation. Less clear, but tends to be less noisy.',
+            m_16_SP_UVR_MID_44100_2:
+                'An older standard-precision (SP) model that needs little computation. Less clear, but tends to be less noisy.',
+            m_17_HP_Wind_Inst_UVR:
+                'Separates woodwinds (flute, saxophone and the like) from the rest. Use it after extracting the accompaniment. It sometimes picks up strings as woodwinds.',
+            m_1_HP_UVR:
+                'A higher-precision (HP) model aimed mainly at the accompaniment. Reliable, and keeps drums more strongly than 2_HP.',
+            m_2_HP_UVR:
+                'A higher-precision (HP) model aimed mainly at the accompaniment. Much faster than 1_HP with a crisp sound, but more vocal residue remains.',
+            m_3_HP_Vocal_UVR: 'A higher-precision (HP) model aimed mainly at extracting vocals.',
+            m_4_HP_Vocal_UVR: 'A higher-precision (HP) model aimed mainly at extracting vocals.',
+            m_5_HP_Karaoke_UVR:
+                'Removes the lead vocals and keeps the backing vocals with the accompaniment. Works better on vocals extracted first than on the full song. Its quality is below newer models.',
+            m_6_HP_Karaoke_UVR:
+                'Removes the lead vocals and keeps the backing vocals with the accompaniment. Works better on vocals extracted first than on the full song. Its quality is below newer models.',
+            m_7_HP2_UVR:
+                'A large (HP2) accompaniment model. It leaves the least vocal residue of the VR models, at the cost of fullness and some high end. Very slow.',
+            m_8_HP2_UVR:
+                'A lightly fine-tuned version of 9_HP2 (large, HP2). On its own it is usually worse than 9_HP2; it suits being paired with it in an ensemble.',
+            m_9_HP2_UVR:
+                'A large (HP2) accompaniment model. Gives the most consistent results across songs. Heavy to run.',
+            m_aspiration_mel_band_roformer_less_aggr_sdr_18_1201: 'A gentler version of the breath separation model.',
+            m_aspiration_mel_band_roformer_sdr_18_9845:
+                'Separates breath sounds from vocals, for mixing work. It also grabs some sounds other than breaths.',
+            m_BS_Roformer_SW:
+                'Splits into vocals, drums, bass, guitar, piano and other. Top-level quality for every part except vocals and especially strong on guitar and piano, but anything percussive goes to the drums, and finger snaps or foot taps can end up in the vocals.',
+            m_bs_roformer_instrumental_resurrection_gabox:
+                'A fine-tune of the Resurrection accompaniment model with more fullness (close to Inst V1e).',
+            m_bs_roformer_instrumental_resurrection_unwa:
+                'A small, fast accompaniment model with fullness between Inst V1e and V1e Plus. It keeps vocals out well, but is muddier than V1e Plus.',
+            m_bs_roformer_karaoke_anvuew:
+                'Separates the lead vocals from the rest (backing vocals and accompaniment). Full, bright lead vocals, but the lead can leak into the accompaniment; extracting the vocals first prevents this.',
+            m_bs_roformer_karaoke_frazer_becruily:
+                'Separates the lead vocals from the rest (backing vocals and accompaniment). Especially good with harmonies; ad-libs and multiple leads go to the lead side. It can miss radio-effect vocals.',
+            m_bs_roformer_male_female_by_aufr33_sdr_7_2889:
+                'A beta model that splits voices into male and female. Extract the vocals first.',
+            m_bs_roformer_vocals_gabox: 'A vocal model. No published description was found.',
+            m_bs_roformer_vocals_resurrection_unwa: 'A small vocal model with both low bleed and high quality.',
+            m_bs_roformer_vocals_revive_unwa:
+                'A vocal model fine-tuned from BS-Roformer 1297, with less instrument bleed in the vocals. Experimental.',
+            m_bs_roformer_vocals_revive_v2_unwa:
+                'The vocal model with the highest bleedless score among published vocal models. Slower to run.',
+            m_bs_roformer_vocals_revive_v3e_unwa:
+                'A version that pushes vocal fullness to the maximum. It has issues with harmonies and tends to be noisy.',
+            m_denoise_mel_band_roformer_aufr33_aggr_sdr_27_9768:
+                'Removes noise more strongly; it sometimes deletes parts of the mix such as snares.',
+            m_denoise_mel_band_roformer_aufr33_sdr_27_9959:
+                'Removes noise, more gently than the VR DeNoise. Also usable for crowd removal.',
+            m_dereverb_echo_mel_band_roformer_sdr_10_0169:
+                'Removes reverb and echo (delay) together (vocals only). Some harmonies are removed too.',
+            m_dereverb_echo_mel_band_roformer_sdr_13_4843_v2:
+                'An improved version of the reverb and echo removal model (V1), retrained on many more songs (vocals only). Most harmonies are removed too.',
+            m_dereverb_big_mbr_ep_362: 'Removes large reverb (vocals only). Most harmonies are removed too.',
+            m_dereverb_echo_mbr_fused:
+                'Fuses V2, Big and Super Big into one, removing both small and large reverb at once (vocals only). The version the author recommends.',
+            m_dereverb_mel_band_roformer_anvuew_sdr_19_1729:
+                'Removes reverb from vocals aggressively (vocals only). The output leans toward mono, and off-center harmonies and instrument residue are removed too.',
+            m_dereverb_mel_band_roformer_less_aggressive_anvuew_sdr_18_8050:
+                'A gentler version of the vocal reverb removal model (vocals only), chosen for stereo and layered vocals.',
+            m_dereverb_mel_band_roformer_mono_anvuew:
+                'A vocal reverb removal model with stronger reverb removal (vocals only). Works on mono and speech, but removes less instrument residue and harmony.',
+            m_dereverb_super_big_mbr_ep_346:
+                'For extremely large reverb; rarely needed (vocals only). Most harmonies are removed too.',
+            m_deverb_bs_roformer_8_384dim_10depth:
+                'Removes reverb from vocals. It also removes off-center harmonies and vocal effects, so it suits a single voice or speech, not choirs. Some echo can remain.',
+            m_hdemucs_mmi:
+                'A previous-generation (Hybrid Demucs) model splitting into 4 parts. The fastest Demucs model, but of lower quality.',
+            m_htdemucs:
+                'The default Demucs v4 model, splitting into vocals, drums, bass and other. Trained on the standard MusDB data plus 800 songs.',
+            m_htdemucs_6s:
+                'Splits into vocals, drums, bass, guitar, piano and other. Guitar is fair, but piano is poor, and overall bleed is higher than with the 4-part models.',
+            m_htdemucs_ft:
+                'A fine-tuned version of the default Demucs v4 model, splitting into 4 parts. It takes about 4 times longer and can be slightly better.',
+            m_Kim_Inst:
+                'An accompaniment model. Cleaner and higher quality than Inst 3, but noisier. Up to about 17.7 kHz.',
+            m_Kim_Vocal_1: 'A vocal model.',
+            m_Kim_Vocal_2: 'A newer vocal model than Kim Vocal 1. It has a high-frequency cutoff and can be noisy.',
+            m_kuielab_a_bass:
+                'From the KUIELab entry, a top entry in the 2021 Music Demixing Challenge. Separates the bass from the rest. The version for the track limited to the given training data (A), where it placed 2nd.',
+            m_kuielab_a_drums:
+                'From the KUIELab entry, a top entry in the 2021 Music Demixing Challenge. Separates the drums from the rest. The version for the track limited to the given training data (A), where it placed 2nd.',
+            m_kuielab_a_other:
+                'From the KUIELab entry, a top entry in the 2021 Music Demixing Challenge. Separates the instruments other than vocals, drums and bass. The version for the track limited to the given training data (A), where it placed 2nd.',
+            m_kuielab_a_vocals:
+                'From the KUIELab entry, a top entry in the 2021 Music Demixing Challenge. Separates vocals from the rest. The version for the track limited to the given training data (A), where it placed 2nd.',
+            m_kuielab_b_bass:
+                'From the KUIELab entry, a top entry in the 2021 Music Demixing Challenge. Separates the bass from the rest. The version for the track allowing other training data (B), where it placed 3rd. Fast, but of average quality.',
+            m_kuielab_b_drums:
+                'From the KUIELab entry, a top entry in the 2021 Music Demixing Challenge. Separates the drums from the rest. The version for the track allowing other training data (B), where it placed 3rd. Fast, but of average quality.',
+            m_kuielab_b_other:
+                'From the KUIELab entry, a top entry in the 2021 Music Demixing Challenge. Separates the instruments other than vocals, drums and bass. The version for the track allowing other training data (B), where it placed 3rd. Fast, but of average quality.',
+            m_kuielab_b_vocals:
+                'From the KUIELab entry, a top entry in the 2021 Music Demixing Challenge. Separates vocals from the rest. The version for the track allowing other training data (B), where it placed 3rd. Fast, but of average quality.',
+            m_MDX23C_8KFFT_InstVoc_HQ:
+                'Separates vocals and accompaniment over the full band. Gives good results for many songs and recovers the character of the voice well, but leaves more vocals in the accompaniment and can remove breaths.',
+            m_MDX23C_De_Reverb_aufr33_jarredou:
+                'Removes reverb from vocals, including room reverb. Cleaner than the VR reverb removal, but can make some sounds pinched. Also suits choirs and backing vocals.',
+            m_MDX23C_DrumSep_aufr33_jarredou:
+                'Splits drums into kick, snare, toms, hi-hat, ride and crash. Extract the drums first. Kick, snare and toms come out clean, but it struggles to tell ride, hi-hat and crash apart.',
+            m_mel_band_roformer_bleed_suppressor_v1:
+                'Removes vocal residue and other bleed left in an extracted accompaniment. Use it after extracting the accompaniment (for example with Inst V1 or V1e).',
+            m_mel_band_roformer_crowd_aufr33_viperx_sdr_8_7144:
+                'Removes crowd noise from live recordings. Keeps instruments and vocals better than the MDX-Net crowd model, at the cost of some crowd residue.',
+            m_mel_band_roformer_denoise_debleed_gabox:
+                'Removes the noise produced by fullness-oriented accompaniment models; it cannot remove vocal residue. Running it on the full song first, then an accompaniment model (such as INSTV6N), gives a clean, full result.',
+            m_mel_band_roformer_instrumental_2_gabox:
+                'The second version of the base accompaniment model, balancing fullness and bleed.',
+            m_mel_band_roformer_instrumental_3_gabox:
+                'The third version of the base accompaniment model. Less full and noisier, and some vocal residue can remain.',
+            m_mel_band_roformer_instrumental_becruily:
+                'An accompaniment model as clean as Inst V1 with less noise, and it keeps vocal chops. Struggles with low-passed vocals.',
+            m_mel_band_roformer_instrumental_bleedless_v1_gabox:
+                'The first version that emphasizes keeping vocals out of the accompaniment (B).',
+            m_mel_band_roformer_instrumental_bleedless_v2_gabox:
+                'A version that emphasizes keeping vocals out of the accompaniment (B).',
+            m_mel_band_roformer_instrumental_bleedless_v3_gabox:
+                'The B version that puts the most weight on keeping vocals out of the accompaniment. It can be muffled.',
+            m_mel_band_roformer_instrumental_fullness_noise_v4_gabox:
+                'Even fuller than Fullness V4, but with a significant amount of noise.',
+            m_mel_band_roformer_instrumental_fullness_v1_gabox:
+                'The first version that emphasizes accompaniment fullness (F).',
+            m_mel_band_roformer_instrumental_fullness_v2_gabox: 'A version that emphasizes accompaniment fullness (F).',
+            m_mel_band_roformer_instrumental_fullness_v3_gabox:
+                'A fullness (F) version with fullness close to Inst V1e but less bleed. It can move a saxophone into the vocals.',
+            m_mel_band_roformer_instrumental_fullness_v4_gabox:
+                'A fullness (F) version that is full without being too noisy. On some songs more vocals bleed in.',
+            m_mel_band_roformer_instrumental_fv7z_gabox:
+                'Very low vocal bleed and almost no noise. On some songs the reverb or noise of the vocals remains.',
+            m_mel_band_roformer_instrumental_fv8_gabox: 'Emphasizes low vocal bleed, with slightly less fullness.',
+            m_mel_band_roformer_instrumental_fv8b_gabox:
+                'Muddier than Inst V1e Plus but cleaner. It keeps vocal chops.',
+            m_mel_band_roformer_instrumental_fvx_gabox: 'A middle ground between INSTV7 and Instrumental 3.',
+            m_mel_band_roformer_instrumental_gabox: 'The base accompaniment model, balancing fullness and bleed.',
+            m_mel_band_roformer_instrumental_instv5_gabox: 'A version in the INSTV series, which focuses on fullness.',
+            m_mel_band_roformer_instrumental_instv5n_gabox: 'The N version of INSTV5: fuller, but noisier.',
+            m_mel_band_roformer_instrumental_instv6_gabox:
+                'An INSTV version combining traits of the becruily and unwa models. It mistakes fewer instruments for vocals than Inst V1e, but is less full.',
+            m_mel_band_roformer_instrumental_instv6n_gabox:
+                'The N version of INSTV6: much fuller, but noisier. Running Denoise-Debleed first gives cleaner results.',
+            m_mel_band_roformer_instrumental_instv7_gabox:
+                'An INSTV version that is fairly full but noisy. Some vocal residue can remain and some instruments can be erased.',
+            m_mel_band_roformer_instrumental_instv7n_gabox: 'The N version of INSTV7: fuller, but noisier.',
+            m_mel_band_roformer_instrumental_instv8_gabox:
+                'Less full than INSTV7, but with less vocal residue and noise.',
+            m_mel_band_roformer_instrumental_instv8n_gabox: 'The N version of INSTV8. Reported to leave vocal residue.',
+            m_mel_band_roformer_karaoke_aufr33_viperx_sdr_10_1956:
+                'Separates the lead vocals from the rest (backing vocals and accompaniment). Surpassed by newer models but more consistent; also removes a little more sound effects.',
+            m_mel_band_roformer_karaoke_becruily:
+                'Separates the lead vocals from the rest (backing vocals and accompaniment). Full sound and good at telling lead from backing, but two singers singing together both count as lead. Extracting the vocals first is recommended.',
+            m_mel_band_roformer_karaoke_gabox:
+                'Separates the lead vocals from the rest (backing vocals and accompaniment). Clean lead vocals, but the backing side is lossy.',
+            m_mel_band_roformer_karaoke_gabox_v2:
+                'The second version of the lead-vocal model; quality is almost the same as the first.',
+            m_mel_band_roformer_kim_ft2_bleedless_unwa:
+                'A fine-tune of the Kim vocal model that puts keeping instruments out of the vocals first. Very little noise, but it gets muffled easily.',
+            m_mel_band_roformer_kim_ft2_unwa:
+                'The second fine-tune of the Kim vocal model, with even less instrument bleed in the vocals. The accompaniment can become muffled.',
+            m_mel_band_roformer_kim_ft3_unwa:
+                'A fine-tune of the Kim vocal model (FT3 preview) aimed at reducing wind instruments leaking into the vocals.',
+            m_mel_band_roformer_kim_ft_unwa:
+                'A fine-tune of the Kim vocal model. Both bleedless and fullness are better than the original. Vocals can remain in the accompaniment.',
+            m_mel_band_roformer_vocal_fullness_aname:
+                'A vocal model that emphasizes fullness while keeping noise balanced. Faint vocals can remain in parts without vocals.',
+            m_mel_band_roformer_vocals_becruily:
+                'A vocal model with high fullness. It extracts screams cleanly, but can put extra reverb into the vocals.',
+            m_mel_band_roformer_vocals_fv1_gabox: 'The first version that emphasizes vocal fullness (F).',
+            m_mel_band_roformer_vocals_fv2_gabox: 'A version that emphasizes vocal fullness (F).',
+            m_mel_band_roformer_vocals_fv3_gabox: 'A version that emphasizes vocal fullness (F).',
+            m_mel_band_roformer_vocals_fv4_gabox:
+                'A version that strongly emphasizes fullness, giving clean, unmuffled vocals. It captures lead vocals well, so it suits Voice Conversion (RVC) training data, but struggles with backing vocals.',
+            m_mel_band_roformer_vocals_fv5_gabox:
+                'A version slightly fuller than FV4. It also keeps vocal chops in the vocal stem.',
+            m_mel_band_roformer_vocals_fv6_gabox:
+                'An experimental version with the most fullness. Picks up backing vocals well, but sometimes mistakes instruments for vocals and has more bleed.',
+            m_mel_band_roformer_vocals_fv7b_gabox:
+                'An improved FV4 with less bleed that picks up backing vocals well. Noisier than FV4, and synths or parts of instruments can bleed in.',
+            m_mel_band_roformer_vocals_gabox: 'An early version of the vocal model.',
+            m_mel_band_roformer_vocals_v2_gabox: 'An early version (the second) of the vocal model.',
+            m_melband_roformer_big_beta4:
+                'A large vocal model with clear, full vocals; also suits making voices for Voice Conversion (RVC) training. Synths can bleed in.',
+            m_melband_roformer_big_beta5e:
+                'A large vocal model that strongly emphasizes fullness. Good with whispers, but gets grainy noise when the accompaniment is loud. Beta 4 suits Voice Conversion training data better.',
+            m_melband_roformer_big_beta6:
+                'A conservative large vocal model that emphasizes low bleed. It avoids the noise problem of Beta 5e but has less fullness and is a little muffled.',
+            m_melband_roformer_big_beta6x:
+                'The largest Mel-Roformer vocal model, keeping bleed low with more fullness. Picks up backing vocals well, but is slow and a little noisy.',
+            m_melband_roformer_inst_v1: 'An accompaniment model. Little muffling, but a characteristic noise remains.',
+            m_melband_roformer_inst_v1_plus: 'An improved version of the accompaniment model Inst V1, with less noise.',
+            m_melband_roformer_inst_v1e:
+                'An accompaniment model that strongly emphasizes fullness. Its fullness is consistent across songs, but it is noisy and struggles with flute, saxophone and trumpet.',
+            m_melband_roformer_inst_v1e_plus:
+                'An improved version of Inst V1e. Less noise, with fullness between V1 and V1e. It removes vocals gently.',
+            m_melband_roformer_inst_v2:
+                'A larger version in the Inst V1 line with less vocal residue and noise. In exchange it is a little muffled and can miss flutes and similar parts.',
+            m_melband_roformer_instvoc_duality_v1:
+                'Trained on both vocals and accompaniment, so one model extracts both. Vocals are close to Big Beta 4 but noisier; the accompaniment has little noise but is a little muffled.',
+            m_melband_roformer_instvox_duality_v2:
+                'An improved version of Duality V1, with slightly better quality and less residue.',
+            m_MelBandRoformerBigSYHFTV1: 'A fine-tune of the Kim vocal model with more vocal fullness but more bleed.',
+            m_MelBandRoformerSYHFT:
+                'An experimental fine-tune of the Kim vocal model. The author advises checking the quality by ear.',
+            m_MelBandRoformerSYHFTV2_5: 'A fine-tune of the Kim vocal model, outperformed by newer models.',
+            m_MelBandRoformerSYHFTV2:
+                'The second experimental fine-tune of the Kim vocal model. The author advises checking the quality by ear.',
+            m_MelBandRoformerSYHFTV3Epsilon:
+                'A fine-tune of the Kim vocal model with less muffled vocals. Background noise can bleed into the vocals.',
+            m_MGM_HIGHEND_v4: 'An older-generation (v4) model that focuses on the high frequencies.',
+            m_MGM_LOWEND_A_v4:
+                'An older-generation (v4) model that focuses on the low frequencies (trained at 32 kHz).',
+            m_MGM_LOWEND_B_v4:
+                'An older-generation (v4) model that focuses on the low frequencies, trained with different settings from LOWEND_A.',
+            m_MGM_MAIN_v4:
+                'The main older-generation (v4) model for removing vocals. It removes vocals well from most songs.',
+            m_model_bs_roformer_ep_317_sdr_12_9755:
+                'An early BS-Roformer model separating vocals and accompaniment, with better vocals than 1296. The accompaniment tends to be muffled on its own, and it struggles with saxophone.',
+            m_model_bs_roformer_ep_368_sdr_12_9628:
+                'An early BS-Roformer model separating vocals and accompaniment, with slightly better accompaniment than 1297. The accompaniment tends to be muffled on its own, and it struggles with saxophone.',
+            m_model_bs_roformer_ep_937_sdr_10_5309:
+                'Separates drums and bass together from the rest. Use it on an extracted accompaniment to avoid vocal residue.',
+            m_model_chorus_bs_roformer_ep_267_sdr_24_1275:
+                'An experimental model that splits a chorus into male and female voices (trained on Chinese songs). It cannot separate parts where they sing in turn.',
+            m_model_mel_band_roformer_ep_3005_sdr_11_4360:
+                'The first Mel-Roformer vocal model. It picks up background vocals well, but is slow.',
+            m_Reverb_HQ_By_FoxJoy:
+                'Removes reverb, from whole mixes as well as vocals, but only for stereo audio and sounds in the center. On a cappella it can damage the singing or remove delay or piano.',
+            m_UVR_BVE_4B_SN_44100_1:
+                'Splits vocals into lead and backing vocals. Extract the vocals first. When the backing vocals are in the center, set the aggressiveness to 0.',
+            m_UVR_BVE_4B_SN_44100_2:
+                'Splits vocals into lead and backing vocals. Extract the vocals first. When the backing vocals are in the center, set the aggressiveness to 0.',
+            m_UVR_De_Echo_Aggressive: 'Removes echo more strongly than the Normal version.',
+            m_UVR_De_Echo_Normal: 'Removes echo. Some songs come out better than with the stronger Aggressive version.',
+            m_UVR_De_Reverb_aufr33_jarredou:
+                'Removes reverb from vocals. Sounds more natural than the MDX23C De-Reverb but leaves a little reverb. Also suits choirs and vocals with backing vocals.',
+            m_UVR_DeEcho_DeReverb:
+                'Removes echo and reverb together. It is said to remove mono reverb too, though reports on this differ.',
+            m_UVR_DeNoise_Lite: 'Removes noise gently, with less damage to instruments.',
+            m_UVR_DeNoise:
+                'Removes noise strongly. The result can sound muffled, and synths or bass are sometimes removed.',
+            m_UVR_MDX_NET_Inst_1: 'An early model aimed mainly at the accompaniment. Up to about 17.7 kHz.',
+            m_UVR_MDX_NET_Inst_2: 'An early model aimed mainly at the accompaniment. Up to about 17.7 kHz.',
+            m_UVR_MDX_NET_Inst_3:
+                'An early model aimed mainly at the accompaniment. A little muffled, but less noisy. Up to about 17.7 kHz.',
+            m_UVR_MDX_NET_Inst_HQ_1:
+                'A high-quality (HQ) model aimed mainly at the accompaniment, covering the full band (up to about 22 kHz).',
+            m_UVR_MDX_NET_Inst_HQ_2:
+                'A high-quality (HQ) model aimed mainly at the accompaniment, with fewer problems removing vocals than HQ_1.',
+            m_UVR_MDX_NET_Inst_HQ_3:
+                'A high-quality (HQ) model aimed mainly at the accompaniment. It separates fairly aggressively and can move flutes into the vocals.',
+            m_UVR_MDX_NET_Inst_HQ_4:
+                'A high-quality (HQ) model aimed mainly at the accompaniment, improved over HQ_3. The least muffled of the HQ models, though vocals can remain in fade-outs.',
+            m_UVR_MDX_NET_Inst_HQ_5:
+                'A high-quality (HQ) model aimed mainly at the accompaniment. Less vocal residue but more muffled. The lightest and fastest of the HQ models, and also good for vocals.',
+            m_UVR_MDX_NET_Inst_Main:
+                'An early model aimed mainly at the accompaniment. It separates gently, so more vocal residue remains.',
+            m_UVR_MDX_NET_Voc_FT:
+                'A fine-tuned version of a vocal model (Kim Vocal). Works widely for vocals. Up to about 17.7 kHz.',
+            m_UVR_MDX_NET_Crowd_HQ_1:
+                'Removes crowd noise from live recordings. It removes most of the crowd, but instruments tend to bleed into the crowd stem and the result can be muffled.',
+            m_UVR_MDXNET_1_9703: 'An early vocal model (up to about 14.7 kHz). Its quality is below newer models.',
+            m_UVR_MDXNET_2_9682: 'An early vocal model (up to about 14.7 kHz). Its quality is below newer models.',
+            m_UVR_MDXNET_3_9662: 'An early vocal model (up to about 14.7 kHz). Its quality is below newer models.',
+            m_UVR_MDXNET_9482: 'One of the oldest vocal models. Its quality is below newer models.',
+            m_UVR_MDXNET_KARA:
+                'Removes the lead vocals and keeps the backing vocals with the accompaniment. It is aggressive and can remove many backing vocals too. For backing vocals in the center, the VR karaoke models suit better.',
+            m_UVR_MDXNET_KARA_2:
+                'Removes the lead vocals and keeps the backing vocals with the accompaniment. Keeps the detail of the lead vocals well. For backing vocals in the center, the VR karaoke models suit better.',
+            m_UVR_MDXNET_Main:
+                'An early vocal model. It leaves more of the accompaniment in the vocals than the 9703 model.',
+            m_vocals_mel_band_roformer:
+                'A vocal model that many fine-tunes are based on. Less muffled than the viperx models, but it can move wind instruments into the vocals and leave some residue.',
         },
         separatorCategoryNotes: {
             vocals: 'Splits into vocals and accompaniment (the instruments). Used to convert a singing voice or to use only the accompaniment.',
@@ -338,63 +502,68 @@ export default {
         items: {
             python: 'Python 3.11',
             pythonDesc:
-                'The runtime that runs the voice feature programs. It is kept in a location of its own and runs separately from any Python installed on your computer.',
+                'The runtime that runs the programs of the voice features (Audio Separation, Voice Conversion and Text to Speech). It runs in a location of its own, separately from any Python installed on your computer.',
             separatorPackages: 'Audio Separation package set',
             separatorPackagesDesc:
-                'The Audio Separation program (python-audio-separator) and the libraries it needs (PyTorch and others). The Xcode Command Line Tools on macOS, or a C/C++ compiler (such as build-essential) on Linux, must be installed first.',
+                'The Audio Separation program (python-audio-separator) and the libraries it needs (PyTorch and others). Used for Audio Separation and for separating on the Voice Conversion screen. The Xcode Command Line Tools on macOS, or a C/C++ compiler (such as build-essential) on Linux, must be installed first.',
             converterPackages: 'Voice Conversion package set',
             converterPackagesDesc:
-                'The Voice Conversion (RVC) program (Applio) and the libraries it needs (PyTorch and others). Used for conversion and for training its models.',
+                'The Voice Conversion (RVC) program (Applio) and the libraries it needs (PyTorch and others). Used for Voice Conversion and for training its models.',
             ttsPackages: 'Text to Speech package set',
             ttsPackagesDesc:
-                'The Text to Speech program (Style-Bert-VITS2) and the libraries it needs (PyTorch and others).',
+                'The Text to Speech program (Style-Bert-VITS2) and the libraries it needs (PyTorch and others). Used for Text to Speech.',
             ttsTrainPackages: 'Text to Speech training package set',
             ttsTrainPackagesDesc:
-                'The extra programs needed to train Text to Speech models, and a speaker embedding model that computes the tone (style) of a voice. Available only on Windows and Linux with an NVIDIA GPU.',
+                'The extra programs needed to train Text to Speech models, and a speaker embedding model that computes the tone (style) of a voice. Used for training Text to Speech models. Available only on Windows and Linux with an NVIDIA GPU.',
             rmvpe: 'Pitch extraction model (RMVPE)',
             rmvpeDesc:
-                'Estimates how the pitch of a voice moves. Used in conversion and training to keep the intonation of the original voice.',
+                'Estimates how the pitch of a voice moves. Used in Voice Conversion, for conversion and training, to keep the intonation of the original voice.',
             fcpe: 'Pitch extraction model (FCPE)',
-            fcpeDesc: 'Estimates pitch with a different method from RMVPE. It is lighter and faster than RMVPE.',
+            fcpeDesc:
+                'Estimates how the pitch of a voice moves. Used in Voice Conversion when FCPE is chosen for pitch extraction. It is lighter and faster than RMVPE.',
             contentvec: 'Speech feature model (ContentVec)',
             contentvecDesc:
-                'Extracts features describing what is being said. Conversion re-voices these features with a voice model. Training in this app always uses this method, as do most distributed voice models.',
+                'Extracts features describing what is being said. Used in Voice Conversion for conversion and training. Training in this app always uses this model, as do most distributed voice models.',
             rvcPretrained: 'Pretrained model for training (40 kHz)',
             rvcPretrainedDesc:
-                'A model already trained on many voices. Training starts from it, so a voice can be trained in less time from fewer recordings.',
+                'A model already trained on many voices. Voice Conversion training starts from it, so a voice can be trained in less time from fewer recordings.',
             embedderSpin: 'Speech feature model (SPIN)',
             embedderSpinDesc:
-                'Plays the same role as ContentVec. It is designed to extract features that depend less on the speaker.',
+                'Extracts features describing what is being said (the same role as ContentVec). Used when converting with voice models made with it. It is designed to extract features that depend less on the speaker.',
             embedderSpinV2: 'Speech feature model (SPIN v2)',
-            embedderSpinV2Desc: 'An improved version of SPIN.',
+            embedderSpinV2Desc:
+                'Extracts features describing what is being said (the same role as ContentVec). Used when converting with voice models made with it. An improved version of SPIN.',
             embedderJapaneseHubert: 'Speech feature model (Japanese HuBERT)',
-            embedderJapaneseHubertDesc: 'Plays the same role as ContentVec, trained on Japanese speech.',
+            embedderJapaneseHubertDesc:
+                'Extracts features describing what is being said (the same role as ContentVec). Used when converting with voice models made with it. Trained on Japanese speech.',
             embedderChineseHubert: 'Speech feature model (Chinese HuBERT)',
-            embedderChineseHubertDesc: 'Plays the same role as ContentVec, trained on Chinese speech.',
+            embedderChineseHubertDesc:
+                'Extracts features describing what is being said (the same role as ContentVec). Used when converting with voice models made with it. Trained on Chinese speech.',
             embedderKoreanHubert: 'Speech feature model (Korean HuBERT)',
-            embedderKoreanHubertDesc: 'Plays the same role as ContentVec, trained on Korean speech.',
+            embedderKoreanHubertDesc:
+                'Extracts features describing what is being said (the same role as ContentVec). Used when converting with voice models made with it. Trained on Korean speech.',
             languageModelJa: 'Japanese language model (DeBERTa)',
             languageModelJaDesc:
-                'A language model (DeBERTa) that decides natural intonation from the meaning and context of Japanese text. Used to read Japanese (with both JP-Extra and multilingual voices).',
+                'Decides natural intonation from the meaning and context of Japanese text. Used to read Japanese and to train Japanese Text to Speech models (with both JP-Extra and multilingual voices).',
             languageModelEn: 'English language model (DeBERTa)',
             languageModelEnDesc:
-                'A language model (DeBERTa) that decides natural intonation from the meaning and context of English text. Also includes a dictionary for English pronunciation (CMUdict) and related data. Used to read English.',
+                'Decides natural intonation from the meaning and context of English text. Used to read English and to train English Text to Speech models. Also includes a dictionary for English pronunciation (CMUdict) and related data.',
             languageModelZh: 'Chinese language model (RoBERTa)',
             languageModelZhDesc:
-                'A language model (chinese-roberta-wwm-ext-large) that decides natural intonation from the meaning and context of Chinese text. Used to read Chinese.',
+                'Decides natural intonation from the meaning and context of Chinese text. Used to read Chinese and to train Chinese Text to Speech models.',
             ttsTrainJpExtra: 'Pretrained model for training (JP-Extra)',
             ttsTrainJpExtraDesc:
-                'The trained model that JP-Extra training starts from, and a model (WavLM) that judges how natural the audio sounds during training.',
+                'The trained model that JP-Extra Text to Speech training starts from. Also includes a model (WavLM) that judges how natural the audio sounds during training.',
             ttsTrainMultilingual: 'Pretrained model for training (Multilingual)',
-            ttsTrainMultilingualDesc: 'The trained model that multilingual training starts from.',
+            ttsTrainMultilingualDesc: 'The trained model that multilingual Text to Speech training starts from.',
             jvnvFemaleJpExtraDesc:
-                'A female voice (JP-Extra), made from Japanese speech spoken with emotion (the JVNV corpus). Ready to use for reading.',
+                'A female voice (JP-Extra), made from Japanese speech spoken with emotion (the JVNV corpus). It reads Japanese.',
             jvnvMaleJpExtraDesc:
-                'A male voice (JP-Extra), made from Japanese speech spoken with emotion (the JVNV corpus). Ready to use for reading.',
+                'A male voice (JP-Extra), made from Japanese speech spoken with emotion (the JVNV corpus). It reads Japanese.',
             jvnvFemaleMultilingualDesc:
-                'A female voice (Multilingual), made from Japanese speech spoken with emotion (the JVNV corpus). It can also read English and Chinese, but with a Japanese accent because the speaker is Japanese.',
+                'A female voice (Multilingual), made from Japanese speech spoken with emotion (the JVNV corpus). Besides Japanese it can read English and Chinese, but with a Japanese accent because the speaker is Japanese.',
             jvnvMaleMultilingualDesc:
-                'A male voice (Multilingual), made from Japanese speech spoken with emotion (the JVNV corpus). It can also read English and Chinese, but with a Japanese accent because the speaker is Japanese.',
+                'A male voice (Multilingual), made from Japanese speech spoken with emotion (the JVNV corpus). Besides Japanese it can read English and Chinese, but with a Japanese accent because the speaker is Japanese.',
         },
     },
     update: {
@@ -438,7 +607,7 @@ export default {
         },
         verifiedEnsemble: 'Combination verified by the distributor ({{count}} models)',
         categoryEmpty: 'No models in this group have been downloaded. You can get them from "Downloads".',
-        quality: 'Separation quality (higher is better): {{values}}',
+        quality: 'Separation quality: {{values}}',
         algorithm: 'How to decide the result',
         algorithmNotes: {
             avg_wave:
@@ -570,7 +739,10 @@ export default {
         candidates: 'Candidates',
         noCandidates:
             'Choose a voice model and parameters and run the conversion; each result is listed as a candidate.',
-        preview: 'Listen',
+        withAccompanimentCreate: 'Create',
+        withAccompanimentRecreate: 'Recreate',
+        withAccompanimentFor: 'Converted + Accompaniment of {{name}}',
+        withAccompanimentRendering: 'Mixing with the accompaniment',
         paramsSummary: 'Key {{pitch}} / {{f0}} / index {{index}} / envelope {{envelope}} / protect {{protect}}',
         targets: {
             converted: 'Converted Vocals',
@@ -594,14 +766,14 @@ export default {
         roomSize: 'Room size',
         damping: 'High-frequency damping',
         wetLevel: 'Reverb level',
-        dryLevel: 'Dry level',
+        dryLevel: 'Dry level (1 = original volume)',
         width: 'Stereo width',
         masterGain: 'Master volume',
-        limiter: 'Prevent clipping (limiter)',
-        preview: 'Create Preview',
+        preview: 'Create Mix',
         rendering: 'Mixing',
-        hint: 'The preview is made with the same processing as the export, so the exported file sounds exactly as you heard it.',
-        stale: 'The settings or the adopted candidate have changed. Create the preview again (exporting recreates it automatically).',
+        notCreated: 'Press "Create Mix" to show the mix here.',
+        hint: 'The mix is made with the same processing as the export, so the exported file sounds exactly as you heard it. When the peak of the mix goes over -1 dB, the whole mix is lowered by one amount.',
+        stale: 'The settings or the adopted candidate have changed. Press "Create Mix" again (exporting recreates it automatically).',
         builtin: {
             standard: 'Light Reverb',
             dry: 'No reverb',

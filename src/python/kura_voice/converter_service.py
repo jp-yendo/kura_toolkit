@@ -387,6 +387,15 @@ def rpc_export_model(params: dict, context: Context) -> dict:
 # one block of each input is held in memory regardless of the length of the song.
 _MIX_BLOCK_SECONDS = 10
 
+# Upper limit of the sample peak of the mix (dBFS). When the mix goes over it, the whole mix is lowered by one
+# constant gain, so the balance between quiet and loud parts is kept (no limiter or compressor).
+_MIX_PEAK_LIMIT_DB = -1.0
+
+# pedalboard's Reverb (JUCE) multiplies dry_level by 2 and wet_level by 3 internally. The parameters are divided
+# by these factors so that the values in the app are the actual gains (dry 1.0 = the original volume).
+_REVERB_DRY_SCALE = 2.0
+_REVERB_WET_SCALE = 3.0
+
 
 def _stereo(block: Any) -> Any:
     import numpy as np
@@ -401,10 +410,13 @@ def rpc_mix(params: dict, context: Context) -> dict:
 
     The preview and the export use this same rendering, so they always sound the same.
     Processed block by block; the effects keep their state between blocks (reset=False), so the result is the
-    same as processing the whole audio at once.
+    same as processing the whole audio at once. When the peak of the mix goes over _MIX_PEAK_LIMIT_DB, the
+    written file is lowered by one constant gain in a second pass.
     """
+    import os
+
     import numpy as np
-    from pedalboard import Gain, Limiter, Pedalboard, Reverb
+    from pedalboard import Gain, Pedalboard, Reverb
     from pedalboard.io import AudioFile
 
     sample_rate = int(params["sampleRate"])
@@ -416,18 +428,15 @@ def rpc_mix(params: dict, context: Context) -> dict:
             Reverb(
                 room_size=float(reverb["roomSize"]),
                 damping=float(reverb["damping"]),
-                wet_level=float(reverb["wetLevel"]),
-                dry_level=float(reverb["dryLevel"]),
+                wet_level=float(reverb["wetLevel"]) / _REVERB_WET_SCALE,
+                dry_level=float(reverb["dryLevel"]) / _REVERB_DRY_SCALE,
                 width=float(reverb["width"]),
                 freeze_mode=0.0,
             )
         )
     vocal_board = Pedalboard(chain)
     accompaniment_board = Pedalboard([Gain(gain_db=float(settings["accompanimentGainDb"]))])
-    master = [Gain(gain_db=float(settings["masterGainDb"]))]
-    if settings["limiter"]:
-        master.append(Limiter(threshold_db=-1.0, release_ms=100.0))
-    master_board = Pedalboard(master)
+    master_board = Pedalboard([Gain(gain_db=float(settings["masterGainDb"]))])
     channels = 1 if int(params["channels"]) == 1 else 2
     block = _MIX_BLOCK_SECONDS * sample_rate
 
@@ -438,6 +447,7 @@ def rpc_mix(params: dict, context: Context) -> dict:
     try:
         total = max(vocals.frames, accompaniment.frames if accompaniment else 0)
         output = params["output"]
+        peak = 0.0
         with AudioFile(output, "w", samplerate=sample_rate, num_channels=channels, bit_depth=32) as handle:
             done = 0
             while done < total:
@@ -453,15 +463,39 @@ def rpc_mix(params: dict, context: Context) -> dict:
                 mix = master_board(mix, sample_rate, reset=False)
                 if channels == 1:
                     mix = mix.mean(axis=0, keepdims=True)
+                if mix.size:
+                    peak = max(peak, float(np.max(np.abs(mix))))
                 handle.write(mix.astype(np.float32))
                 done += size
-                context.progress(done / total, "mix")
-                context.phase("mix", done / total)
+                # The first pass is 0-0.8 of the phase, the second pass (only when lowering) 0.8-1
+                context.progress(0.8 * done / total, "mix")
+                context.phase("mix", 0.8 * done / total)
     finally:
         vocals.close()
         if accompaniment:
             accompaniment.close()
-    return {"path": output}
+
+    limit = 10 ** (_MIX_PEAK_LIMIT_DB / 20)
+    gain_db = 0.0
+    if peak > limit:
+        scale = limit / peak
+        gain_db = float(20 * np.log10(scale))
+        # Same directory and extension as the output, so the format is the same and the replace stays on one drive
+        scaled = os.path.join(os.path.dirname(output), ".scaled-" + os.path.basename(output))
+        try:
+            with AudioFile(output) as source, AudioFile(
+                scaled, "w", samplerate=sample_rate, num_channels=channels, bit_depth=32
+            ) as handle:
+                while source.tell() < source.frames:
+                    handle.write((source.read(min(block, source.frames - source.tell())) * scale).astype(np.float32))
+                    context.progress(0.8 + 0.2 * source.tell() / max(1, source.frames), "mix")
+                    context.phase("mix", 0.8 + 0.2 * source.tell() / max(1, source.frames))
+            os.replace(scaled, output)
+        finally:
+            if os.path.exists(scaled):
+                os.remove(scaled)
+    context.phase("mix", 1.0)
+    return {"path": output, "gainDb": gain_db}
 
 
 def unload() -> None:
