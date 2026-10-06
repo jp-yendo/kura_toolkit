@@ -55,7 +55,11 @@ def _install_progress(context: Context, start: float, span: float) -> None:
     )
     from audio_separator.separator.uvr_lib_v5.demucs import apply as demucs_apply
 
-    bridge = runtime.TqdmBridge(lambda fraction: context.progress(start + span * fraction))
+    def report(fraction: float) -> None:
+        context.progress(start + span * fraction)
+        context.phase("separate", fraction)
+
+    bridge = runtime.TqdmBridge(report)
     bridge.install([separator_module, mdx_separator, vr_separator, mdxc_separator, demucs_separator])
     # Demucs uses the module ("import tqdm" and "tqdm.tqdm(...)") rather than the class
     demucs_apply.tqdm = types.SimpleNamespace(tqdm=bridge.cls)
@@ -223,7 +227,7 @@ def _run(params: dict, context: Context, device: str) -> List[dict]:
         model_file_dir=model_dir,
         output_dir=output_dir,
         output_format="WAV",
-        # Keep the original level: stems are only scaled down when they would clip.
+        # Replaced below (the library only accepts values up to 1).
         normalization_threshold=1.0,
         # Write float data directly instead of going through pydub (16-bit) and ffmpeg.
         use_soundfile=True,
@@ -236,7 +240,13 @@ def _run(params: dict, context: Context, device: str) -> List[dict]:
         kwargs["ensemble_algorithm"] = method["algorithm"]
 
     context.progress(0.02, "load")
+    context.phase("loadModel")
+    runtime.write_wav_as_float()
     separator = Separator(**kwargs)
+    # Keep the level of the stems as they come out of the model. The output is 32-bit float, so a peak above 1
+    # does not clip, and scaling a stem down would change its level against the source and the other stems.
+    # Read when a model is loaded, so it is set before load_model.
+    separator.normalization_threshold = float("inf")
     if device == "cpu":
         import torch
 

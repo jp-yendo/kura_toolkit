@@ -14,10 +14,11 @@ type Props = {
     label?: string;
 };
 
-// マイク録音のボタンと入力レベル。録音を止めると 16bit の WAV を渡す
+// マイク録音のボタンと入力レベル。録音を止めると、main が書き終えた録音 (16bit の WAV) を渡す
 export default function RecorderControl({ onRecorded, onActiveChange, disabled, label }: Props) {
     const { t } = useTranslation();
-    const recorder = useRecorder();
+    // 書き込みに失敗して録音が途中で終わった場合も、録音中の扱いを解く
+    const recorder = useRecorder({ onAbort: () => onActiveChange?.(false) });
     const recording = recorder.state === 'recording';
 
     const start = async () => {
@@ -36,16 +37,19 @@ export default function RecorderControl({ onRecorded, onActiveChange, disabled, 
         }
     };
 
-    const stop = () => {
-        const audio = recorder.stop();
-        if (audio) onRecorded(audio);
-        onActiveChange?.(false);
+    const stop = async () => {
+        try {
+            const audio = await recorder.stop();
+            if (audio) onRecorded(audio);
+        } finally {
+            onActiveChange?.(false);
+        }
     };
 
     return (
         <Stack direction='row' spacing={1.5} sx={{ alignItems: 'center' }}>
             {recording ? (
-                <Button variant='contained' color='error' startIcon={<StopIcon />} onClick={stop}>
+                <Button variant='contained' color='error' startIcon={<StopIcon />} onClick={() => void stop()}>
                     {t('voice.recorder.stop')}
                 </Button>
             ) : (
@@ -53,7 +57,7 @@ export default function RecorderControl({ onRecorded, onActiveChange, disabled, 
                     variant='outlined'
                     color='error'
                     startIcon={<FiberManualRecordIcon />}
-                    disabled={disabled || recorder.state === 'starting'}
+                    disabled={disabled || recorder.state === 'starting' || recorder.state === 'stopping'}
                     onClick={() => void start()}
                 >
                     {label ?? t('voice.recorder.start')}

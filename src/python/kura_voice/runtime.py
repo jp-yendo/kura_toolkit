@@ -268,6 +268,31 @@ def patch_applio_model_paths() -> None:
     applio_utils.load_embedding = load_embedding
 
 
+def write_wav_as_float() -> None:
+    """Make every WAV file written with soundfile.write in this process 32-bit float.
+
+    The libraries write their results with soundfile and pick 16-bit PCM in places: Applio saves the converted
+    voice with the default WAV format, and audio-separator writes 16-bit for float input with the VR models and for
+    ensembles. The app keeps intermediate audio as 32-bit float, so the subtype is replaced for WAV files
+    (whether given or not). Other formats are passed through unchanged.
+    """
+    import soundfile
+
+    if getattr(soundfile.write, "_kura_float_wav", False):
+        return
+    original = soundfile.write
+
+    def write(file: Any, data: Any, samplerate: int, subtype: Any = None, endian: Any = None, format: Any = None,
+              *args: Any, **kwargs: Any) -> Any:
+        file_format = format or os.path.splitext(str(file))[1].lstrip(".")
+        if str(file_format).lower() == "wav":
+            subtype = "FLOAT"
+        return original(file, data, samplerate, subtype, endian, format, *args, **kwargs)
+
+    write._kura_float_wav = True  # type: ignore[attr-defined]
+    soundfile.write = write
+
+
 # Start of the line with which a script run by script_runner.py reports a KuraError to the training
 # driver that started it (training_common.run_step raises it again with the same code and message)
 ERROR_MARKER = "KURA_ERROR:"

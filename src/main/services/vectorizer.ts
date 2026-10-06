@@ -1,18 +1,23 @@
+import crypto from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 import { ColorMode, Hierarchical, PathSimplifyMode, vectorize, type Config } from '@neplex/vectorizer';
-import type { ImagePreview, VectorizeParams } from '../../shared/types';
+import type { ImagePreview, SvgResult, VectorizeParams } from '../../shared/types';
+import { forgetMedia, mediaUrl } from './media-protocol';
+import { discardLater, newTempDir } from './work-dir';
 
 // 画像 -> SVG 変換 (元: vtracer-gui/vtracer-gui.py、vtracer の NAPI バインディングを使用)
+// 元画像と変換結果は、中身を renderer へ渡さず、表示用の URL (kura-media://) で見せる。
+// 変換結果は作業ディレクトリのファイルに置き、保存はそのファイルを写す (最後の 1 つだけを持つ)
 
-const MIME_TYPES: Record<string, string> = {
-    '.png': 'image/png',
-    '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg',
-    '.bmp': 'image/bmp',
-    '.gif': 'image/gif',
-    '.tiff': 'image/tiff',
-};
+let currentResult: { id: string; dir: string; file: string } | null = null;
+
+function discardResult(): void {
+    if (!currentResult) return;
+    forgetMedia(currentResult.file);
+    discardLater(currentResult.dir);
+    currentResult = null;
+}
 
 function toConfig(params: VectorizeParams): Config {
     return {
@@ -35,23 +40,33 @@ function toConfig(params: VectorizeParams): Config {
     };
 }
 
-// プレビュー用に画像を dataURL として読み込む
-export async function loadImagePreview(filePath: string): Promise<ImagePreview> {
-    const buffer = await fs.readFile(filePath);
-    const mime = MIME_TYPES[path.extname(filePath).toLowerCase()] ?? 'application/octet-stream';
-    return {
-        dataUrl: `data:${mime};base64,${buffer.toString('base64')}`,
-        fileName: path.basename(filePath),
-    };
+// プレビュー用に画像を公開する (画像の中身は renderer が表示するときに読む)。
+// 画像を選び直すと前の変換結果は使わなくなるため、ここで片付ける
+export function loadImagePreview(filePath: string): ImagePreview {
+    const preview = { url: mediaUrl(filePath), fileName: path.basename(filePath) };
+    discardResult();
+    return preview;
 }
 
-// 画像ファイルを SVG 文字列に変換する
-export async function convertImage(filePath: string, params: VectorizeParams): Promise<string> {
+// 画像ファイルを SVG に変換し、作業ディレクトリのファイルに置く (前の変換結果は片付ける)
+export async function convertImage(filePath: string, params: VectorizeParams): Promise<SvgResult> {
     const buffer = await fs.readFile(filePath);
-    return vectorize(buffer, toConfig(params));
+    const svg = await vectorize(buffer, toConfig(params));
+    const dir = newTempDir();
+    const file = path.join(dir, 'result.svg');
+    try {
+        await fs.writeFile(file, svg, 'utf-8');
+    } catch (error) {
+        discardLater(dir);
+        throw error;
+    }
+    discardResult();
+    currentResult = { id: crypto.randomUUID(), dir, file };
+    return { id: currentResult.id, url: mediaUrl(file) };
 }
 
-// SVG 文字列をファイルへ保存する
-export async function saveSvgFile(filePath: string, svg: string): Promise<void> {
-    await fs.writeFile(filePath, svg, 'utf-8');
+// 変換結果を保存先へ写す (resultId は convertImage が返したもの)
+export async function saveSvgFile(resultId: string, filePath: string): Promise<void> {
+    if (!currentResult || currentResult.id !== resultId) throw new Error('SVG_RESULT_GONE');
+    await fs.copyFile(currentResult.file, filePath);
 }

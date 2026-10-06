@@ -1,10 +1,9 @@
 import { create } from 'zustand';
-import type { VoiceHandoff } from './voiceHandoffStore';
 import type { ConversionCandidate, ConversionParams, MediaRef, MixParams } from '@shared/voice/types';
 
 // 音声変換の作業 (入力と分離の後の段階)。入力と分離は useConversionSeparationStore が持つ
 
-export type ConversionInputMode = 'separate' | 'direct' | 'external';
+export type ConversionInputMode = 'separate' | 'direct';
 
 const DEFAULT_CONVERSION_PARAMS: ConversionParams = {
     pitch: 0,
@@ -25,7 +24,6 @@ const DEFAULT_MIX_PARAMS: MixParams = {
 type ConversionState = {
     step: number;
     inputMode: ConversionInputMode;
-    external: VoiceHandoff | null;
     voiceId: string;
     params: ConversionParams;
     candidates: ConversionCandidate[];
@@ -38,7 +36,6 @@ type ConversionState = {
     mixSignature: string | null;
     setStep(step: number): void;
     setInputMode(mode: ConversionInputMode): void;
-    setExternal(handoff: VoiceHandoff | null): void;
     setVoiceId(id: string): void;
     setParams(params: ConversionParams): void;
     addCandidate(candidate: ConversionCandidate, inputKey: string): void;
@@ -54,7 +51,6 @@ type ConversionState = {
 export const useConversionStore = create<ConversionState>((set, get) => ({
     step: 0,
     inputMode: 'separate',
-    external: null,
     voiceId: '',
     params: DEFAULT_CONVERSION_PARAMS,
     candidates: [],
@@ -68,9 +64,6 @@ export const useConversionStore = create<ConversionState>((set, get) => ({
     },
     setInputMode(inputMode) {
         set({ inputMode });
-    },
-    setExternal(external) {
-        set({ external });
     },
     setVoiceId(voiceId) {
         set({ voiceId });
@@ -107,7 +100,6 @@ export const useConversionStore = create<ConversionState>((set, get) => ({
         set({
             step: 0,
             inputMode: 'separate',
-            external: null,
             candidates: [],
             candidatesInput: null,
             adoptedId: null,

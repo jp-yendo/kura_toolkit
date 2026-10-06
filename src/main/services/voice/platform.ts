@@ -2,7 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { runTool } from '../ffmpeg/ffmpeg';
-import { getLibraryDir, getModelDir, getWorkDir, hasNonAscii } from '../storage';
+import { getCacheDir, getLibraryDir, getModelDir, getWorkDir, hasNonAscii } from '../storage';
 import type { CudaFlavor, GpuInfo, VoicePlatformInfo, VoicePlatformKey } from '../../../shared/voice/types';
 
 // 音声機能を動かす環境の判定 (OS・CPU・GPU・Visual C++ 再頒布可能パッケージ)。
@@ -120,7 +120,8 @@ export async function getPlatformInfo(refreshGpu = false): Promise<VoicePlatform
         libraryDir,
         modelDir,
         storageNonAscii:
-            process.platform === 'win32' && [libraryDir, modelDir, getWorkDir()].some(dir => hasNonAscii(dir)),
+            process.platform === 'win32' &&
+            [libraryDir, modelDir, getCacheDir(), getWorkDir()].some(dir => hasNonAscii(dir)),
     };
 }
 

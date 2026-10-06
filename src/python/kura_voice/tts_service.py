@@ -194,7 +194,7 @@ def _synthesize_piece(piece: dict, params: dict, model: Any) -> Any:
     language = params["language"]
     use_jp_extra = params["engine"] == "jp-extra"
     base = params["params"]
-    rate = max(0.05, float(base["speed"]) * float(piece["rate"]))
+    rate = float(base["speed"]) * float(piece["rate"])
     pitch_scale = float(base["pitchScale"]) * (2 ** (float(piece["pitch"]) / 12))
     kwargs = dict(
         language=_language(language),
@@ -204,11 +204,12 @@ def _synthesize_piece(piece: dict, params: dict, model: Any) -> Any:
         noise_w=float(base["noiseW"]),
         length=1.0 / rate,
         line_split=False,
-        style=str(base["style"]),
-        style_weight=float(base["styleWeight"]),
         pitch_scale=pitch_scale,
         intonation_scale=float(base["intonationScale"]),
     )
+    # Styles come only from the model; when the model has none, the engine's own handling applies.
+    if base.get("style"):
+        kwargs.update(style=str(base["style"]), style_weight=float(base["styleWeight"]))
     parts = piece["parts"]
     if language == "ja" and any("kataTone" in part for part in parts):
         from style_bert_vits2.nlp import InvalidPhoneError
@@ -242,6 +243,12 @@ def _synthesize_piece(piece: dict, params: dict, model: Any) -> Any:
     samples = audio.astype(np.float32) / 32768.0
     return samples * _db_to_gain(float(piece["volume"])) * OUTPUT_GAIN
 
+    ramp = (0.5 - 0.5 * np.cos(np.linspace(0.0, np.pi, length, dtype=np.float32))).astype(np.float32)
+    samples = samples.copy()
+    samples[:length] *= ramp
+    samples[-length:] *= ramp[::-1]
+    return samples
+
 
 def _speakable(piece: dict) -> bool:
     for part in piece["parts"]:
@@ -252,24 +259,35 @@ def _speakable(piece: dict) -> bool:
     return False
 
 
-def _synthesize_segment(segment: dict, params: dict, model: Any, sample_rate: int) -> Any:
+# Length of one block of silence written at a time (seconds), so a long pause is never held in memory.
+_SILENCE_BLOCK_SECONDS = 10
+
+
+def _write_segment(segment: dict, params: dict, model: Any, sample_rate: int, path: str) -> int:
+    """Write one segment to a WAV file piece by piece and return its length in frames.
+
+    Each piece is written as soon as it is made, so the pieces of a segment are never held in memory
+    together.
+    """
     import numpy as np
-
-    chunks = []
-    for piece in segment["pieces"]:
-        if piece["kind"] == "silence":
-            chunks.append(np.zeros(int(sample_rate * float(piece["ms"]) / 1000.0), dtype=np.float32))
-        elif _speakable(piece):
-            chunks.append(_synthesize_piece(piece, params, model))
-    if not chunks:
-        return np.zeros(0, dtype=np.float32)
-    return np.concatenate(chunks).astype(np.float32)
-
-
-def _write_wav(path: str, samples: Any, sample_rate: int) -> None:
     import soundfile
 
-    soundfile.write(path, samples, sample_rate, subtype="FLOAT")
+    frames = 0
+    with soundfile.SoundFile(path, "w", samplerate=sample_rate, channels=1, subtype="FLOAT") as out:
+        for piece in segment["pieces"]:
+            if piece["kind"] == "silence":
+                remaining = int(sample_rate * float(piece["ms"]) / 1000.0)
+                block = sample_rate * _SILENCE_BLOCK_SECONDS
+                while remaining > 0:
+                    count = min(remaining, block)
+                    out.write(np.zeros(count, dtype=np.float32))
+                    remaining -= count
+                    frames += count
+            elif _speakable(piece):
+                samples = _synthesize_piece(piece, params, model).astype(np.float32)
+                out.write(samples)
+                frames += len(samples)
+    return frames
 
 
 def rpc_synthesize(params: dict, context: Context) -> dict:
@@ -277,47 +295,72 @@ def rpc_synthesize(params: dict, context: Context) -> dict:
     _prepare()
 
     def run(device: str) -> List[dict]:
+        context.phase("loadModel")
         _load_bert(params["language"], params["berts"])
         model = _load_model(params, device)
         sample_rate = int(model.hyper_parameters.data.sampling_rate)
         results = []
         segments = params["segments"]
+        context.phase("synthesize", 0.0)
         for index, segment in enumerate(segments):
-            samples = _synthesize_segment(segment, params, model, sample_rate)
             path = os.path.join(params["outputDir"], f"{segment['id']}.wav")
-            _write_wav(path, samples, sample_rate)
-            results.append({"id": segment["id"], "path": path, "duration": len(samples) / sample_rate})
+            frames = _write_segment(segment, params, model, sample_rate, path)
+            results.append({"id": segment["id"], "path": path, "duration": frames / sample_rate})
             context.progress((index + 1) / len(segments), str(segment["id"]))
+            context.phase("synthesize", (index + 1) / len(segments))
         return results
 
     return {"segments": runtime.run_with_cpu_fallback(run, unload)}
 
 
+# Length of one block when mixing (seconds). Only one block and the parts of the clips that overlap it are
+# held in memory, so memory use does not grow with the length of the text.
+_ASSEMBLE_BLOCK_SECONDS = 10
+
+
 def rpc_assemble(params: dict, context: Context) -> dict:
-    """Place clips at their start times (seconds) and mix them into one file."""
+    """Place clips at their start times (seconds) and mix them into one file, block by block."""
     import numpy as np
     import soundfile
 
     sample_rate = int(params["sampleRate"])
-    placements = params["placements"]
     clips = []
     length = int(math.ceil(float(params["minDuration"]) * sample_rate))
-    for placement in placements:
-        data, rate = soundfile.read(placement["path"], dtype="float32", always_2d=False)
-        if data.ndim > 1:
-            data = data.mean(axis=1)
-        if rate != sample_rate:
-            raise KuraError("SAMPLE_RATE_MISMATCH", f"{rate} != {sample_rate}")
+    for placement in params["placements"]:
+        info = soundfile.info(placement["path"])
+        if info.samplerate != sample_rate:
+            raise KuraError("SAMPLE_RATE_MISMATCH", f"{info.samplerate} != {sample_rate}")
         start = int(round(float(placement["start"]) * sample_rate))
-        clips.append((start, data))
-        length = max(length, start + len(data))
-    mix = np.zeros(length, dtype=np.float32)
-    for start, data in clips:
-        mix[start : start + len(data)] += data
-    peak = float(np.max(np.abs(mix))) if len(mix) else 0.0
-    if peak > 1.0:
-        mix /= peak
-    _write_wav(params["output"], mix, sample_rate)
+        clips.append((start, info.frames, placement["path"]))
+        length = max(length, start + info.frames)
+    block = _ASSEMBLE_BLOCK_SECONDS * sample_rate
+
+    def mix_block(begin: int, end: int) -> Any:
+        mix = np.zeros(end - begin, dtype=np.float32)
+        for start, frames, path in clips:
+            first = max(begin, start)
+            last = min(end, start + frames)
+            if first >= last:
+                continue
+            data, _ = soundfile.read(path, start=first - start, stop=last - start, dtype="float32", always_2d=True)
+            mix[first - begin : last - begin] += data.mean(axis=1)
+        return mix
+
+    # Pass 1: the peak of the whole mix (to scale it down only when it would clip, as before)
+    peak = 0.0
+    context.phase("assemble", 0.0)
+    for begin in range(0, length, block):
+        context.phase("assemble", 0.5 * begin / max(1, length))
+        mix = mix_block(begin, min(length, begin + block))
+        if len(mix):
+            peak = max(peak, float(np.max(np.abs(mix))))
+    scale = 1.0 / peak if peak > 1.0 else 1.0
+    # Pass 2: write the mix block by block
+    with soundfile.SoundFile(params["output"], "w", samplerate=sample_rate, channels=1, subtype="FLOAT") as out:
+        for begin in range(0, length, block):
+            context.phase("assemble", 0.5 + 0.5 * begin / max(1, length))
+            mix = mix_block(begin, min(length, begin + block))
+            out.write(mix * scale if scale != 1.0 else mix)
     return {"path": params["output"], "duration": length / sample_rate}
 
 
@@ -331,7 +374,7 @@ def rpc_inspect_style_vectors(params: dict, context: Context) -> dict:
         safe = True
     except Exception as error:
         if not params.get("allowUnsafe"):
-            return {"safe": False, "detail": f"{type(error).__name__}: {error}"[:2000]}
+            return {"safe": False, "detail": f"{type(error).__name__}: {error}"}
         # The user accepted the risk: pickle data inside the file may run code while loading.
         vectors = np.load(path, allow_pickle=True)
         safe = False

@@ -26,7 +26,8 @@ import {
     type TtsEngineId,
     type VoiceLanguage,
 } from '../../../shared/voice/languages';
-import type { TrainingProgress, VoiceModelInfo } from '../../../shared/voice/types';
+import type { TrainingStage, VoiceModelInfo } from '../../../shared/voice/types';
+import { voicePhase } from './job-progress';
 
 // 声のモデルの学習。学習用の音声は学習セット (training-sets.ts) から読む。
 // 学習時のパラメーターはアプリが決める (利用者は名前を付けるだけ)。
@@ -34,7 +35,7 @@ import type { TrainingProgress, VoiceModelInfo } from '../../../shared/voice/typ
 // --- 学習の実行 ---
 
 // 学習処理の段階ごとの進捗の配分 (%)
-const STAGE_RANGES: Record<TrainingProgress['stage'], [number, number]> = {
+const STAGE_RANGES: Record<TrainingStage, [number, number]> = {
     prepare: [0, 2],
     preprocess: [2, 10],
     extract: [10, 22],
@@ -45,7 +46,7 @@ const STAGE_RANGES: Record<TrainingProgress['stage'], [number, number]> = {
 
 type DriverEvent = {
     kind?: string;
-    stage?: TrainingProgress['stage'];
+    stage?: TrainingStage;
     epoch?: number;
     totalEpochs?: number;
     code?: string;
@@ -72,7 +73,6 @@ async function runDriver(
             jobId,
             cwd: tempDir,
             env: buildPythonEnv(component, extraEnv),
-            tailLines: 80,
             onLine: (line, stream) => {
                 if (stream === 'stderr') {
                     pythonLog('train', line);
@@ -91,18 +91,15 @@ async function runDriver(
                 if (event.kind === 'done') done = true;
                 if (event.kind === 'stage' && event.stage) {
                     const [start, end] = STAGE_RANGES[event.stage];
-                    const fraction = event.epoch && event.totalEpochs ? event.epoch / event.totalEpochs : 0;
-                    const progress: TrainingProgress = {
-                        stage: event.stage,
-                        epoch: event.epoch,
-                        totalEpochs: event.totalEpochs,
-                    };
-                    emitJobEvent({
+                    const counted = !!(event.epoch && event.totalEpochs);
+                    const fraction = counted ? event.epoch! / event.totalEpochs! : 0;
+                    emitJobEvent({ jobId, kind: 'progress', percent: start + (end - start) * fraction });
+                    // 回数で数えられる段階 (学習) は、回数の進み具合から残り時間を見積もる
+                    voicePhase(
                         jobId,
-                        kind: 'progress',
-                        percent: start + (end - start) * fraction,
-                        payload: progress,
-                    });
+                        `training.${event.stage}`,
+                        counted ? { fraction, current: event.epoch, total: event.totalEpochs } : {}
+                    );
                 }
             },
         }
@@ -111,7 +108,7 @@ async function runDriver(
         const { code = 'TRAINING_FAILED', message } = failure as DriverEvent;
         throw new Error(message ? `${code}: ${message}` : code);
     }
-    if (result.code !== 0 || !done) throw new Error(`TRAINING_FAILED: ${result.tail.slice(-15).join('\n')}`);
+    if (result.code !== 0 || !done) throw new Error(`TRAINING_FAILED: ${result.output.join('\n')}`);
 }
 
 function internalModelName(): string {

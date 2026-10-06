@@ -1,13 +1,13 @@
 import { Avatar, Box, ButtonBase, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useGuardedNavigate } from '../stores/navigationGuard';
 import PageContainer from '../components/common/PageContainer';
 import SectionLabel from '../components/common/SectionLabel';
 import { FEATURE_CATEGORIES, featuresByCategory } from '../navigation/features';
 
 export default function DashboardPage() {
     const { t } = useTranslation();
-    const navigate = useNavigate();
+    const navigate = useGuardedNavigate();
 
     return (
         <PageContainer sx={{ maxWidth: 1400, mx: 'auto', width: '100%' }}>

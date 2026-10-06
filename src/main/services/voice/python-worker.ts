@@ -2,6 +2,7 @@ import type { ChildProcess } from 'child_process';
 import path from 'path';
 import { killTree, spawnGroup } from '../../utils/process-tree';
 import { pythonLog } from './log';
+import { createLineReader } from './output-lines';
 import { isCancelled, onJobCancel } from '../job-manager';
 import { newTempDir, discardLater } from '../work-dir';
 import { bundledResourceDir, envPythonExecutable, libraryPaths } from './paths';
@@ -32,9 +33,6 @@ type WorkerRequestOptions = {
     onEvent?(event: Record<string, unknown>): void;
 };
 
-// 標準エラーの末尾を保持する行数 (異常終了時の原因として返すため)
-const STDERR_TAIL_LINES = 60;
-
 // プロセスが終了済みか (起動できなかったプロセスは pid を持たず、exit も来ない)
 function hasExited(child: ChildProcess): boolean {
     return child.pid === undefined || child.exitCode !== null || child.signalCode !== null;
@@ -62,7 +60,9 @@ class PythonWorker {
     private stopping = new Set<ChildProcess>();
     private nextId = 1;
     private pending = new Map<number, PendingRequest>();
-    private stderrTail: string[] = [];
+    // 処理中の要求の間に出た標準エラー (異常終了時の原因として返す)。
+    // 常駐プロセスの出力を溜め続けないよう、要求ごとに改める
+    private stderrLines: string[] = [];
     // 要求は 1 件ずつ順番に処理する (Python 側も 1 件ずつしか処理しない)
     private chain: Promise<unknown> = Promise.resolve();
 
@@ -96,7 +96,7 @@ class PythonWorker {
         child.once('exit', () => discardLater(temp));
         child.once('error', () => discardLater(temp));
         this.child = child;
-        this.stderrTail = [];
+        this.stderrLines = [];
         // 終了しかけのプロセスへの書き込みは EPIPE になる。終了は exit で扱うため、ここでは無視する
         child.stdin?.on('error', () => undefined);
 
@@ -112,21 +112,21 @@ class PythonWorker {
                 index = stdoutBuffer.indexOf('\n');
             }
         });
-        let stderrBuffer = '';
         child.stderr?.setEncoding('utf-8');
-        child.stderr?.on('data', (chunk: string) => {
-            stderrBuffer += chunk;
-            const lines = stderrBuffer.split(/\r?\n|\r/);
-            stderrBuffer = lines.pop() ?? '';
-            for (const line of lines) {
-                if (!line.trim()) continue;
+        child.stderr?.on(
+            'data',
+            createLineReader((line, overwrite) => {
                 pythonLog(`python:${this.component}`, line);
                 // 切り離した古いプロセスの出力は、新しいプロセスの異常終了の詳細に混ぜない
-                if (this.child !== child) continue;
-                this.stderrTail.push(line);
-                if (this.stderrTail.length > STDERR_TAIL_LINES) this.stderrTail.shift();
-            }
-        });
+                if (this.child !== child) return;
+                // \r で書き換えられた行 (進捗表示) は、端末に最後に残る内容だけを残す
+                if (overwrite && this.stderrLines.length > 0) {
+                    this.stderrLines[this.stderrLines.length - 1] = line;
+                } else {
+                    this.stderrLines.push(line);
+                }
+            })
+        );
         child.on('error', error => this.handleExit(child, error.message));
         child.on('exit', (code, signal) => this.handleExit(child, `exit code ${code ?? signal}`));
         return child;
@@ -169,7 +169,7 @@ class PythonWorker {
     private handleExit(child: ChildProcess, reason: string): void {
         if (this.child !== child) return;
         this.child = null;
-        this.rejectPending(new Error(`PYTHON_WORKER_EXITED: ${reason}\n${this.stderrTail.slice(-20).join('\n')}`));
+        this.rejectPending(new Error(`PYTHON_WORKER_EXITED: ${reason}\n${this.stderrLines.join('\n')}`));
     }
 
     // 要求を送り、結果を待つ。途中経過は onEvent で受け取る
@@ -182,6 +182,7 @@ class PythonWorker {
                     return;
                 }
                 const child = this.start();
+                this.stderrLines = [];
                 const id = this.nextId++;
                 let unregister = () => undefined as void;
                 this.pending.set(id, {

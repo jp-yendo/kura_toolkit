@@ -4,6 +4,21 @@ export default {
     appTitle: 'Kura Toolkit',
     common: {
         cancel: 'キャンセル',
+        unsavedTitle: '保存していない変更があります',
+        unsavedMessage: '保存していない変更は失われます。移動しますか？',
+        discardAndLeave: '破棄して移動',
+        unsavedCloseMessage: '保存していない変更は失われます。終了しますか？',
+        discardAndClose: '破棄して終了',
+        failed: '処理に失敗しました。({{detail}})',
+        // ファイルを選ぶダイアログの種類の名前
+        fileTypes: {
+            audio: '音声ファイル',
+            media: '動画・音声ファイル',
+            image: '画像ファイル',
+            svg: 'SVG ファイル',
+            executable: '実行ファイル',
+            all: 'すべてのファイル',
+        },
         close: '閉じる',
         done: '完了',
         showDetails: '詳細を表示',
@@ -15,6 +30,44 @@ export default {
         ffprobeNotFound: 'ffprobe が見つかりません。アプリ設定でパスを指定してください。',
         workDirMissing: '作業ディレクトリが見つかりません。アプリ設定の「保存場所」で確認してください。({{detail}})',
         dropHint: 'ここにファイルをドラッグ&ドロップ\nまたはクリックして選択',
+    },
+    jobPhases: {
+        prepare: '準備をしています',
+        decodeInput: '音声を読み込んでいます',
+        loadModel: 'モデルを読み込んでいます',
+        separate: '音声を分離しています',
+        finishStems: '分離した音声を仕上げています',
+        convert: '声を変換しています',
+        loudness: '音量をそろえています',
+        pitchShift: '伴奏の音程を変えています',
+        mixPreview: '伴奏と重ねています',
+        mix: '合成しています',
+        synthesize: '音声を作成しています',
+        stretch: '話速を調整しています',
+        assemble: '音声をつなげています',
+        encode: '書き出しています',
+        training: {
+            prepare: '学習の準備をしています',
+            preprocess: '音声を前処理しています',
+            extract: '特徴を抽出しています',
+            train: '学習しています',
+            index: 'インデックスを作成しています',
+            finalize: 'モデルを仕上げています',
+        },
+    },
+    jobPhasesCounted: {
+        encode: '書き出しています ({{current}} / {{total}})',
+        training: {
+            train: '学習しています ({{current}} / {{total}} 回目)',
+        },
+    },
+    jobEta: {
+        left: '残り 約 {{time}}',
+        seconds: '{{seconds}} 秒',
+        minutes: '{{minutes}} 分',
+        minutesSeconds: '{{minutes}} 分 {{seconds}} 秒',
+        hours: '{{hours}} 時間 {{minutes}} 分',
+        hoursOnly: '{{hours}} 時間',
     },
     nav: {
         dashboard: 'ダッシュボード',
@@ -99,6 +152,10 @@ export default {
         unsupportedCodec: '未対応のコーデックのためスキップしました',
     },
     chapterPage: {
+        subtitleFormats: {
+            hdmvText: 'Blu-ray テキスト',
+            arib: 'ARIB 字幕',
+        },
         dropHint: 'ここに動画ファイルをドラッグ&ドロップ\nまたはクリックして選択',
         chapters: 'チャプター一覧',
         colId: 'ID',
@@ -247,7 +304,7 @@ export default {
         searchSection: 'ファイル探索',
         searchThreads: '探索のスレッド数',
         searchThreadsHint:
-            'ディレクトリの走査に使うスレッド数です (1〜100)。大きいほど速くなりますが、HDD やネットワークドライブでは逆に遅くなることがあります。',
+            'ディレクトリの走査に使うスレッド数です (1 以上)。大きいほど速くなりますが、HDD やネットワークドライブでは逆に遅くなることがあります。',
         ffmpegSection: 'ffmpeg / ffprobe',
         ffmpegPath: 'ffmpeg の実行ファイルパス',
         ffprobePath: 'ffprobe の実行ファイルパス',
@@ -261,6 +318,10 @@ export default {
             libraryHint: 'アプリが使用するライブラリの保存先です。',
             model: 'モデルディレクトリ',
             modelHint: 'アプリが使用するモデルの保存先です。',
+            cache: 'キャッシュディレクトリ',
+            cacheHint:
+                '消しても作り直せるファイル (ライブラリが作るキャッシュなど) の保存先です。保持期間より長く使われていないものは、起動時に消します。',
+            cacheRetention: 'キャッシュの保持期間 (日)',
             work: '作業ディレクトリ',
             workHint:
                 '処理中の一時ファイルを置く一時ディレクトリです (既定は OS の一時ディレクトリ)。アプリはこの中に「kura_toolkit_」で始まるフォルダを処理ごとに作り、処理が終わると消します。',
@@ -314,7 +375,8 @@ export default {
                 '半角英数字以外の文字を含む場所では、正しく動かないことがあります。半角英数字だけの場所をおすすめします。',
             errors: {
                 STORAGE_MOVE_NESTED: '今の場所の中や、今の場所を含む場所へは移動できません。',
-                STORAGE_OVERLAP: 'ほかの保存場所 (ライブラリ・モデル・作業ディレクトリ) と重なる場所は選べません。',
+                STORAGE_OVERLAP:
+                    'ほかの保存場所 (ライブラリ・モデル・キャッシュ・作業ディレクトリ) と重なる場所は選べません。',
                 STORAGE_TARGET_NOT_EMPTY:
                     '選んだフォルダには、この保存場所のもの以外のファイルがあります。空のフォルダか、同じ種類の保存場所として使っていたフォルダを選んでください。({{detail}})',
                 STORAGE_MOVE_UNDECIDED: '上書きするかを選んでいない項目があります。({{detail}})',

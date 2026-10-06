@@ -29,21 +29,19 @@ export function formatDuration(seconds: number): string {
         : `${m}:${String(s).padStart(2, '0')}`;
 }
 
-// 声のモデルの表示名。すぐに使えるモデルは名前を変えるまで配布時の名前とエンジンから作る
-export function voiceLabel(t: TFunction, voice: VoiceModelInfo): string {
+// 声のモデルの表示名
+export function voiceLabel(voice: VoiceModelInfo): string {
     if (voice.name) return voice.name;
-    if (voice.distributedName) {
-        const engine = voice.tts ? t(`voice.engine.${voice.tts.engine}`) : '';
-        return t('voice.models.readyLabel', { name: voice.distributedName.replace(/-jp$/, ''), engine });
-    }
+    // 名前を付けていないダウンロードしたモデルは、配布時の名前で表示する (ほかのモデルと同じく名前だけを示す)
+    if (voice.distributedName) return voice.distributedName.replace(/-jp$/, '');
     return voice.id;
 }
 
 // 同じ表示名のモデルがあるか (選択欄で区別できなくなるため、名前の入力時に注意を出すのに使う)
-export function hasSameVoiceName(t: TFunction, voices: VoiceModelInfo[], name: string, exceptId?: string): boolean {
+export function hasSameVoiceName(voices: VoiceModelInfo[], name: string, exceptId?: string): boolean {
     const normalized = name.trim().toLowerCase();
     if (!normalized) return false;
-    return voices.some(voice => voice.id !== exceptId && voiceLabel(t, voice).trim().toLowerCase() === normalized);
+    return voices.some(voice => voice.id !== exceptId && voiceLabel(voice).trim().toLowerCase() === normalized);
 }
 
 // 作業 (分離・変換・読み上げの 1 回分の作業) の識別子。作業の結果を置くフォルダの名前になるため、意味を持たないランダムな値にする

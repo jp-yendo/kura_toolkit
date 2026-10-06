@@ -34,6 +34,17 @@ export type AudioExportSettings = {
 export const EXPORT_SAMPLE_RATES = [8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000];
 export const EXPORT_BITRATES = [320, 256, 224, 192, 160, 144, 128, 112, 96, 80, 64, 56, 48, 40, 32, 24, 16, 8];
 
+// プレビューの波形の区間の数 (チャンネルごと)
+export const WAVEFORM_BUCKETS = 4096;
+
+// プレビューの波形 (チャンネルは 1 か 2。3ch 以上の音声はステレオにまとめる)
+export type WaveformData = {
+    channels: number;
+    durationSec: number;
+    // チャンネルごとに、区間 (WAVEFORM_BUCKETS 個) の [最小値, 最大値] を順に並べたもの
+    peaks: Float32Array[];
+};
+
 // プレビュー再生できる音声ファイル
 export type MediaRef = {
     path: string;
@@ -346,8 +357,10 @@ export type ConversionCandidate = {
     voiceId: string;
     voiceName: string;
     params: ConversionParams;
-    // 変換後のボーカル (中央定位のステレオ)
+    // 変換後のボーカル (モデルのサンプリング周波数のモノラル)
     vocals: MediaRef;
+    // 合成で出力するチャンネル数 (元の音源がステレオなら 2。ボーカルは左右に同じ音を置いた中央定位にする)
+    channels: number;
     // 変換後のボーカルと伴奏を既定の音量で重ねた試聴用の音 (伴奏が無い場合は null)
     withAccompaniment: MediaRef | null;
     createdAt: number;
@@ -388,6 +401,8 @@ export type MixRenderRequest = {
     workKey: string;
     vocals: string;
     accompaniment: string | null;
+    // 出力するチャンネル数 (候補の channels。伴奏がステレオなら伴奏に合わせて 2 にする)
+    channels: number;
     // キーの変更量。オクターブ単位以外なら伴奏を同じだけ移調する
     pitch: number;
     params: MixParams;
@@ -419,7 +434,9 @@ export type SeparationPresetParams = {
 // 声のモデル
 // ---------------------------------------------------------------------------
 
-export type VoiceModelCategory = 'trained' | 'imported' | 'ready';
+// 声のモデルの区分。ユーザーモデル (user: 利用者がこのアプリで学習して作ったモデル) と、
+// 既存モデル (existing: それ以外。ダウンロードしたもの・取り込んだもの) の 2 つだけを区別する
+export type VoiceModelOrigin = 'user' | 'existing';
 
 export type RvcModelMeta = {
     version: string;
@@ -444,9 +461,10 @@ export type VoiceModelInfo = {
     id: string;
     feature: VoiceModelFeature;
     name: string;
-    category: VoiceModelCategory;
+    origin: VoiceModelOrigin;
     createdAt: number;
-    // すぐに使えるモデルの元になったダウンロード項目と、配布時の名前 (name が空の間はこれから表示名を作る)
+    // ダウンロードして使うモデル (すぐに使えるモデル) の元になったダウンロード項目と、配布時の名前
+    // (name が空の間はこれから表示名を作る)。区分ではなく、保存のされ方 (ダウンロードの記録で管理する) の違いを表す
     readyItemId?: string;
     distributedName?: string;
     rvc?: RvcModelMeta;
@@ -478,7 +496,7 @@ export type ImportInspection = {
     // kura: 本アプリで書き出したファイル / external: 外部で入手したモデル
     source: 'kura' | 'external';
     suggestedName: string;
-    category: VoiceModelCategory;
+    origin: VoiceModelOrigin;
     // 安全な方式で読み込めたか。false の場合は利用者の許可が必要
     safe: boolean;
     unsafeDetail?: string;
@@ -497,7 +515,7 @@ export type TtsParams = {
     styleWeight: number;
     // 話速 (1 = 標準。大きいほど速い)
     speed: number;
-    // 音高の倍率 (1 = 標準)
+    // 音の高さの倍率 (1 = 標準)
     pitchScale: number;
     // 抑揚の倍率 (1 = 標準)
     intonationScale: number;
@@ -512,7 +530,15 @@ export type TtsParams = {
 // 合成音声が字幕の区間に収まらない場合の扱い
 export type TimelineOverflowMode = 'speedup' | 'overlap' | 'shift' | 'warn';
 
-export type TtsInputKind = 'text' | 'srt' | 'vtt';
+// 読み上げの入力方法。normal: 制御タグを含む文章 / timed: 行ごとに開始時間・終了時間・テキストを指定する表 (タイミング指定)
+export type TtsInputMode = 'normal' | 'timed';
+
+// タイミング指定の 1 行 (時間は秒)。テキストは複数行でもよく、制御タグを含められる
+export type TimedLine = {
+    start: number;
+    end: number;
+    text: string;
+};
 
 export type TtsRunRequest = {
     workKey: string;
@@ -522,11 +548,13 @@ export type TtsRunRequest = {
     params: TtsParams;
     readSymbols: boolean;
     symbolReadings: SymbolReading[];
+    inputMode: TtsInputMode;
+    // 通常の入力の文章 (inputMode = normal)
     text: string;
-    inputKind: TtsInputKind;
+    // タイミング指定の行 (inputMode = timed)
+    lines: TimedLine[];
+    // 行の時間内に収まらない場合の扱い (全体。行ごとには、その行の fit タグで変える)
     overflowMode: TimelineOverflowMode;
-    // 区間ごとの個別指定 (区間の番号 -> 扱い)
-    cueOverflowModes: Record<number, TimelineOverflowMode>;
     // 話速の閾値を超える区間の確認を済ませた場合の確認 ID
     confirmationToken?: string;
 };
@@ -537,7 +565,8 @@ export type SpeedupConfirmation = {
     items: { index: number; start: number; end: number; text: string; factor: number }[];
 };
 
-export type TtsCandidate = {
+// 読み上げで作成した音声 (作成し直すと置き換える)
+export type TtsAudio = {
     id: string;
     voiceId: string;
     voiceName: string;
@@ -553,7 +582,7 @@ export type TtsCandidate = {
 };
 
 export type TtsRunResult =
-    | { status: 'done'; candidate: TtsCandidate }
+    | { status: 'done'; audio: TtsAudio }
     | { status: 'needsConfirmation'; confirmation: SpeedupConfirmation }
     | { status: 'invalid'; errors: TagIssue[]; fixes: TagFix[] };
 
@@ -601,8 +630,22 @@ export type TrainingSetDetail = {
     sentences: TrainingSentence[];
 };
 
-export type TrainingProgress = {
-    stage: 'prepare' | 'preprocess' | 'extract' | 'train' | 'index' | 'finalize';
-    epoch?: number;
-    totalEpochs?: number;
-};
+export type TrainingStage = 'prepare' | 'preprocess' | 'extract' | 'train' | 'index' | 'finalize';
+
+// 音声機能の処理の段階 (voice.phases.<id> の文言で示す)
+export type VoicePhaseId =
+    | 'prepare'
+    | 'decodeInput'
+    | 'loadModel'
+    | 'separate'
+    | 'finishStems'
+    | 'convert'
+    | 'loudness'
+    | 'pitchShift'
+    | 'mixPreview'
+    | 'mix'
+    | 'synthesize'
+    | 'stretch'
+    | 'assemble'
+    | 'encode'
+    | `training.${TrainingStage}`;

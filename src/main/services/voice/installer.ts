@@ -130,7 +130,7 @@ async function checkPython(executable: string): Promise<void> {
         env: buildPythonEnv(null),
     });
     if (result.code === WINDOWS_DLL_NOT_FOUND) throw new Error('VC_RUNTIME_MISSING');
-    if (result.code !== 0) throw new Error(`PYTHON_BROKEN: ${result.tail.join('\n')}`);
+    if (result.code !== 0) throw new Error(`PYTHON_BROKEN: ${result.output.join('\n')}`);
 }
 
 export async function installPython(platform: VoicePlatformInfo, context: InstallContext): Promise<void> {
@@ -233,7 +233,7 @@ async function ensureVenv(env: VoiceComponentId): Promise<void> {
     const result = await runProcess(pythonExecutable(), ['-m', 'venv', '--without-pip', '--copies', lib.env(env)], {
         env: buildPythonEnv(null),
     });
-    if (result.code !== 0) throw new Error(`VENV_FAILED: ${result.tail.join('\n')}`);
+    if (result.code !== 0) throw new Error(`VENV_FAILED: ${result.output.join('\n')}`);
     if (process.platform !== 'win32') await copyLibpython(lib.env(env));
     // Linux の venv は --copies でも lib64 を lib へのシンボリックリンクとして作る。使われない (パッケージは lib に入る) うえ、
     // 保存場所の移動でリンク先の中身を写すと lib が二重になるため消す
@@ -335,7 +335,7 @@ async function runPip(
     });
     if (result.code === WINDOWS_DLL_NOT_FOUND) throw new Error('VC_RUNTIME_MISSING');
     if (result.code !== 0) {
-        const text = result.tail.join('\n');
+        const text = result.output.join('\n');
         if (
             /error: Microsoft Visual C\+\+|xcrun: error|command '[^']*(?:gcc|cc|clang)' failed|unable to execute '[^']*(?:gcc|cc|clang)'/i.test(
                 text
@@ -400,7 +400,7 @@ async function verifyComponent(spec: ComponentSpec): Promise<void> {
         cwd: spec.env === 'converter' ? libraryPaths().source('converter') : undefined,
     });
     if (result.code === WINDOWS_DLL_NOT_FOUND) throw new Error('VC_RUNTIME_MISSING');
-    if (result.code !== 0) throw new Error(`VERIFY_FAILED: ${result.tail.join('\n')}`);
+    if (result.code !== 0) throw new Error(`VERIFY_FAILED: ${result.output.join('\n')}`);
 }
 
 export async function installComponent(

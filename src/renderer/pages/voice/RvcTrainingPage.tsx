@@ -35,7 +35,6 @@ import { useTrainingSets } from '../../components/voice/useTrainingSets';
 import { audioInputFilters } from '../../components/voice/audioInput';
 import { formatDuration } from '../../components/voice/voiceFormat';
 import { isCancelledError, voiceErrorMessage } from '../../components/voice/voiceErrors';
-import { trainingStatus } from '../../components/voice/trainingProgress';
 import { useJobRunner } from '../../hooks/useJobRunner';
 import { showNotice } from '../../stores/noticeStore';
 import type { TrainingAudio, TrainingSetDetail, VoiceModelInfo } from '@shared/voice/types';
@@ -156,7 +155,7 @@ export default function RvcTrainingPage() {
                                         await window.kuraToolkit.voice.trainingSets.addRecording(
                                             'converter',
                                             shown.summary.id,
-                                            audio.wav,
+                                            audio.recordingId,
                                             {
                                                 name: t('voice.training.recordingName', {
                                                     date: new Date().toLocaleString(),
@@ -230,10 +229,7 @@ export default function RvcTrainingPage() {
                                 </Table>
                             )}
                         </Panel>
-                        <SyncPlayer
-                            source={playing ? { key: playing.id, url: playing.media.url, label: playing.name } : null}
-                            emptyHint={t('voice.training.playHint')}
-                        />
+                        <SyncPlayer source={playing ? { key: playing.id, url: playing.media.url } : null} />
                         {total > 0 && total < 600 && <Alert severity='warning'>{t('voice.training.rvcShort')}</Alert>}
 
                         <Panel>
@@ -272,7 +268,7 @@ export default function RvcTrainingPage() {
                 percent={job?.percent}
                 current={job?.current}
                 total={job?.total}
-                status={trainingStatus(t, job?.payload)}
+                status={job?.status}
                 message={job?.message ?? ''}
                 onCancel={cancel}
             />

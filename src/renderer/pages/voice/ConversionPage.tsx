@@ -28,7 +28,6 @@ import {
 } from '@mui/material';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import RecordVoiceOverIcon from '@mui/icons-material/RecordVoiceOver';
-import SaveAltIcon from '@mui/icons-material/SaveAlt';
 import TuneIcon from '@mui/icons-material/Tune';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import { useTranslation } from 'react-i18next';
@@ -40,6 +39,7 @@ import FileDropZone from '../../components/common/FileDropZone';
 import ProgressDialog from '../../components/common/ProgressDialog';
 import ReadinessAlert, { useFeatureReadiness } from '../../components/voice/ReadinessAlert';
 import VoiceFeatureHeader from '../../components/voice/VoiceFeatureHeader';
+import UserModelIcon from '../../components/voice/UserModelIcon';
 import SeparationWorkbench from '../../components/voice/SeparationWorkbench';
 import SyncPlayer, { type PlayerSource } from '../../components/voice/SyncPlayer';
 import SliderField from '../../components/voice/SliderField';
@@ -54,7 +54,6 @@ import { useJobRunner } from '../../hooks/useJobRunner';
 import { showNotice } from '../../stores/noticeStore';
 import { useConversionSeparationStore } from '../../stores/separationWorkStore';
 import { useConversionStore, type ConversionInputMode } from '../../stores/conversionStore';
-import { useVoiceHandoffStore } from '../../stores/voiceHandoffStore';
 import { openVoiceLibrary } from '../../stores/voiceLibraryStore';
 import {
     F0_METHODS,
@@ -129,33 +128,13 @@ export default function ConversionPage() {
         setMixTarget('mix');
     };
 
-    // 分離や読み上げから受け取った音声で作業を始める。受け取った音声は、この画面の作業の置き場に移されている。
-    // 別の機能から移ってきたとき (変換の作業は、別の機能へ移ったときに破棄されている) に受け取る
-    React.useEffect(() => {
-        const handoff = useVoiceHandoffStore.getState().take();
-        if (!handoff) return;
-        const conversion = useConversionStore.getState();
-        conversion.reset();
-        setTarget({ kind: 'originalVocals' });
-        setMixTarget('mix');
-        conversion.setInputMode('external');
-        conversion.setExternal(handoff);
-        conversion.setStep(1);
-    }, []);
-
     // --- 変換に使うボーカルと伴奏 (どちらも複数の音から成る場合は、使うときに 1 つに重ねる) ---
     let vocals: string[] = [];
     let accompaniment: string[] = [];
     let sourceMedia: MediaRef | null = null;
     let sourcePath = '';
     let channels = 2;
-    if (conv.inputMode === 'external' && conv.external) {
-        vocals = conv.external.vocals;
-        accompaniment = conv.external.accompaniment;
-        sourceMedia = conv.external.sourceMedia;
-        sourcePath = conv.external.sourcePath;
-        channels = conv.external.channels;
-    } else if (sep.source) {
+    if (sep.source) {
         sourceMedia = sep.source.media;
         sourcePath = sep.source.sourcePath;
         channels = sep.source.channels;
@@ -290,6 +269,7 @@ export default function ConversionPage() {
             workKey,
             vocals: adopted.vocals.path,
             accompaniment: await singlePath(jobId, accompaniment),
+            channels: adopted.channels,
             pitch: adopted.params.pitch,
             params: conv.mixParams,
         });
@@ -313,29 +293,21 @@ export default function ConversionPage() {
     // --- 再生対象 ---
     let step1Source: PlayerSource | null = null;
     if (target.kind === 'originalVocals' && vocalsMedia) {
-        step1Source = {
-            key: 'original-vocals',
-            url: vocalsMedia.url,
-            label: t('voice.conversion.targets.originalVocals'),
-        };
+        step1Source = { key: 'original-vocals', url: vocalsMedia.url };
     } else if (target.kind === 'source' && sourceMedia) {
-        step1Source = { key: 'source', url: sourceMedia.url, label: t('voice.conversion.targets.source') };
+        step1Source = { key: 'source', url: sourceMedia.url };
     } else if (target.kind === 'converted' || target.kind === 'withAccompaniment') {
         const candidate = conv.candidates.find(item => item.id === target.candidateId);
         const media = candidate ? (target.kind === 'converted' ? candidate.vocals : candidate.withAccompaniment) : null;
         if (candidate && media) {
-            step1Source = {
-                key: `${candidate.id}-${target.kind}`,
-                url: media.url,
-                label: `${candidate.voiceName} - ${t(`voice.conversion.targets.${target.kind}`)}`,
-            };
+            step1Source = { key: `${candidate.id}-${target.kind}`, url: media.url };
         }
     }
     const step2Source: PlayerSource | null =
         mixTarget === 'mix' && conv.mix
-            ? { key: `mix-${conv.mixSignature}`, url: conv.mix.url, label: t('voice.conversion.targets.mix') }
+            ? { key: `mix-${conv.mixSignature}`, url: conv.mix.url }
             : sourceMedia
-              ? { key: 'source', url: sourceMedia.url, label: t('voice.conversion.targets.source') }
+              ? { key: 'source', url: sourceMedia.url }
               : null;
 
     const exportEntries: ExportEntry[] = adopted
@@ -404,26 +376,12 @@ export default function ConversionPage() {
                                 control={<Radio />}
                                 label={t('voice.conversion.modeDirect')}
                             />
-                            {conv.external && (
-                                <FormControlLabel
-                                    value='external'
-                                    control={<Radio />}
-                                    label={t(
-                                        conv.external.from === 'tts'
-                                            ? 'voice.conversion.modeFromTts'
-                                            : 'voice.conversion.modeFromSeparation',
-                                        {
-                                            name: conv.external.name,
-                                        }
-                                    )}
-                                />
-                            )}
                         </RadioGroup>
                         <Typography variant='caption' color='text.secondary' sx={{ lineHeight: 1.5 }}>
                             {t('voice.conversion.modeHint')}
                         </Typography>
                     </Panel>
-                    {conv.inputMode !== 'external' && !sep.source && (
+                    {!sep.source && (
                         <FileDropZone
                             onFiles={paths => void loadSource(paths)}
                             filters={audioInputFilters(t)}
@@ -432,7 +390,7 @@ export default function ConversionPage() {
                             sx={{ minHeight: 200, opacity: ready ? 1 : 0.6, pointerEvents: ready ? 'auto' : 'none' }}
                         />
                     )}
-                    {conv.inputMode !== 'external' && sep.source && (
+                    {sep.source && (
                         <Panel sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                             <Box sx={{ flexGrow: 1, minWidth: 0 }}>
                                 <Typography
@@ -459,7 +417,7 @@ export default function ConversionPage() {
                         </>
                     )}
                     {conv.inputMode === 'direct' && sep.source && (
-                        <SyncPlayer source={{ key: 'direct', url: sep.source.media.url, label: sep.sourceName }} />
+                        <SyncPlayer source={{ key: 'direct', url: sep.source.media.url }} />
                     )}
                     <Panel sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
                         <Typography variant='body2' sx={{ flexGrow: 1, lineHeight: 1.6 }}>
@@ -500,15 +458,11 @@ export default function ConversionPage() {
                                 >
                                     {voices.map(item => (
                                         <MenuItem key={item.id} value={item.id}>
-                                            {voiceLabel(t, item)}
-                                            <Typography
-                                                component='span'
-                                                variant='caption'
-                                                color='text.secondary'
-                                                sx={{ ml: 1 }}
-                                            >
-                                                {t(`voice.models.categories.${item.category}`)}
-                                            </Typography>
+                                            {/* ユーザーモデルにだけ、名前の右にアイコンを付ける */}
+                                            <Box component='span' sx={{ flexGrow: 1, minWidth: 0, mr: 1 }}>
+                                                {voiceLabel(item)}
+                                            </Box>
+                                            <UserModelIcon voice={item} />
                                         </MenuItem>
                                     ))}
                                 </Select>
@@ -784,12 +738,7 @@ export default function ConversionPage() {
                         <SyncPlayer source={step2Source} />
                         <Stack direction='row' spacing={1} sx={{ justifyContent: 'flex-end' }}>
                             <Button onClick={() => conv.setStep(1)}>{t('voice.common.back')}</Button>
-                            <Button
-                                variant='contained'
-                                startIcon={<SaveAltIcon />}
-                                disabled={!adopted || busy}
-                                onClick={() => setExportOpen(true)}
-                            >
+                            <Button variant='contained' disabled={!adopted || busy} onClick={() => setExportOpen(true)}>
                                 {t('voice.export.open')}
                             </Button>
                         </Stack>
@@ -846,6 +795,7 @@ export default function ConversionPage() {
                 open={job !== null}
                 title={job?.title ?? ''}
                 percent={job?.percent}
+                status={job?.status}
                 message={job?.message ?? ''}
                 onCancel={cancel}
             />

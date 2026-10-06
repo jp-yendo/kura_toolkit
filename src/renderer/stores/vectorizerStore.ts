@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { VectorizeParams } from '@shared/types';
+import type { SvgResult, VectorizeParams } from '@shared/types';
 
 // 変換パラメータの初期値 (設定ファイルには保存しないため、起動のたびにこの値から始まる)
 export const DEFAULT_VECTORIZE_PARAMS: VectorizeParams = {
@@ -16,21 +16,22 @@ export const DEFAULT_VECTORIZE_PARAMS: VectorizeParams = {
 
 type VectorizerState = {
     imagePath: string | null;
-    imageDataUrl: string | null;
-    svg: string | null;
+    imageUrl: string | null;
+    // 変換結果 (中身は main が作業ディレクトリに持つ)
+    svg: SvgResult | null;
     params: VectorizeParams;
-    setImage(imagePath: string, imageDataUrl: string): void;
-    setSvg(svg: string | null): void;
+    setImage(imagePath: string, imageUrl: string): void;
+    setSvg(svg: SvgResult | null): void;
     patchParams(patch: Partial<VectorizeParams>): void;
 };
 
 export const useVectorizerStore = create<VectorizerState>(set => ({
     imagePath: null,
-    imageDataUrl: null,
+    imageUrl: null,
     svg: null,
     params: DEFAULT_VECTORIZE_PARAMS,
-    setImage(imagePath, imageDataUrl) {
-        set({ imagePath, imageDataUrl, svg: null });
+    setImage(imagePath, imageUrl) {
+        set({ imagePath, imageUrl, svg: null });
     },
     setSvg(svg) {
         set({ svg });

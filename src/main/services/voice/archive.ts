@@ -56,14 +56,11 @@ async function forEachEntry(
     }
 }
 
-// zip から文字列として読み出す項目の大きさの上限 (書き出しファイルの情報 JSON は小さいため)
-const MAX_ZIP_TEXT_BYTES = 1024 * 1024;
-
 // zip から 1 件を取り出して文字列で返す (書き出しファイルの情報 JSON を読むため)
 export async function readZipText(zipPath: string, entryName: string): Promise<string | null> {
     let result: string | null = null;
     await forEachEntry(zipPath, async (zipFile, entry) => {
-        if (entry.fileName !== entryName || entry.uncompressedSize > MAX_ZIP_TEXT_BYTES) return;
+        if (entry.fileName !== entryName) return;
         const stream = await openEntryStream(zipFile, entry);
         const chunks: Buffer[] = [];
         for await (const chunk of stream) chunks.push(chunk as Buffer);

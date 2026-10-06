@@ -1,11 +1,8 @@
 import fs from 'fs';
-import path from 'path';
-import type { TtsInputKind } from '../../../shared/voice/types';
 
-// 読み上げの文章ファイル (テキスト・SRT・WebVTT) の読み込みと保存。
+// 読み上げの文章ファイル (通常の入力はテキスト、タイミング指定は字幕ファイル) の読み込みと保存。
+// 内容の解釈 (字幕ファイルを表へ展開するなど) は画面側で行い、ここでは文字コードと改行だけを扱う。
 // 読み込んだ内容は編集画面上で編集し、ディスク上のファイルへの反映は利用者が保存操作をしたときだけ行う。
-
-const MAX_TEXT_BYTES = 20 * 1024 * 1024;
 
 function decode(buffer: Buffer): string {
     if (buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf) {
@@ -25,18 +22,9 @@ function decode(buffer: Buffer): string {
     }
 }
 
-function inputKindForPath(filePath: string): TtsInputKind {
-    const ext = path.extname(filePath).toLowerCase();
-    if (ext === '.srt') return 'srt';
-    if (ext === '.vtt') return 'vtt';
-    return 'text';
-}
-
-export function loadTextFile(filePath: string): { text: string; kind: TtsInputKind } {
-    const stat = fs.statSync(filePath);
-    if (stat.size > MAX_TEXT_BYTES) throw new Error('TEXT_FILE_TOO_LARGE');
-    const text = decode(fs.readFileSync(filePath)).replace(/\r\n?/g, '\n');
-    return { text, kind: inputKindForPath(filePath) };
+// 改行は LF にそろえて返す
+export function loadTextFile(filePath: string): string {
+    return decode(fs.readFileSync(filePath)).replace(/\r\n?/g, '\n');
 }
 
 // UTF-8 (BOM なし) で保存する。改行は OS の標準に合わせる。

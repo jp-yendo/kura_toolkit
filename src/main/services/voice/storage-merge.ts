@@ -8,6 +8,7 @@ import { libraryPaths } from './paths';
 import { COMPONENT_SPECS } from './spec';
 import { isFileBusyError, renameWithRetry } from '../../utils/rename-retry';
 import type {
+    MovableStorageKind,
     StorageMoveDecisions,
     StorageMovePlan,
     StorageUnitConflict,
@@ -15,10 +16,11 @@ import type {
 } from '../../../shared/types';
 import type { VoiceComponentId, VoiceModelFeature } from '../../../shared/voice/types';
 
-// 保存場所 (ライブラリ・モデルディレクトリ) の移動。移動先に中身がある場合は、まとまり (単位) ごとにマージする。
+// 保存場所 (ライブラリ・モデル・キャッシュディレクトリ) の移動。移動先に中身がある場合は、まとまり (単位) ごとにマージする。
 // - 単位: モデルディレクトリはダウンロードしたモデル (取得記録の項目ごと)・分離のパッケージ一式のモデル設定・
 //   声のモデル・学習セット。ライブラリディレクトリは Python 本体とライブラリ (仮想環境の単位) ごと。
-//   モデルのファイルの一部などの単位では扱わない
+//   モデルのファイルの一部などの単位では扱わない。キャッシュディレクトリには単位が無い (すべてどの単位にも
+//   属さないファイルとして扱い、利用記録は両方のものを合わせる)
 // - 複数のモデルが共有するファイル (同じ系統の分離モデルが共有する設定ファイルなど。配布元の同じファイル) は
 //   どの単位にも入れず、移動先に無い場合だけ移す (上書きでモデルを消すときも消さない)
 // - 移動元にだけある単位は移す。両方にある単位は、利用者が選んだとおりに、上書きする (移動先の単位を削除してから
@@ -27,7 +29,7 @@ import type { VoiceComponentId, VoiceModelFeature } from '../../../shared/voice/
 // 別のドライブへは、まず移動先の中の一時フォルダへコピーし (中断・失敗したら一時フォルダを消して元のまま)、
 // コピーし終えてから単位ごとに置き換える。同じドライブでは名前の変更で移す
 
-type MovableStorage = 'library' | 'model';
+type MovableStorage = MovableStorageKind;
 
 type Unit = Omit<StorageUnitConflict, 'source' | 'target'> & {
     // 単位に属するファイル・フォルダ (保存場所からの相対パス)
@@ -49,12 +51,21 @@ const KNOWN_TOP_LEVEL: Record<MovableStorage, string[]> = {
         'applio',
         'style-bert-vits2',
     ],
+    cache: ['cache.json', 'cache.json.tmp', 'audio-separator', 'applio', 'style-bert-vits2'],
+};
+
+// 保存場所の記録 (中身と一緒には移さず、両方のものを合わせて書き直す)
+const RECORD_FILE: Record<MovableStorage, string> = {
+    model: 'manifest.json',
+    library: 'manifest.json',
+    cache: 'cache.json',
 };
 
 // 移さずに移動元と一緒に消すもの (取得の再試行のためだけに残しているもの・書きかけで残ったもの)
 const NOT_TRANSFERRED: Record<MovableStorage, string[]> = {
     model: ['manifest.json.tmp'],
     library: ['pip-cache', 'python.tar.gz', 'python.tar.gz.part', 'python.staging', 'manifest.json.tmp'],
+    cache: ['cache.json.tmp'],
 };
 
 // 別のドライブへの移動で、先にコピーする一時フォルダの名前の接頭辞
@@ -145,6 +156,8 @@ export function checkMergeTarget(kind: MovableStorage, newRoot: string): void {
         .readdirSync(newRoot)
         .filter(name => !KNOWN_TOP_LEVEL[kind].some(item => sameName(item, name)) && !isIgnorableName(name));
     if (unknown.length > 0) throw new Error(`STORAGE_TARGET_NOT_EMPTY: ${newRoot}`);
+    // キャッシュの利用記録は、壊れていても空として扱う (作り直せるものの記録のため)
+    if (kind === 'cache') return;
     // 記録が別の種類の保存場所のもの (モデルディレクトリにライブラリの記録など) なら選べない
     const data = readJsonFile<unknown>(path.join(newRoot, 'manifest.json'));
     if (data !== null && !(kind === 'model' ? isModelManifest(data) : isLibraryManifest(data))) {
@@ -204,7 +217,9 @@ function sharedFilesOf(manifests: ModelManifestFile[]): Set<string> {
 // 取得記録のファイル。展開して消す zip (NLTK のデータなど) は、展開したフォルダ (zip と同じ名前) も含める
 function recordedPaths(files: string[]): string[] {
     const paths = files.map(safeRelative).filter((file): file is string => file !== null);
-    return paths.flatMap(file => (file.toLowerCase().endsWith('.zip') ? [file, file.slice(0, -'.zip'.length)] : [file]));
+    return paths.flatMap(file =>
+        file.toLowerCase().endsWith('.zip') ? [file, file.slice(0, -'.zip'.length)] : [file]
+    );
 }
 
 function modelUnits(root: string, shared: Set<string>): Unit[] {
@@ -275,7 +290,7 @@ function sharedFiles(kind: MovableStorage, oldRoot: string, newRoot: string): Se
 }
 
 function unitsOf(kind: MovableStorage, root: string, shared: Set<string>): Unit[] {
-    if (!fs.existsSync(root)) return [];
+    if (!fs.existsSync(root) || kind === 'cache') return [];
     return kind === 'model' ? modelUnits(root, shared) : libraryUnits(root);
 }
 
@@ -390,7 +405,7 @@ type Plan = {
 async function collectOthers(kind: MovableStorage, oldRoot: string, newRoot: string, units: Unit[]): Promise<string[]> {
     const claimed = units.flatMap(unit => unit.paths);
     const special = [
-        'manifest.json',
+        RECORD_FILE[kind],
         ...NOT_TRANSFERRED[kind],
         ...(kind === 'model' ? [path.join(...READY_OVERRIDES.split('/'))] : []),
     ];
@@ -582,7 +597,20 @@ type Records =
           sourceOverrides: Record<string, unknown> | null;
           targetOverrides: Record<string, unknown> | null;
       }
-    | { kind: 'library'; source: LibraryManifestFile; target: LibraryManifestFile };
+    | { kind: 'library'; source: LibraryManifestFile; target: LibraryManifestFile }
+    | { kind: 'cache'; source: Record<string, number>; target: Record<string, number> };
+
+// キャッシュの利用記録 (相対パスごとの最終利用日時)。無い・壊れている場合は空として扱う
+function readCacheIndex(root: string): Record<string, number> {
+    try {
+        const data = JSON.parse(fs.readFileSync(path.join(root, RECORD_FILE.cache), 'utf-8')) as {
+            entries?: Record<string, number>;
+        };
+        return data.entries && typeof data.entries === 'object' ? data.entries : {};
+    } catch {
+        return {};
+    }
+}
 
 function readRecords(kind: MovableStorage, oldRoot: string, newRoot: string): Records {
     if (kind === 'model') {
@@ -594,10 +622,22 @@ function readRecords(kind: MovableStorage, oldRoot: string, newRoot: string): Re
             targetOverrides: readOverrides(newRoot),
         };
     }
+    if (kind === 'cache') return { kind, source: readCacheIndex(oldRoot), target: readCacheIndex(newRoot) };
     return { kind, source: readLibraryManifest(oldRoot), target: readLibraryManifest(newRoot) };
 }
 
 function writeRecords(records: Records, newRoot: string, moved: Unit[]): void {
+    if (records.kind === 'cache') {
+        // 移動先にあるものの記録だけを残し、両方にある記録は新しいほうの日時にする
+        const entries: Record<string, number> = {};
+        for (const [key, time] of [...Object.entries(records.target), ...Object.entries(records.source)]) {
+            const relative = safeRelative(key);
+            if (relative === null || typeof time !== 'number' || !fs.existsSync(path.join(newRoot, relative))) continue;
+            entries[key] = Math.max(entries[key] ?? 0, time);
+        }
+        writeJsonFile(path.join(newRoot, RECORD_FILE.cache), { version: 1, entries }, { pretty: false });
+        return;
+    }
     if (records.kind === 'model') {
         const { source, target } = records;
         for (const unit of moved) {

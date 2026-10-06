@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { probeJson } from '../ffmpeg/ffprobe';
 import { resolveFfmpegPath, runFfmpeg, runTool } from '../ffmpeg/ffmpeg';
-import { produceFile } from '../work-dir';
+import { discardLater, newTempDir, produceFile } from '../work-dir';
 import type { AudioExportSettings } from '../../../shared/voice/types';
 
 // 音声機能で使う ffmpeg の処理。中間ファイルは 32bit 浮動小数の WAV とする
@@ -36,8 +36,24 @@ export async function probeAudio(filePath: string, jobId?: string): Promise<Audi
     return { durationSec, channels, sampleRate };
 }
 
+// チャンネル数を変える ffmpeg のフィルタ (変えない場合は null)。
+// ffmpeg の既定の変換 (-ac) は、モノラル -> ステレオで各チャンネルを -3dB、ステレオ -> モノラルで左右の和の -3dB
+// (左右が同じ音なら +3dB) にするため、音量が変わる。ここでは、ステレオ -> モノラルは左右の平均、
+// モノラル -> ステレオは同じ音量のまま左右に置く (中央定位) ようにして、音量を変えない。
+// 3ch 以上はまず ffmpeg の標準の方法でステレオに縮約する
+export function channelFilter(from: number, to: number): string | null {
+    if (from === to) return null;
+    const average = 'pan=mono|c0=0.5*c0+0.5*c1';
+    if (to === 1) return from === 2 ? average : `aformat=channel_layouts=stereo,${average}`;
+    return from === 1 ? 'pan=stereo|c0=c0|c1=c0' : 'aformat=channel_layouts=stereo';
+}
+
+// ffmpeg の進み具合 (0-100) を受け取る関数 (段階の残り時間の見積もりに使う)
+type ProgressHandler = (percent: number) => void;
+
 type DecodeOptions = {
     jobId?: string;
+    onProgress?: ProgressHandler;
     // keep: 元のまま (3ch 以上はステレオへ縮約) / mono: 左右の平均
     channels: 'keep' | 'mono';
 };
@@ -47,15 +63,18 @@ export async function decodeToWav(input: string, output: string, options: Decode
     const info = await probeAudio(input, options.jobId);
     const args = ['-hide_banner', '-nostdin', '-y', '-i', input, '-map', '0:a:0', '-vn', '-sn', '-dn'];
     const channels = options.channels === 'mono' ? 1 : Math.min(info.channels, 2);
-    if (channels !== info.channels) args.push('-ac', String(channels));
+    const filter = channelFilter(info.channels, channels);
+    if (filter) args.push('-af', filter);
     args.push('-c:a', 'pcm_f32le', '-f', 'wav', output);
     fs.mkdirSync(path.dirname(output), { recursive: true });
-    await runFfmpeg(args, { jobId: options.jobId });
+    await runFfmpeg(args, { jobId: options.jobId, totalSec: info.durationSec, onProgress: options.onProgress });
     return { ...info, channels };
 }
 
 // 学習用の音声の形式 (アプリ内の録音と同じ、16bit・モノラルの WAV。サンプリング周波数は元のまま) にする
 export async function encodeTrainingWav(input: string, output: string, jobId?: string): Promise<void> {
+    const info = await probeAudio(input, jobId);
+    const filter = channelFilter(info.channels, 1);
     await produceFile(output, target =>
         runFfmpeg(
             [
@@ -69,8 +88,7 @@ export async function encodeTrainingWav(input: string, output: string, jobId?: s
                 '-vn',
                 '-sn',
                 '-dn',
-                '-ac',
-                '1',
+                ...(filter ? ['-af', filter] : []),
                 '-c:a',
                 'pcm_s16le',
                 '-f',
@@ -82,10 +100,45 @@ export async function encodeTrainingWav(input: string, output: string, jobId?: s
     );
 }
 
-// チャンネル数をそろえる (分離結果を元の音源のチャンネル構成に戻すときなど)
-export async function convertChannels(input: string, output: string, channels: number, jobId?: string): Promise<void> {
+// チャンネル数をそろえる (分離結果を元の音源のチャンネル構成に戻すときなど)。
+// durationSec を指定すると、その長さ (このファイルのサンプリング周波数でのサンプル数) に切りそろえる
+// (足りない分は無音で埋める)
+export async function convertChannels(
+    input: string,
+    output: string,
+    channels: number,
+    jobId?: string,
+    durationSec?: number,
+    onProgress?: ProgressHandler
+): Promise<void> {
+    const info = await probeAudio(input, jobId);
+    const steps = [channelFilter(info.channels, channels)];
+    if (durationSec !== undefined) {
+        const length = Math.round(durationSec * info.sampleRate);
+        steps.push(`apad=whole_len=${length}`, `atrim=end_sample=${length}`);
+    }
+    const filter = steps.filter(Boolean).join(',');
     await runFfmpeg(
-        ['-hide_banner', '-nostdin', '-y', '-i', input, '-ac', String(channels), '-c:a', 'pcm_f32le', output],
+        [
+            '-hide_banner',
+            '-nostdin',
+            '-y',
+            '-i',
+            input,
+            ...(filter ? ['-af', filter] : []),
+            '-c:a',
+            'pcm_f32le',
+            output,
+        ],
+        { jobId, totalSec: durationSec ?? info.durationSec, onProgress }
+    );
+}
+
+// 末尾に無音を足す (分離の入力。モデルによっては末尾の数ミリ秒を処理せずに短く返すため、
+// 無音を足した入力で分離し、結果を元の長さに切りそろえる)
+export async function padEnd(input: string, output: string, seconds: number, jobId?: string): Promise<void> {
+    await runFfmpeg(
+        ['-hide_banner', '-nostdin', '-y', '-i', input, '-af', `apad=pad_dur=${seconds}`, '-c:a', 'pcm_f32le', output],
         { jobId }
     );
 }
@@ -110,68 +163,153 @@ export async function requireRubberband(): Promise<void> {
 
 // 統合ラウドネス (ITU-R BS.1770。無音の部分を除いて測る) を LUFS で返す。無音で測れない場合は null
 // (ffmpeg の ebur128 は、ゲートを通る区間が無い音を -70 LUFS と報告する)
-export async function measureLoudness(input: string, jobId?: string): Promise<number | null> {
+export async function measureLoudness(
+    input: string,
+    jobId?: string,
+    onProgress?: ProgressHandler
+): Promise<number | null> {
+    const info = onProgress ? await probeAudio(input, jobId) : null;
     const result = await runFfmpeg(
         ['-hide_banner', '-nostdin', '-i', input, '-map', '0:a:0', '-af', 'ebur128=framelog=quiet', '-f', 'null', '-'],
-        { jobId }
+        { jobId, totalSec: info?.durationSec, onProgress }
     );
     const matches = [...result.stderr.matchAll(/I:\s+(-?\d+(?:\.\d+)?) LUFS/g)];
     const loudness = matches.length > 0 ? Number(matches[matches.length - 1][1]) : NaN;
     return Number.isFinite(loudness) && loudness > -70 ? loudness : null;
 }
 
-// 音程を半音単位で変える (伴奏の移調)。長さは変えない
-export async function pitchShift(input: string, output: string, semitones: number, jobId?: string): Promise<void> {
-    await requireRubberband();
-    const ratio = Math.pow(2, semitones / 12);
-    await runFfmpeg(
-        [
-            '-hide_banner',
-            '-nostdin',
-            '-y',
-            '-i',
-            input,
-            '-af',
-            `rubberband=pitch=${ratio.toFixed(6)}:pitchq=quality`,
-            '-c:a',
-            'pcm_f32le',
-            output,
-        ],
-        { jobId }
-    );
+// rubberband (伴奏の移調・読み上げの話速) は、処理の方式上、音の位置が設定ごとに一定量ずれる
+// (実測: 移調 +3 半音で約 4.5ms 早く、-5 半音で約 7.4ms 遅く、話速 1.25 倍で約 5.8ms 遅くなる。Rubber Band 本体でも同じ)。
+// 同じ設定・同じサンプリング周波数で短いクリック音を処理してずれを測り、そのぶん結果を前後に動かして打ち消す。
+// 測った値は設定ごとに覚える
+const CALIBRATION_CLICKS = 16;
+const CALIBRATION_INTERVAL_SEC = 0.37;
+const CALIBRATION_LEAD_SEC = 0.5;
+const CALIBRATION_SEARCH_SEC = 0.05;
+const rubberbandOffsets = new Map<string, number>();
+
+// ずれ (出力のサンプル数。正の値は遅れ) を返す
+async function rubberbandOffset(filter: string, sampleRate: number, tempo: number, jobId?: string): Promise<number> {
+    const key = `${resolveFfmpegPath()}|${filter}|${sampleRate}`;
+    const cached = rubberbandOffsets.get(key);
+    if (cached !== undefined) return cached;
+    const length = Math.round((CALIBRATION_LEAD_SEC * 2 + CALIBRATION_CLICKS * CALIBRATION_INTERVAL_SEC) * sampleRate);
+    const signal = new Float32Array(length);
+    const burst = Math.max(8, Math.round(sampleRate * 0.002));
+    const clicks: number[] = [];
+    for (let index = 0; index < CALIBRATION_CLICKS; index++) {
+        const start = Math.round((CALIBRATION_LEAD_SEC + index * CALIBRATION_INTERVAL_SEC) * sampleRate);
+        for (let i = 0; i < burst; i++) {
+            const window = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (burst - 1));
+            signal[start + i] = 0.5 * window * Math.sin((2 * Math.PI * 1500 * i) / sampleRate);
+        }
+        clicks.push(start + peakIndex(signal, start, start + burst));
+    }
+    const dir = newTempDir();
+    try {
+        const input = path.join(dir, 'clicks.raw');
+        const output = path.join(dir, 'processed.raw');
+        fs.writeFileSync(input, Buffer.from(signal.buffer));
+        const raw = ['-f', 'f32le', '-ar', String(sampleRate), '-ac', '1'];
+        await runFfmpeg(['-hide_banner', '-nostdin', '-y', ...raw, '-i', input, '-af', filter, ...raw, output], {
+            jobId,
+        });
+        const data = fs.readFileSync(output);
+        const processed = new Float32Array(data.buffer, data.byteOffset, Math.floor(data.length / 4));
+        const search = Math.round(CALIBRATION_SEARCH_SEC * sampleRate);
+        const offsets = clicks
+            .map(click => {
+                const expected = Math.round(click / tempo);
+                const from = Math.max(0, expected - search);
+                const to = Math.min(processed.length, expected + search);
+                return to > from ? from + peakIndex(processed, from, to) - expected : null;
+            })
+            .filter((value): value is number => value !== null)
+            .sort((a, b) => a - b);
+        if (offsets.length === 0) throw new Error('RUBBERBAND_CALIBRATION_FAILED');
+        const offset = offsets[Math.floor(offsets.length / 2)];
+        rubberbandOffsets.set(key, offset);
+        return offset;
+    } finally {
+        discardLater(dir);
+    }
 }
 
-// 音程を変えずに長さを変える (読み上げの話速の微調整)。tempo > 1 で短くなる
-export async function timeStretch(input: string, output: string, tempo: number, jobId?: string): Promise<void> {
+function peakIndex(samples: Float32Array, from: number, to: number): number {
+    let best = from;
+    for (let i = from; i < to; i++) if (Math.abs(samples[i]) > Math.abs(samples[best])) best = i;
+    return best - from;
+}
+
+// rubberband で処理し、ずれを打ち消して、長さを「元の長さ ÷ tempo」にそろえる
+async function runRubberband(
+    input: string,
+    output: string,
+    filter: string,
+    tempo: number,
+    jobId?: string,
+    onProgress?: ProgressHandler
+) {
     await requireRubberband();
-    await runFfmpeg(
-        [
-            '-hide_banner',
-            '-nostdin',
-            '-y',
-            '-i',
-            input,
-            '-af',
-            `rubberband=tempo=${tempo.toFixed(6)}`,
-            '-c:a',
-            'pcm_f32le',
-            output,
-        ],
-        { jobId }
-    );
+    const info = await probeAudio(input, jobId);
+    const offset = await rubberbandOffset(filter, info.sampleRate, tempo, jobId);
+    const length = Math.round((info.durationSec * info.sampleRate) / tempo);
+    // 遅れる場合は先頭を切り詰め、早まる場合は先頭に無音を足す。末尾は無音で埋めてから長さで切る
+    const shift =
+        offset > 0
+            ? `atrim=start_sample=${offset},asetpts=PTS-STARTPTS`
+            : offset < 0
+              ? `adelay=delays=${-offset}S:all=1`
+              : null;
+    const chain = [filter, shift, `apad=whole_len=${length}`, `atrim=end_sample=${length}`].filter(Boolean).join(',');
+    await runFfmpeg(['-hide_banner', '-nostdin', '-y', '-i', input, '-af', chain, '-c:a', 'pcm_f32le', output], {
+        jobId,
+        totalSec: info.durationSec / tempo,
+        onProgress,
+    });
+}
+
+// 音程を半音単位で変える (伴奏の移調)。長さと音の位置は変えない
+export async function pitchShift(
+    input: string,
+    output: string,
+    semitones: number,
+    jobId?: string,
+    onProgress?: ProgressHandler
+): Promise<void> {
+    const ratio = Math.pow(2, semitones / 12);
+    await runRubberband(input, output, `rubberband=pitch=${ratio.toFixed(6)}:pitchq=quality`, 1, jobId, onProgress);
+}
+
+// 音程を変えずに長さを変える (読み上げの話速の微調整)。tempo > 1 で短くなる。先頭の位置は変えない
+export async function timeStretch(input: string, output: string, tempo: number, jobId?: string): Promise<void> {
+    await runRubberband(input, output, `rubberband=tempo=${tempo.toFixed(6)}`, tempo, jobId);
 }
 
 // 複数の音声を重ねる (分離結果の重ね合わせ再生や、変換結果と伴奏の簡易合成のプレビュー)。
-// 音量の自動調整は行わず、そのままの大きさで足し合わせる
-export async function mixFiles(inputs: string[], output: string, channels: number, jobId?: string): Promise<void> {
+// 音量の自動調整は行わず、そのままの大きさで足し合わせる。
+// サンプリング周波数の違う音声を重ねる場合は sampleRate を指定し、すべてをその周波数にそろえる
+export async function mixFiles(
+    inputs: string[],
+    output: string,
+    format: { channels: number; sampleRate?: number },
+    jobId?: string,
+    onProgress?: ProgressHandler
+): Promise<void> {
     if (inputs.length === 0) throw new Error('NO_INPUT');
     const args = ['-hide_banner', '-nostdin', '-y'];
     for (const input of inputs) args.push('-i', input);
-    const layout = channels === 1 ? 'mono' : 'stereo';
     const filters: string[] = [];
     const labels: string[] = [];
+    let longest = 0;
     for (let index = 0; index < inputs.length; index++) {
-        filters.push(`[${index}:a]aformat=channel_layouts=${layout}[a${index}]`);
+        const info = await probeAudio(inputs[index], jobId);
+        longest = Math.max(longest, info.durationSec);
+        const steps = [
+            channelFilter(info.channels, format.channels),
+            format.sampleRate && format.sampleRate !== info.sampleRate ? `aresample=${format.sampleRate}` : null,
+        ].filter(Boolean);
+        filters.push(`[${index}:a]${steps.length > 0 ? steps.join(',') : 'anull'}[a${index}]`);
         labels.push(`[a${index}]`);
     }
     if (inputs.length === 1) {
@@ -180,7 +318,7 @@ export async function mixFiles(inputs: string[], output: string, channels: numbe
         filters.push(`${labels.join('')}amix=inputs=${inputs.length}:duration=longest:normalize=0[out]`);
     }
     args.push('-filter_complex', filters.join(';'), '-map', '[out]', '-c:a', 'pcm_f32le', output);
-    await runFfmpeg(args, { jobId });
+    await runFfmpeg(args, { jobId, totalSec: longest, onProgress });
 }
 
 // ステレオの左右差を使って中央に定位した音を打ち消す従来手法 (機械学習を使わない比較用の分離)。
@@ -189,7 +327,8 @@ export async function centerCancel(
     input: string,
     vocalsOutput: string,
     instrumentalOutput: string,
-    jobId?: string
+    jobId?: string,
+    onProgress?: ProgressHandler
 ): Promise<void> {
     const info = await probeAudio(input, jobId);
     if (info.channels < 2) throw new Error('CENTER_CANCEL_MONO');
@@ -214,7 +353,7 @@ export async function centerCancel(
             'pcm_f32le',
             instrumentalOutput,
         ],
-        { jobId }
+        { jobId, totalSec: info.durationSec, onProgress }
     );
 }
 
@@ -237,8 +376,10 @@ export async function encodeExport(
     input: string,
     output: string,
     settings: AudioExportSettings,
-    jobId?: string
+    jobId?: string,
+    onProgress?: ProgressHandler
 ): Promise<void> {
+    const info = await probeAudio(input, jobId);
     const args = ['-hide_banner', '-nostdin', '-nostats', '-y', '-i', input, '-map', '0:a:0'];
     if (settings.format === 'mp3') {
         args.push('-ar', String(settings.sampleRate), '-c:a', 'libmp3lame');
@@ -249,5 +390,7 @@ export async function encodeExport(
         args.push('-c:a', 'flac', '-sample_fmt', 's32', '-bits_per_raw_sample', '24');
     }
     // 別の名前に書いてから、名前の変更で既存のファイルを置き換える (失敗しても既存のファイルは残る)
-    await produceFile(output, target => runFfmpeg([...args, target], { jobId }));
+    await produceFile(output, target =>
+        runFfmpeg([...args, target], { jobId, totalSec: info.durationSec, onProgress })
+    );
 }

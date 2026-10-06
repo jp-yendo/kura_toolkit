@@ -2,7 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import { probeSize } from './downloader';
 import { writeJsonFile } from './json-file';
-import { libraryPaths, modelPaths } from './paths';
+import { touchCacheFile } from '../cache-dir';
+import { libraryCacheDirOf, modelPaths } from './paths';
 import { getWorker } from './python-worker';
 import { componentSpec, SEPARATOR_MODEL_DIR, separatorItemId, type SpecFile } from './spec';
 import type { SeparationArch, SeparationCategory } from '../../../shared/voice/types';
@@ -42,13 +43,14 @@ type ModelListCache = {
 // ファイルの取得元 (候補のうちファイルが実際にある URL) と、その大きさ
 type FileSource = { url: string; size: number };
 
-// 一覧と取得元は導入したパッケージ一式から得る情報のため、audio-separator のライブラリのディレクトリに置く
+// 一覧と取得元は、作り直せる (パッケージ一式・配布元へ問い合わせれば得られる) ため、キャッシュディレクトリの
+// audio-separator のディレクトリに置く。読み書きしたときに使ったことを記録する (保持期間の判断に使う)
 function listCachePath(): string {
-    return path.join(libraryPaths().library('separator'), 'model-list.json');
+    return path.join(libraryCacheDirOf('separator'), 'model-list.json');
 }
 
 function sourceCachePath(): string {
-    return path.join(libraryPaths().library('separator'), 'model-sources.json');
+    return path.join(libraryCacheDirOf('separator'), 'model-sources.json');
 }
 
 let cachedList: ModelListCache | null = null;
@@ -73,6 +75,7 @@ export function readSeparatorModelList(): ModelListCache | null {
         const data = JSON.parse(fs.readFileSync(listCachePath(), 'utf-8')) as ModelListCache;
         if (data.componentVersion !== listCacheVersion()) return null;
         cachedList = data;
+        touchCacheFile(listCachePath());
         return data;
     } catch {
         return null;
@@ -118,6 +121,7 @@ async function refreshSeparatorModelList(): Promise<ModelListCache> {
     const data: ModelListCache = { componentVersion: listCacheVersion(), ...result };
     if (started !== generation) throw new Error('SEPARATOR_LIST_OUTDATED');
     writeJsonFile(listCachePath(), data, { pretty: false });
+    touchCacheFile(listCachePath());
     cachedList = data;
     return data;
 }
@@ -138,6 +142,7 @@ function readSourceCache(): Record<string, FileSource | undefined> {
     if (sourceCache) return sourceCache;
     try {
         sourceCache = JSON.parse(fs.readFileSync(sourceCachePath(), 'utf-8')) as Record<string, FileSource>;
+        touchCacheFile(sourceCachePath());
     } catch {
         sourceCache = {};
     }
@@ -146,6 +151,7 @@ function readSourceCache(): Record<string, FileSource | undefined> {
 
 function saveSourceCache(cache: Record<string, FileSource | undefined>): void {
     writeJsonFile(sourceCachePath(), cache, { pretty: false });
+    touchCacheFile(sourceCachePath());
 }
 
 // ファイルがある取得元を候補から探す (ファイルは候補のうち 1 か所にだけある)。どこにも無ければ null。

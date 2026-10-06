@@ -31,24 +31,20 @@ import SaveIcon from '@mui/icons-material/Save';
 import SaveAsIcon from '@mui/icons-material/SaveAs';
 import NoteAddIcon from '@mui/icons-material/NoteAdd';
 import CodeIcon from '@mui/icons-material/Code';
-import CampaignIcon from '@mui/icons-material/Campaign';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
-import SaveAltIcon from '@mui/icons-material/SaveAlt';
-import RecordVoiceOverIcon from '@mui/icons-material/RecordVoiceOver';
 import DownloadIcon from '@mui/icons-material/Download';
 import EditNoteIcon from '@mui/icons-material/EditNote';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
 import PageContainer from '../../components/common/PageContainer';
 import Panel from '../../components/common/Panel';
-import SectionLabel from '../../components/common/SectionLabel';
 import AppDialog from '../../components/common/AppDialog';
 import ProgressDialog from '../../components/common/ProgressDialog';
 import ReadinessAlert, { useFeatureReadiness } from '../../components/voice/ReadinessAlert';
 import VoiceFeatureHeader from '../../components/voice/VoiceFeatureHeader';
+import UserModelIcon from '../../components/voice/UserModelIcon';
 import TagEditor, { type TagEditorHandle } from '../../components/voice/TagEditor';
+import TimedLinesEditor from '../../components/voice/TimedLinesEditor';
 import TagListDialog from '../../components/voice/TagListDialog';
 import SymbolReadingsDialog, { symbolReadingsFor } from '../../components/voice/SymbolReadingsDialog';
 import SyncPlayer from '../../components/voice/SyncPlayer';
@@ -59,11 +55,20 @@ import { isCancelledError, voiceErrorMessage } from '../../components/voice/voic
 import { useJobRunner } from '../../hooks/useJobRunner';
 import { showNotice } from '../../stores/noticeStore';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { useTtsStore } from '../../stores/ttsStore';
-import { sendToConversion } from '../../stores/voiceHandoffStore';
+import { timedSnapshot, useTtsStore, type TimedRow } from '../../stores/ttsStore';
 import { openVoiceLibrary, useVoiceLibraryStore } from '../../stores/voiceLibraryStore';
 import { applyTagFixes, findTagRanges, parseControlTags, type TagFix, type TagIssue } from '@shared/voice/control-tags';
-import { formatTimestamp, parseSubtitles } from '@shared/voice/subtitles';
+import {
+    formatSrt,
+    formatTimestamp,
+    parseSubtitleFile,
+    parseTimeInput,
+    subtitleFormatOf,
+    SUBTITLE_EXTENSIONS,
+    validateTimedLines,
+    type TimedLineIssue,
+    type TimedLineIssueCode,
+} from '@shared/voice/timed-text';
 import {
     LANGUAGE_DEFINITIONS,
     TTS_LANGUAGE_MODEL_ITEMS,
@@ -74,37 +79,46 @@ import {
 import type {
     LibraryStatus,
     SpeedupConfirmation,
+    TimedLine,
     TimelineOverflowMode,
-    TtsCandidate,
-    TtsInputKind,
+    TtsAudio,
+    TtsInputMode,
     VoiceModelInfo,
 } from '@shared/voice/types';
 import type { TFunction } from 'i18next';
 
 const OVERFLOW_MODES: TimelineOverflowMode[] = ['speedup', 'overlap', 'shift', 'warn'];
-// 保存するファイルの種類 (入力の種類ごと)
-const SAVE_FILTER_KEYS: Record<TtsInputKind, string> = {
-    text: 'voice.fileFilters.text',
-    srt: 'voice.fileFilters.srt',
-    vtt: 'voice.fileFilters.vtt',
+const INPUT_MODES: TtsInputMode[] = ['normal', 'timed'];
+// 入力方法ごとのファイルの種類 (通常はテキスト、タイミング指定の保存は SRT だけ)
+const TEXT_EXTENSIONS = ['txt'];
+const SAVE_EXTENSION: Record<TtsInputMode, string> = { normal: 'txt', timed: 'srt' };
+const SAVE_FILTER_KEYS: Record<TtsInputMode, string> = {
+    normal: 'voice.fileFilters.text',
+    timed: 'voice.fileFilters.srt',
 };
+
+// 制御タグの誤りと一括で直せる注意。タイミング指定では、それぞれが行の番号 (row) を持つ
 type Analysis = { errors: TagIssue[]; fixes: TagFix[] };
 
-// 編集中の文章を解析して、誤りと一括で直せる注意を返す (字幕は区間ごとに解析する)
-function analyze(text: string, kind: TtsInputKind, language: VoiceLanguage): Analysis {
-    if (kind === 'text') {
-        const parsed = parseControlTags(text, { language });
-        return { errors: parsed.errors, fixes: parsed.fixes };
-    }
-    const subtitles = parseSubtitles(text, kind);
-    const errors: TagIssue[] = [...subtitles.errors];
+function analyzeNormal(text: string, language: VoiceLanguage): Analysis {
+    const parsed = parseControlTags(text, { language });
+    return { errors: parsed.errors, fixes: parsed.fixes };
+}
+
+function analyzeTimed(rows: TimedRow[], language: VoiceLanguage): Analysis {
+    const errors: TagIssue[] = [];
     const fixes: TagFix[] = [];
-    for (const cue of subtitles.cues) {
-        const parsed = parseControlTags(cue.text, { language, baseOffset: cue.textOffset, documentText: text });
-        errors.push(...parsed.errors);
-        fixes.push(...parsed.fixes);
-    }
+    rows.forEach((row, index) => {
+        const parsed = parseControlTags(row.text, { language, timed: true });
+        errors.push(...parsed.errors.map(issue => ({ ...issue, row: index + 1 })));
+        fixes.push(...parsed.fixes.map(fix => ({ ...fix, row: index + 1 })));
+    });
     return { errors, fixes };
+}
+
+// 行の時間 (読めない場合は null) とテキスト
+function parsedRows(rows: TimedRow[]) {
+    return rows.map(row => ({ start: parseTimeInput(row.start), end: parseTimeInput(row.end), text: row.text }));
 }
 
 function tagIssueMessage(t: TFunction, issue: TagIssue): string {
@@ -126,19 +140,20 @@ function languageInstalled(status: LibraryStatus | null, language: VoiceLanguage
 
 export default function TtsPage() {
     const { t } = useTranslation();
-    const navigate = useNavigate();
     const readiness = useFeatureReadiness('tts');
     const { settings } = useSettingsStore();
     const tts = useTtsStore();
     const editorRef = React.useRef<TagEditorHandle>(null);
+    // タイミング指定の行のテキストの入力欄 (行の ID -> 入力欄) と、最後に操作した行
+    const rowEditorsRef = React.useRef(new Map<string, TagEditorHandle>());
+    const focusedRowRef = React.useRef<string | null>(null);
     const [voices, setVoices] = React.useState<VoiceModelInfo[]>([]);
     const [analysis, setAnalysis] = React.useState<Analysis>({ errors: [], fixes: [] });
     const [tagListOpen, setTagListOpen] = React.useState(false);
     const [symbolsOpen, setSymbolsOpen] = React.useState(false);
-    const [cuesOpen, setCuesOpen] = React.useState(false);
     const [fixConfirm, setFixConfirm] = React.useState<TagFix[] | null>(null);
     const [speedup, setSpeedup] = React.useState<SpeedupConfirmation | null>(null);
-    const [report, setReport] = React.useState<TtsCandidate | null>(null);
+    const [report, setReport] = React.useState<TtsAudio | null>(null);
     const [exportOpen, setExportOpen] = React.useState(false);
     // 変更を破棄してよいかの確認 (新しい文章・ファイルを開く)。閉じる間も表示が変わらないよう、開閉とは別に持つ
     const [discardConfirm, setDiscardConfirm] = React.useState<{ open: boolean; action: 'new' | 'open' }>({
@@ -161,8 +176,12 @@ export default function TtsPage() {
         voice => voice.tts?.engine === engine && voice.tts.languages.includes(language)
     );
     const voice = candidatesVoices.find(item => item.id === tts.voiceId) ?? candidatesVoices[0] ?? null;
-    const styles = voice?.tts?.styles ?? ['Neutral'];
+    // スタイルはモデルが持つものだけを使う (モデルに無ければ選べない)
+    const styles = voice?.tts?.styles ?? [];
+    const style = styles.includes(tts.params.style) ? tts.params.style : (styles[0] ?? '');
     const speakers = voice?.tts?.speakers ?? [];
+    const timedMode = tts.inputMode === 'timed';
+    const rows = tts.timed.rows;
 
     // 画面を開いたときと、すぐに使えるモデルや言語モデルをダウンロードしたときに読み直す
     React.useEffect(() => {
@@ -180,54 +199,134 @@ export default function TtsPage() {
         };
     }, [libraryVersion, t]);
 
+    const analyzeCurrent = React.useCallback(
+        (): Analysis => (timedMode ? analyzeTimed(rows, language) : analyzeNormal(tts.normal.text, language)),
+        [timedMode, rows, tts.normal.text, language]
+    );
+
     // 入力中も随時チェックする (打つたびに解析すると重いので少し待ってから)
     React.useEffect(() => {
-        const timer = window.setTimeout(() => setAnalysis(analyze(tts.text, tts.inputKind, language)), 250);
+        const timer = window.setTimeout(() => setAnalysis(analyzeCurrent()), 250);
         return () => window.clearTimeout(timer);
-    }, [tts.text, tts.inputKind, language]);
+    }, [analyzeCurrent]);
 
-    const tagRanges = React.useMemo(() => findTagRanges(tts.text), [tts.text]);
-    const errorRanges = analysis.errors.map(error => ({ start: error.offset, end: error.offset + error.length }));
-    const cues = React.useMemo(
-        () => (tts.inputKind === 'text' ? [] : parseSubtitles(tts.text, tts.inputKind).cues),
-        [tts.text, tts.inputKind]
+    // タイミング指定の時間とテキストの誤り (表の欄を赤く示す)
+    const timingIssues = React.useMemo(
+        () => (timedMode ? validateTimedLines(parsedRows(rows)) : []),
+        [timedMode, rows]
     );
-    const modified = tts.text !== tts.savedText;
+    const issuesByRow = React.useMemo(() => {
+        const map = new Map<string, TimedLineIssueCode[]>();
+        for (const issue of timingIssues) {
+            const id = rows[issue.row - 1]?.id;
+            if (id) map.set(id, [...(map.get(id) ?? []), issue.code]);
+        }
+        return map;
+    }, [timingIssues, rows]);
+    const tagErrorRangesByRow = React.useMemo(() => {
+        const map = new Map<string, { start: number; end: number }[]>();
+        for (const error of analysis.errors) {
+            const id = error.row ? rows[error.row - 1]?.id : undefined;
+            if (id) map.set(id, [...(map.get(id) ?? []), { start: error.offset, end: error.offset + error.length }]);
+        }
+        return map;
+    }, [analysis.errors, rows]);
+
+    const tagRanges = React.useMemo(() => findTagRanges(tts.normal.text), [tts.normal.text]);
+    const errorRanges = timedMode
+        ? []
+        : analysis.errors.map(error => ({ start: error.offset, end: error.offset + error.length }));
+    const filePath = timedMode ? tts.timed.filePath : tts.normal.filePath;
+    const modified = timedMode
+        ? timedSnapshot(rows) !== tts.timed.savedSnapshot
+        : tts.normal.text !== tts.normal.savedText;
     const busy = job !== null;
     const ready = (readiness.readiness?.ready ?? false) && !!engine && !!voice;
+
+    // 誤りの位置へ移る (タイミング指定では、その行のテキストの入力欄)
+    const focusIssue = (issue: TagIssue) => {
+        if (issue.row) {
+            const id = rows[issue.row - 1]?.id;
+            if (id) rowEditorsRef.current.get(id)?.focusRange(issue.offset, issue.length);
+            return;
+        }
+        editorRef.current?.focusRange(issue.offset, issue.length);
+    };
+    // 時間とテキストの誤りの行へ移る
+    const focusTimingIssue = (issue: TimedLineIssue) => {
+        const id = rows[issue.row - 1]?.id;
+        if (id) rowEditorsRef.current.get(id)?.focusRange(0, 0);
+    };
 
     // --- ファイル ---
     const closeDiscardConfirm = () => setDiscardConfirm(previous => ({ ...previous, open: false }));
 
+    const newDocument = () => {
+        if (timedMode) tts.loadTimed([], null, true);
+        else tts.loadNormal('', null);
+    };
+
     const openFile = async () => {
         const paths = await window.kuraToolkit.dialog.openFiles({
-            filters: [
-                { name: t('voice.fileFilters.textAndSubtitles'), extensions: ['txt', 'srt', 'vtt'] },
-                { name: t('voice.fileFilters.allFiles'), extensions: ['*'] },
-            ],
+            filters: timedMode
+                ? [{ name: t('voice.fileFilters.subtitles'), extensions: SUBTITLE_EXTENSIONS }]
+                : [{ name: t('voice.fileFilters.text'), extensions: TEXT_EXTENSIONS }],
         });
-        if (!paths[0]) return;
+        const target = paths[0];
+        if (!target) return;
         try {
-            const loaded = await window.kuraToolkit.voice.tts.loadText(paths[0]);
-            tts.loadDocument(loaded.text, loaded.kind, paths[0]);
+            const text = await window.kuraToolkit.voice.tts.loadText(target);
+            if (!timedMode) {
+                tts.loadNormal(text, target);
+                return;
+            }
+            // 字幕ファイルは表へ展開し、元の形式は覚えない。保存は SRT で行うため、SRT のファイルだけを保存先として残す
+            const format = subtitleFormatOf(target);
+            if (!format) {
+                showNotice('error', t('voice.tts.timed.unsupportedFile'));
+                return;
+            }
+            const parsed = parseSubtitleFile(text, format);
+            if (parsed.lines.length === 0) {
+                showNotice('error', t('voice.tts.timed.noLines'));
+                return;
+            }
+            const isSrt = format === 'srt';
+            tts.loadTimed(parsed.lines, isSrt ? target : null, isSrt);
+            if (parsed.skipped > 0) showNotice('warning', t('voice.tts.timed.skipped', { count: parsed.skipped }));
         } catch (error) {
             showNotice('error', voiceErrorMessage(t, error));
         }
     };
 
     const saveFile = async (saveAs: boolean) => {
-        let target = tts.filePath;
+        let content: string;
+        if (timedMode) {
+            // 時間を読めない行があると SRT に書けないため、その行を示して止める
+            const lines = parsedRows(rows);
+            const unreadable = lines.findIndex(line => line.start === null || line.end === null);
+            if (unreadable >= 0) {
+                showNotice('warning', t('voice.tts.timed.saveInvalidTime', { row: unreadable + 1 }));
+                return;
+            }
+            content = formatSrt(lines as TimedLine[]);
+        } else {
+            content = tts.normal.text;
+        }
+        let target = filePath;
         if (saveAs || !target) {
-            const ext = tts.inputKind === 'text' ? 'txt' : tts.inputKind;
+            const ext = SAVE_EXTENSION[tts.inputMode];
+            // 保存したことが無い文章は、名前を入れずに保存ダイアログを開く (勝手な名前を付けない)
             target = await window.kuraToolkit.dialog.saveFile({
-                defaultPath: tts.filePath ?? `text.${ext}`,
-                filters: [{ name: t(SAVE_FILTER_KEYS[tts.inputKind]), extensions: [ext] }],
+                defaultPath: filePath ? `${filePath.replace(/\.[^.\\/]*$/, '')}.${ext}` : undefined,
+                filters: [{ name: t(SAVE_FILTER_KEYS[tts.inputMode]), extensions: [ext] }],
             });
             if (!target) return;
         }
         try {
-            await window.kuraToolkit.voice.tts.saveText(target, tts.text);
-            tts.markSaved(target);
+            await window.kuraToolkit.voice.tts.saveText(target, content);
+            if (timedMode) tts.markTimedSaved(target);
+            else tts.markNormalSaved(target);
             showNotice('success', t('voice.tts.saved'));
         } catch (error) {
             showNotice('error', voiceErrorMessage(t, error));
@@ -235,7 +334,7 @@ export default function TtsPage() {
     };
 
     // --- 合成 ---
-    const synthesize = async (text: string, confirmationToken?: string) => {
+    const synthesize = async (input: { text: string; rows: TimedRow[] }, confirmationToken?: string) => {
         if (!engine || !voice) return;
         try {
             const result = await run(t('voice.tts.running'), jobId =>
@@ -244,13 +343,13 @@ export default function TtsPage() {
                     engine,
                     language,
                     voiceId: voice.id,
-                    params: { ...tts.params, style: styles.includes(tts.params.style) ? tts.params.style : styles[0] },
+                    params: { ...tts.params, style },
                     readSymbols: tts.readSymbols,
                     symbolReadings: symbolReadingsFor(settings, language),
-                    text,
-                    inputKind: tts.inputKind,
+                    inputMode: tts.inputMode,
+                    text: timedMode ? '' : input.text,
+                    lines: timedMode ? (parsedRows(input.rows) as TimedLine[]) : [],
                     overflowMode: tts.overflowMode,
-                    cueOverflowModes: tts.cueOverflowModes,
                     confirmationToken,
                 })
             );
@@ -260,13 +359,15 @@ export default function TtsPage() {
             }
             if (result.status === 'invalid') {
                 setAnalysis({ errors: result.errors, fixes: result.fixes });
-                if (result.errors[0]) editorRef.current?.focusRange(result.errors[0].offset, result.errors[0].length);
+                if (result.errors[0]) focusIssue(result.errors[0]);
                 showNotice('warning', t('voice.tts.hasErrors'));
                 return;
             }
-            tts.addCandidate(result.candidate);
-            if (result.candidate.adjusted.length > 0 || result.candidate.overflows.length > 0)
-                setReport(result.candidate);
+            // 作成した音声で前の音声を置き換える (前の音声のファイルは要らなくなるため消す)
+            const previous = tts.result;
+            tts.setResult(result.audio);
+            if (previous) void window.kuraToolkit.voice.media.discard(tts.workKey, [previous.media.path]);
+            if (result.audio.adjusted.length > 0 || result.audio.overflows.length > 0) setReport(result.audio);
         } catch (error) {
             if (isCancelledError(error)) showNotice('warning', t('voice.common.cancelled'));
             else showNotice('error', voiceErrorMessage(t, error), 12000);
@@ -274,11 +375,21 @@ export default function TtsPage() {
     };
 
     const startSynthesis = () => {
-        const current = analyze(tts.text, tts.inputKind, language);
+        if (timedMode ? rows.length === 0 : !tts.normal.text.trim()) {
+            showNotice('warning', t(timedMode ? 'voice.tts.timed.empty' : 'voice.tts.empty'));
+            return;
+        }
+        // 時間とテキストの誤りがあれば始めない (赤く示した欄を直してもらう)
+        if (timingIssues.length > 0) {
+            focusTimingIssue(timingIssues[0]);
+            showNotice('warning', t('voice.tts.hasErrors'));
+            return;
+        }
+        const current = analyzeCurrent();
         setAnalysis(current);
         // 誤りがあれば合成を始めずに止め、該当箇所を示す
         if (current.errors.length > 0) {
-            editorRef.current?.focusRange(current.errors[0].offset, current.errors[0].length);
+            focusIssue(current.errors[0]);
             showNotice('warning', t('voice.tts.hasErrors'));
             return;
         }
@@ -287,32 +398,75 @@ export default function TtsPage() {
             setFixConfirm(current.fixes);
             return;
         }
-        if (!tts.text.trim()) {
-            showNotice('warning', t('voice.tts.empty'));
-            return;
-        }
-        void synthesize(tts.text);
+        void synthesize({ text: tts.normal.text, rows });
     };
 
-    const selected = tts.candidates.find(item => item.id === tts.selectedId) ?? null;
-    // 候補の声の表示名 (一覧と同じ表示名。声のモデルを削除した後は、作成時の名前)
-    const candidateVoiceName = (candidate: TtsCandidate) => {
-        const voice = voices.find(item => item.id === candidate.voiceId);
-        return voice ? voiceLabel(t, voice) : candidate.voiceName;
+    // 一括で直せる注意を直す (タイミング指定では行ごとに直す)
+    const applyFixes = (fixes: TagFix[]): { text: string; rows: TimedRow[] } => {
+        if (!timedMode) {
+            const text = applyTagFixes(tts.normal.text, fixes);
+            tts.setText(text);
+            return { text, rows };
+        }
+        const nextRows = rows.map((row, index) => {
+            const rowFixes = fixes.filter(fix => fix.row === index + 1);
+            return rowFixes.length > 0 ? { ...row, text: applyTagFixes(row.text, rowFixes) } : row;
+        });
+        nextRows.forEach((row, index) => {
+            if (row.text !== rows[index].text) tts.updateRow(row.id, { text: row.text });
+        });
+        return { text: tts.normal.text, rows: nextRows };
+    };
+
+    // 制御タグの一覧から選んだ例を、入力中の欄に入れる (タイミング指定では最後に操作した行)
+    const insertExample = (example: { before: string; after?: string; placeholder?: string }) => {
+        let editor: TagEditorHandle | null | undefined = editorRef.current;
+        if (timedMode) {
+            const id =
+                focusedRowRef.current && rows.some(row => row.id === focusedRowRef.current)
+                    ? focusedRowRef.current
+                    : rows[0]?.id;
+            editor = id ? rowEditorsRef.current.get(id) : null;
+            if (!editor) {
+                showNotice('info', t('voice.tts.timed.addRowFirst'));
+                return;
+            }
+        }
+        if (example.after) editor?.wrap(example.before, example.after, example.placeholder ?? '');
+        else editor?.insert(example.before);
+    };
+
+    const selected = tts.result;
+    // 作成した音声の声の表示名 (一覧と同じ表示名。声のモデルを削除した後は、作成時の名前)
+    const resultVoiceName = (result: TtsAudio) => {
+        const voice = voices.find(item => item.id === result.voiceId);
+        return voice ? voiceLabel(voice) : result.voiceName;
+    };
+    // 書き出しの既定のファイル名: モデル名_スタイル_作成日時 (スタイルを持たないモデルはモデル名_作成日時)
+    const exportBaseName = (audio: TtsAudio) => {
+        const created = new Date(audio.createdAt);
+        const pad = (value: number) => String(value).padStart(2, '0');
+        const stamp =
+            `${created.getFullYear()}${pad(created.getMonth() + 1)}${pad(created.getDate())}-` +
+            `${pad(created.getHours())}${pad(created.getMinutes())}${pad(created.getSeconds())}`;
+        return [resultVoiceName(audio), audio.params.style, stamp].filter(Boolean).join('_');
     };
     const exportEntries: ExportEntry[] = selected
         ? [
               {
                   key: 'tts',
                   label: t('voice.tts.exportLabel'),
-                  suffix: t('voice.tts.suffix'),
+                  // 書き出すのは 1 つだけのため、接尾辞は付けない (名前は exportBaseName で決める)
+                  suffix: '',
                   resolve: async () => selected.media.path,
               },
           ]
         : [];
 
     return (
-        <PageContainer>
+        // ページをウィンドウの高さに収める。再生の行は下に置いたままにし、入力と設定の部分の高さを残りに合わせる
+        // (ウィンドウが極端に低い場合だけ、ページ全体をスクロールさせる)
+        <PageContainer sx={{ height: '100%', minHeight: 640 }}>
             <VoiceFeatureHeader feature='tts' />
             <ReadinessAlert state={readiness} />
             {languageModelMissing && (
@@ -339,11 +493,24 @@ export default function TtsPage() {
             )}
 
             <Stack direction='row' spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
+                <FormControl size='small' sx={{ minWidth: 160 }}>
+                    <InputLabel id='tts-input-mode'>{t('voice.tts.inputMode')}</InputLabel>
+                    <Select
+                        labelId='tts-input-mode'
+                        label={t('voice.tts.inputMode')}
+                        value={tts.inputMode}
+                        onChange={event => tts.setInputMode(event.target.value as TtsInputMode)}
+                    >
+                        {INPUT_MODES.map(mode => (
+                            <MenuItem key={mode} value={mode}>
+                                {t(`voice.tts.inputModes.${mode}`)}
+                            </MenuItem>
+                        ))}
+                    </Select>
+                </FormControl>
                 <Button
                     startIcon={<NoteAddIcon />}
-                    onClick={() =>
-                        modified ? setDiscardConfirm({ open: true, action: 'new' }) : tts.loadDocument('', 'text', null)
-                    }
+                    onClick={() => (modified ? setDiscardConfirm({ open: true, action: 'new' }) : newDocument())}
                 >
                     {t('voice.tts.newText')}
                 </Button>
@@ -356,26 +523,13 @@ export default function TtsPage() {
                 <Button
                     startIcon={<SaveIcon />}
                     onClick={() => void saveFile(false)}
-                    disabled={!modified && !!tts.filePath}
+                    disabled={!modified && !!filePath}
                 >
                     {t('voice.tts.save')}
                 </Button>
                 <Button startIcon={<SaveAsIcon />} onClick={() => void saveFile(true)}>
                     {t('voice.tts.saveAs')}
                 </Button>
-                <FormControl size='small' sx={{ minWidth: 160 }}>
-                    <InputLabel id='tts-kind'>{t('voice.tts.inputKind')}</InputLabel>
-                    <Select
-                        labelId='tts-kind'
-                        label={t('voice.tts.inputKind')}
-                        value={tts.inputKind}
-                        onChange={event => tts.setInputKind(event.target.value as TtsInputKind)}
-                    >
-                        <MenuItem value='text'>{t('voice.tts.kinds.text')}</MenuItem>
-                        <MenuItem value='srt'>SRT</MenuItem>
-                        <MenuItem value='vtt'>WebVTT</MenuItem>
-                    </Select>
-                </FormControl>
                 <Button startIcon={<CodeIcon />} onClick={() => setTagListOpen(true)}>
                     {t('voice.tags.open')}
                 </Button>
@@ -384,9 +538,9 @@ export default function TtsPage() {
                     color='text.secondary'
                     sx={{ flexGrow: 1, textAlign: 'right', minWidth: 0 }}
                     noWrap
-                    title={tts.filePath ?? ''}
+                    title={filePath ?? ''}
                 >
-                    {tts.filePath ? `${tts.filePath}${modified ? ' *' : ''}` : modified ? t('voice.tts.unsaved') : ''}
+                    {filePath ?? ''}
                 </Typography>
             </Stack>
 
@@ -394,36 +548,74 @@ export default function TtsPage() {
                 sx={{
                     display: 'grid',
                     gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) 340px' },
+                    gridTemplateRows: 'minmax(0, 1fr)',
                     gap: 2,
                     flexGrow: 1,
-                    minHeight: 360,
+                    minHeight: 0,
                 }}
             >
-                <Stack spacing={1} sx={{ minWidth: 0, minHeight: 320 }}>
-                    <TagEditor
-                        ref={editorRef}
-                        value={tts.text}
-                        onChange={tts.setText}
-                        tagRanges={tagRanges}
-                        errorRanges={errorRanges}
-                        placeholder={
-                            tts.inputKind === 'text' ? t('voice.tts.placeholder') : t('voice.tts.placeholderTimeline')
-                        }
-                    />
-                    {analysis.errors.length > 0 && (
+                <Stack spacing={1} sx={{ minWidth: 0, minHeight: 0 }}>
+                    {timedMode ? (
+                        <TimedLinesEditor
+                            rows={rows}
+                            issues={issuesByRow}
+                            tagErrorRanges={tagErrorRangesByRow}
+                            onChangeRow={tts.updateRow}
+                            onInsert={index => tts.insertRow(index)}
+                            onRemove={id => {
+                                rowEditorsRef.current.delete(id);
+                                tts.removeRow(id);
+                            }}
+                            onFocusRow={id => {
+                                focusedRowRef.current = id;
+                            }}
+                            registerEditor={(id, handle) => {
+                                if (handle) rowEditorsRef.current.set(id, handle);
+                                else rowEditorsRef.current.delete(id);
+                            }}
+                            disabled={busy}
+                        />
+                    ) : (
+                        <TagEditor
+                            ref={editorRef}
+                            value={tts.normal.text}
+                            onChange={tts.setText}
+                            tagRanges={tagRanges}
+                            errorRanges={errorRanges}
+                            placeholder={t('voice.tts.placeholder')}
+                        />
+                    )}
+                    {(analysis.errors.length > 0 || timingIssues.length > 0) && (
                         <Panel sx={{ maxHeight: 140, overflow: 'auto', p: 0 }}>
                             <List dense disablePadding>
-                                {analysis.errors.map((error, index) => (
-                                    <ListItemButton
-                                        key={index}
-                                        onClick={() => editorRef.current?.focusRange(error.offset, error.length)}
-                                    >
+                                {timingIssues.map((issue, index) => (
+                                    <ListItemButton key={`timing-${index}`} onClick={() => focusTimingIssue(issue)}>
                                         <ListItemText
-                                            primary={t('voice.tts.errorAt', {
-                                                line: error.line,
-                                                column: error.column,
-                                                message: tagIssueMessage(t, error),
+                                            primary={t('voice.tts.timed.rowIssue', {
+                                                row: issue.row,
+                                                message: t(`voice.tts.timed.issues.${issue.code}`),
                                             })}
+                                            slotProps={{ primary: { variant: 'body2', color: 'error' } }}
+                                        />
+                                    </ListItemButton>
+                                ))}
+                                {analysis.errors.map((error, index) => (
+                                    <ListItemButton key={index} onClick={() => focusIssue(error)}>
+                                        <ListItemText
+                                            primary={
+                                                error.row
+                                                    ? t('voice.tts.timed.errorAt', {
+                                                          row: error.row,
+                                                          line: error.line,
+                                                          column: error.column,
+                                                          message: tagIssueMessage(t, error),
+                                                      })
+                                                    : t('voice.tts.errorAt', {
+                                                          line: error.line,
+                                                          column: error.column,
+                                                          message: tagIssueMessage(t, error),
+                                                      })
+                                            }
                                             slotProps={{ primary: { variant: 'body2', color: 'error' } }}
                                         />
                                     </ListItemButton>
@@ -436,8 +628,12 @@ export default function TtsPage() {
                     )}
                 </Stack>
 
-                <Panel sx={{ overflow: 'auto' }}>
-                    <Stack spacing={2}>
+                <Panel disablePadding sx={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                    {/* 高さに収まらない分は中でスクロールさせる。各項目は縮めない (縮めると、詳細な設定を開いたときに重なるため) */}
+                    <Stack
+                        spacing={2}
+                        sx={{ flexGrow: 1, minHeight: 0, overflowY: 'auto', p: 2, '& > *': { flexShrink: 0 } }}
+                    >
                         <FormControl size='small'>
                             <InputLabel id='tts-language'>{t('voice.tts.language')}</InputLabel>
                             <Select
@@ -493,15 +689,11 @@ export default function TtsPage() {
                             >
                                 {candidatesVoices.map(item => (
                                     <MenuItem key={item.id} value={item.id}>
-                                        {voiceLabel(t, item)}
-                                        <Typography
-                                            component='span'
-                                            variant='caption'
-                                            color='text.secondary'
-                                            sx={{ ml: 1 }}
-                                        >
-                                            {t(`voice.models.categories.${item.category}`)}
-                                        </Typography>
+                                        {/* ユーザーモデルにだけ、名前の右にアイコンを付ける */}
+                                        <Box component='span' sx={{ flexGrow: 1, minWidth: 0, mr: 1 }}>
+                                            {voiceLabel(item)}
+                                        </Box>
+                                        <UserModelIcon voice={item} />
                                     </MenuItem>
                                 ))}
                             </Select>
@@ -509,12 +701,12 @@ export default function TtsPage() {
                         {engine && candidatesVoices.length === 0 && (
                             <Alert severity='info'>{t('voice.tts.noVoices')}</Alert>
                         )}
-                        <FormControl size='small' disabled={!voice}>
+                        <FormControl size='small' disabled={styles.length === 0}>
                             <InputLabel id='tts-style'>{t('voice.tts.style')}</InputLabel>
                             <Select
                                 labelId='tts-style'
                                 label={t('voice.tts.style')}
-                                value={styles.includes(tts.params.style) ? tts.params.style : styles[0]}
+                                value={style}
                                 onChange={event => tts.setParams({ ...tts.params, style: String(event.target.value) })}
                             >
                                 {styles.map(style => (
@@ -545,6 +737,7 @@ export default function TtsPage() {
                         )}
                         <SliderField
                             label={t('voice.tts.styleWeight')}
+                            disabled={styles.length === 0}
                             value={tts.params.styleWeight}
                             min={0}
                             max={10}
@@ -618,7 +811,7 @@ export default function TtsPage() {
                                     format={v => v.toFixed(2)}
                                     onChange={noiseW => tts.setParams({ ...tts.params, noiseW })}
                                 />
-                                {tts.inputKind === 'text' && (
+                                {!timedMode && (
                                     <SliderField
                                         label={t('voice.tts.paragraphPause')}
                                         value={tts.params.paragraphPause}
@@ -653,8 +846,8 @@ export default function TtsPage() {
                                 </IconButton>
                             </Tooltip>
                         </Stack>
-                        {tts.inputKind !== 'text' && (
-                            <Stack spacing={1}>
+                        {timedMode && (
+                            <Stack spacing={0.5}>
                                 <FormControl size='small'>
                                     <InputLabel id='tts-overflow'>{t('voice.tts.overflowMode')}</InputLabel>
                                     <Select
@@ -672,199 +865,37 @@ export default function TtsPage() {
                                         ))}
                                     </Select>
                                 </FormControl>
-                                <Button size='small' disabled={cues.length === 0} onClick={() => setCuesOpen(true)}>
-                                    {t('voice.tts.cueSettings', { count: Object.keys(tts.cueOverflowModes).length })}
-                                </Button>
+                                <Typography variant='caption' color='text.secondary' sx={{ lineHeight: 1.5 }}>
+                                    {t('voice.tts.overflowHint')}
+                                </Typography>
                             </Stack>
                         )}
-                        <Button
-                            variant='contained'
-                            startIcon={<CampaignIcon />}
-                            disabled={busy || !ready}
-                            onClick={startSynthesis}
-                        >
+                    </Stack>
+                    <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
+                        <Button variant='contained' fullWidth disabled={busy || !ready} onClick={startSynthesis}>
                             {t('voice.tts.run')}
                         </Button>
-                    </Stack>
+                    </Box>
                 </Panel>
             </Box>
 
-            <Box>
-                <SectionLabel
-                    action={
-                        <Stack direction='row' spacing={1}>
-                            <Button
-                                size='small'
-                                startIcon={<RecordVoiceOverIcon />}
-                                disabled={!selected}
-                                onClick={async () => {
-                                    if (!selected) return;
-                                    try {
-                                        await sendToConversion(tts.workKey, {
-                                            from: 'tts',
-                                            name: tts.filePath?.split(/[\\/]/).pop() ?? t('voice.tts.suffix'),
-                                            sourcePath: tts.filePath ?? 'tts',
-                                            sourceMedia: selected.media,
-                                            vocals: [selected.media.path],
-                                            accompaniment: [],
-                                            channels: 1,
-                                        });
-                                        navigate('/audio/conversion');
-                                    } catch (error) {
-                                        showNotice('error', voiceErrorMessage(t, error), 10000);
-                                    }
-                                }}
-                            >
-                                {t('voice.tts.sendToConversion')}
-                            </Button>
-                            <Button
-                                size='small'
-                                variant='contained'
-                                startIcon={<SaveAltIcon />}
-                                disabled={!selected}
-                                onClick={() => setExportOpen(true)}
-                            >
-                                {t('voice.export.open')}
-                            </Button>
-                        </Stack>
-                    }
-                >
-                    {t('voice.tts.candidates')}
-                </SectionLabel>
-                <Panel disablePadding sx={{ maxHeight: 220, overflow: 'auto' }}>
-                    {tts.candidates.length === 0 ? (
-                        <Typography variant='body2' color='text.secondary' sx={{ p: 2 }}>
-                            {t('voice.tts.noCandidates')}
-                        </Typography>
-                    ) : (
-                        <Table size='small' stickyHeader>
-                            <TableBody>
-                                {tts.candidates.map(candidate => (
-                                    <TableRow
-                                        key={candidate.id}
-                                        hover
-                                        selected={candidate.id === tts.selectedId}
-                                        onClick={() => tts.select(candidate.id)}
-                                        sx={{ cursor: 'pointer' }}
-                                    >
-                                        <TableCell>
-                                            <Typography variant='body2' sx={{ fontWeight: 600 }}>
-                                                {candidateVoiceName(candidate)}
-                                            </Typography>
-                                            <Typography variant='caption' color='text.secondary'>
-                                                {t('voice.tts.paramsSummary', {
-                                                    style: candidate.params.style,
-                                                    weight: candidate.params.styleWeight.toFixed(1),
-                                                    speed: candidate.params.speed.toFixed(2),
-                                                    pitch: candidate.params.pitchScale.toFixed(2),
-                                                    intonation: candidate.params.intonationScale.toFixed(2),
-                                                })}
-                                            </Typography>
-                                        </TableCell>
-                                        <TableCell padding='checkbox'>
-                                            <Tooltip title={t('voice.common.deleteCandidate')}>
-                                                <IconButton
-                                                    size='small'
-                                                    aria-label={t('voice.common.deleteCandidate')}
-                                                    onClick={event => {
-                                                        event.stopPropagation();
-                                                        tts.removeCandidate(candidate.id);
-                                                        // 変換の画面へ渡した候補は、渡した時点で変換の画面の作業へ移してあるため消えない
-                                                        void window.kuraToolkit.voice.media.discard(tts.workKey, [
-                                                            candidate.media.path,
-                                                        ]);
-                                                    }}
-                                                >
-                                                    <DeleteOutlineIcon fontSize='small' />
-                                                </IconButton>
-                                            </Tooltip>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    )}
-                </Panel>
-            </Box>
             <SyncPlayer
-                source={
-                    selected
-                        ? {
-                              key: selected.id,
-                              url: selected.media.url,
-                              label: candidateVoiceName(selected),
-                          }
-                        : null
+                keepPosition={false}
+                source={selected ? { key: selected.id, url: selected.media.url } : null}
+                actions={
+                    <Button size='small' variant='contained' disabled={!selected} onClick={() => setExportOpen(true)}>
+                        {t('voice.export.open')}
+                    </Button>
                 }
-                emptyHint={t('voice.tts.playHint')}
             />
 
             <TagListDialog
                 open={tagListOpen}
                 language={language}
                 onClose={() => setTagListOpen(false)}
-                onInsert={example => {
-                    if (example.after)
-                        editorRef.current?.wrap(example.before, example.after, example.placeholder ?? '');
-                    else editorRef.current?.insert(example.before);
-                }}
+                onInsert={insertExample}
             />
             <SymbolReadingsDialog open={symbolsOpen} language={language} onClose={() => setSymbolsOpen(false)} />
-
-            <AppDialog open={cuesOpen} onClose={() => setCuesOpen(false)} maxWidth='md' fullWidth>
-                <DialogTitle>{t('voice.tts.cueSettingsTitle')}</DialogTitle>
-                <DialogContent dividers sx={{ p: 0 }}>
-                    <Table size='small' stickyHeader>
-                        <TableHead>
-                            <TableRow>
-                                <TableCell>#</TableCell>
-                                <TableCell>{t('voice.tts.cueTime')}</TableCell>
-                                <TableCell>{t('voice.tts.cueText')}</TableCell>
-                                <TableCell sx={{ width: 200 }}>{t('voice.tts.overflowMode')}</TableCell>
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {cues.map(cue => (
-                                <TableRow key={cue.index}>
-                                    <TableCell>{cue.index}</TableCell>
-                                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                                        {formatTimestamp(cue.start)} - {formatTimestamp(cue.end)}
-                                    </TableCell>
-                                    <TableCell sx={{ maxWidth: 320 }}>
-                                        <Typography variant='body2' noWrap title={cue.text}>
-                                            {cue.text}
-                                        </Typography>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Select
-                                            size='small'
-                                            fullWidth
-                                            value={tts.cueOverflowModes[cue.index] ?? 'default'}
-                                            onChange={event => {
-                                                const value = event.target.value as TimelineOverflowMode | 'default';
-                                                const next = { ...tts.cueOverflowModes };
-                                                if (value === 'default') delete next[cue.index];
-                                                else next[cue.index] = value;
-                                                tts.setCueOverflowModes(next);
-                                            }}
-                                        >
-                                            <MenuItem value='default'>{t('voice.tts.overflowDefault')}</MenuItem>
-                                            {OVERFLOW_MODES.map(mode => (
-                                                <MenuItem key={mode} value={mode}>
-                                                    {t(`voice.tts.overflow.${mode}`)}
-                                                </MenuItem>
-                                            ))}
-                                        </Select>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setCuesOpen(false)}>{t('common.close')}</Button>
-                </DialogActions>
-            </AppDialog>
 
             <AppDialog open={fixConfirm !== null} onClose={() => setFixConfirm(null)} maxWidth='sm' fullWidth>
                 <DialogTitle>{t('voice.tts.fixTitle')}</DialogTitle>
@@ -879,7 +910,8 @@ export default function TtsPage() {
                             color='text.secondary'
                             sx={{ fontFamily: 'Consolas, Menlo, monospace' }}
                         >
-                            {t('voice.tts.fixItem', {
+                            {t(fix.row ? 'voice.tts.timed.fixItem' : 'voice.tts.fixItem', {
+                                row: fix.row,
                                 line: fix.line,
                                 column: fix.column,
                                 from: fix.original,
@@ -894,10 +926,11 @@ export default function TtsPage() {
                     <Button
                         variant='contained'
                         onClick={() => {
-                            const fixed = applyTagFixes(tts.text, fixConfirm ?? []);
+                            const fixed = applyFixes(fixConfirm ?? []);
                             setFixConfirm(null);
-                            tts.setText(fixed);
-                            const next = analyze(fixed, tts.inputKind, language);
+                            const next = timedMode
+                                ? analyzeTimed(fixed.rows, language)
+                                : analyzeNormal(fixed.text, language);
                             setAnalysis(next);
                             if (next.errors.length > 0 || next.fixes.length > 0) {
                                 showNotice('warning', t('voice.tts.hasErrors'));
@@ -958,7 +991,7 @@ export default function TtsPage() {
                         onClick={() => {
                             const token = speedup?.token;
                             setSpeedup(null);
-                            if (token) void synthesize(tts.text, token);
+                            if (token) void synthesize({ text: tts.normal.text, rows }, token);
                         }}
                     >
                         {t('voice.tts.speedupAccept')}
@@ -1017,7 +1050,7 @@ export default function TtsPage() {
                         color='warning'
                         onClick={() => {
                             closeDiscardConfirm();
-                            if (discardConfirm.action === 'new') tts.loadDocument('', 'text', null);
+                            if (discardConfirm.action === 'new') newDocument();
                             else void openFile();
                         }}
                     >
@@ -1032,13 +1065,15 @@ export default function TtsPage() {
                     open={exportOpen}
                     onClose={() => setExportOpen(false)}
                     entries={exportEntries}
-                    sourcePath={tts.filePath ?? t('voice.tts.defaultFileName')}
+                    sourcePath={filePath ?? ''}
+                    baseFileName={exportBaseName(selected)}
                 />
             )}
             <ProgressDialog
                 open={job !== null}
                 title={job?.title ?? ''}
                 percent={job?.percent}
+                status={job?.status}
                 message={job?.message ?? ''}
                 onCancel={cancel}
             />

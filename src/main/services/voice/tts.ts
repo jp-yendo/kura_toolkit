@@ -8,6 +8,7 @@ import { mediaRef } from './media';
 import { modelPaths } from './paths';
 import { getWorker } from './python-worker';
 import { withGpu } from './gpu-lock';
+import { forwardPhase, voicePhase } from './job-progress';
 import { TTS_BERT_DIRS } from './spec';
 import { getVoice, ttsModelFiles } from './voice-models';
 import { newId, discardLater, sessionDir } from '../work-dir';
@@ -18,7 +19,7 @@ import {
     TTS_LANGUAGE_MODEL_ITEMS,
     type VoiceLanguage,
 } from '../../../shared/voice/languages';
-import { parseSubtitles, type SubtitleCue } from '../../../shared/voice/subtitles';
+import { validateTimedLines } from '../../../shared/voice/timed-text';
 import type {
     SpeedupConfirmation,
     TimelineOverflowMode,
@@ -26,10 +27,13 @@ import type {
     TtsRunResult,
 } from '../../../shared/voice/types';
 
-// 読み上げ。制御タグを解析して合成の単位 (話速・音高・音量ごとの区切りと間) に分け、Python で合成する。
-// タイムライン (SRT / WebVTT) では区間ごとに合成して開始時刻に配置し、1 本の音声にまとめる。
+// 読み上げ。制御タグを解析して合成の単位 (話速・音の高さ・音量ごとの区切りと間) に分け、Python で合成する。
+// タイミング指定では行ごとに合成して開始時間に配置し、1 本の音声にまとめる。
 
-// 区間に収めるための話速の倍率の閾値。超える区間がある場合は一覧を示して 1 回だけ確認する
+// タイミング指定の 1 行 (index は 1 始まりの行の番号。fit はその行の fit タグで指定した、収まらない場合の扱い)
+type TimelineCue = { index: number; start: number; end: number; text: string; fit?: TimelineOverflowMode };
+
+// 行の時間内に収めるための話速の倍率の閾値。超える行がある場合は一覧を示して 1 回だけ確認する
 const SPEEDUP_CONFIRM_THRESHOLD = 1.3;
 
 type SpeechPart =
@@ -46,7 +50,7 @@ type Segment = { id: string; pieces: Piece[] };
 
 type SegmentResult = { id: string; path: string; duration: number };
 
-// 合成の単位から、話速・音高・音量が同じ並びをまとめた区切り (piece) を作る。
+// 合成の単位から、話速・音の高さ・音量が同じ並びをまとめた区切り (piece) を作る。
 // paragraphs = true のときは改行で段落 (別の segment) に分ける
 function buildSegments(
     runs: SpeechRun[],
@@ -214,6 +218,7 @@ async function synthesize(
                 jobId,
                 onEvent: event => {
                     if (event.kind === 'progress' && typeof event.fraction === 'number') progress(event.fraction);
+                    else forwardPhase(jobId, event);
                 },
             }
         )
@@ -229,7 +234,11 @@ async function assemble(
     minDuration: number
 ): Promise<void> {
     const worker = getWorker('tts');
-    await worker.request('assemble', { sampleRate: model.sampleRate, placements, output, minDuration }, { jobId });
+    await worker.request(
+        'assemble',
+        { sampleRate: model.sampleRate, placements, output, minDuration },
+        { jobId, onEvent: event => forwardPhase(jobId, event) }
+    );
 }
 
 // 話速を上げた合成の設定 (制御タグで話速を指定している区間は、その指定に倍率を掛ける)
@@ -252,7 +261,7 @@ export async function runTts(jobId: string, request: TtsRunRequest): Promise<Tts
         const model = resolveModel(request);
         const id = newId();
         const dir = sessionDir(request.workKey, 'tts', id);
-        // 候補を返す (確認待ちを含む) とき以外 (入力の誤り・失敗・キャンセル) は、作りかけの結果をその場で消す
+        // 作成した音声を返す (確認待ちを含む) とき以外 (入力の誤り・失敗・キャンセル) は、作りかけの結果をその場で消す
         let keep = false;
         try {
             const result = await synthesizeInto(jobId, request, model, id, dir);
@@ -275,8 +284,9 @@ async function synthesizeInto(
 ): Promise<TtsRunResult> {
     const output = path.join(dir, 'output.wav');
     const progress = (percent: number) => emitJobEvent({ jobId, kind: 'progress', percent });
+    voicePhase(jobId, 'prepare');
 
-    if (request.inputKind === 'text') {
+    if (request.inputMode === 'normal') {
         const parsed = parseControlTags(request.text, { language: request.language });
         if (parsed.errors.length > 0 || parsed.fixes.length > 0) return invalid(parsed.errors, parsed.fixes);
         const groups = buildSegments(parsed.runs, request.language, request.readSymbols, request, true);
@@ -298,7 +308,7 @@ async function synthesizeInto(
         progress(100);
         return {
             status: 'done',
-            candidate: {
+            audio: {
                 id,
                 voiceId: request.voiceId,
                 voiceName: model.voiceName,
@@ -328,20 +338,24 @@ async function runTimeline(
     // 確認を済ませた再実行では、確認を求めたときの合成結果 (1 回目の合成) を使う
     const pending = request.confirmationToken ? await takePendingTimeline(request.confirmationToken, key) : undefined;
     try {
-        const subtitles = parseSubtitles(request.text, request.inputKind === 'vtt' ? 'vtt' : 'srt');
-        if (subtitles.errors.length > 0) return invalid(subtitles.errors, []);
-        const cues = subtitles.cues;
+        // 時間とテキストは画面で確かめてから渡される。ここでも確かめ、誤りがあれば始めない
+        if (request.lines.length === 0) throw new Error('TTS_TIMING_INVALID: empty');
+        const timingIssues = validateTimedLines(request.lines);
+        if (timingIssues.length > 0) {
+            throw new Error(
+                `TTS_TIMING_INVALID: ${timingIssues.map(issue => `${issue.row}:${issue.code}`).join(', ')}`
+            );
+        }
+        const cues: TimelineCue[] = request.lines.map((line, index) => ({ index: index + 1, ...line }));
         const errors: TagIssue[] = [];
         const fixes: TagFix[] = [];
         const segments: Segment[] = [];
         for (const cue of cues) {
-            const parsed = parseControlTags(cue.text, {
-                language: request.language,
-                baseOffset: cue.textOffset,
-                documentText: request.text,
-            });
-            errors.push(...parsed.errors);
-            fixes.push(...parsed.fixes);
+            // 誤りの位置は、その行のテキストの中の位置と行の番号で示す
+            const parsed = parseControlTags(cue.text, { language: request.language, timed: true });
+            cue.fit = parsed.fit;
+            errors.push(...parsed.errors.map(issue => ({ ...issue, row: cue.index })));
+            fixes.push(...parsed.fixes.map(fix => ({ ...fix, row: cue.index })));
             const pieces = buildSegments(parsed.runs, request.language, request.readSymbols, request, false)[0];
             segments.push({ id: `c${String(cue.index).padStart(4, '0')}`, pieces });
         }
@@ -362,7 +376,7 @@ async function placeTimeline(
     dir: string,
     output: string,
     progress: (percent: number) => void,
-    cues: SubtitleCue[],
+    cues: TimelineCue[],
     segments: Segment[],
     pending: PendingTimeline | undefined
 ): Promise<TtsRunResult> {
@@ -376,8 +390,7 @@ async function placeTimeline(
         );
     }
 
-    const modeOf = (cue: SubtitleCue): TimelineOverflowMode =>
-        request.cueOverflowModes[cue.index] ?? request.overflowMode;
+    const modeOf = (cue: TimelineCue): TimelineOverflowMode => cue.fit ?? request.overflowMode;
     const speedups = cues
         .map((cue, index) => ({ cue, index, result: first[index], slot: Math.max(0.05, cue.end - cue.start) }))
         .filter(item => modeOf(item.cue) === 'speedup' && item.result.duration > item.slot + 0.005);
@@ -413,9 +426,11 @@ async function placeTimeline(
             path.join(dir, 'fast'),
             fraction => progress(60 + fraction * 30)
         );
+        voicePhase(jobId, 'stretch', { fraction: 0 });
         for (let i = 0; i < speedups.length; i++) {
             const item = speedups[i];
             let result = faster[i];
+            voicePhase(jobId, 'stretch', { fraction: i / speedups.length });
             if (result.duration > item.slot + 0.005) {
                 const stretched = path.join(dir, 'fast', `${result.id}-fit.wav`);
                 await timeStretch(result.path, stretched, result.duration / item.slot, jobId);
@@ -450,7 +465,7 @@ async function placeTimeline(
     progress(100);
     return {
         status: 'done',
-        candidate: {
+        audio: {
             id,
             voiceId: request.voiceId,
             voiceName: model.voiceName,

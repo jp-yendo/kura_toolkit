@@ -1,7 +1,10 @@
 import React from 'react';
+import { parseError } from '../common/errorMessage';
 
 // マイク録音。学習用の音声を録るため、ブラウザ側のエコーキャンセル・ノイズ抑制・自動ゲイン調整を無効にし、
 // 圧縮せずに PCM のまま受け取って 16bit の WAV にする (MediaRecorder は Opus などに圧縮してしまうため使わない)。
+// 録音した音声は 16bit の PCM にして 1 秒分ずつ main へ送り、main が作業ディレクトリの WAV へ追記する
+// (録音全体を画面のメモリに持たないため。録音の長さに上限は設けない)。
 
 const WORKLET_SOURCE = `
 class KuraRecorderProcessor extends AudioWorkletProcessor {
@@ -17,62 +20,60 @@ class KuraRecorderProcessor extends AudioWorkletProcessor {
 registerProcessor('kura-recorder', KuraRecorderProcessor);
 `;
 
-type RecorderState = 'idle' | 'starting' | 'recording';
+// 入力レベル・経過時間の表示を更新する間隔 (ミリ秒)
+const TICK_MS = 100;
+// main へまとめて送る長さ (秒)。送る回数を抑えつつ、画面に溜める量は 1 秒分にとどめる
+const WRITE_SECONDS = 1;
+
+type RecorderState = 'idle' | 'starting' | 'recording' | 'stopping';
 
 export type RecordedAudio = {
-    // 16bit PCM の WAV
-    wav: Uint8Array;
+    // main が書き終えた録音 (trainingSets.addRecording に渡す)
+    recordingId: string;
     durationSec: number;
 };
 
-function encodeWav(chunks: Float32Array[], sampleRate: number): Uint8Array {
-    const length = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
-    const buffer = new ArrayBuffer(44 + length * 2);
-    const view = new DataView(buffer);
-    const writeString = (offset: number, text: string) => {
-        for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i));
-    };
-    writeString(0, 'RIFF');
-    view.setUint32(4, 36 + length * 2, true);
-    writeString(8, 'WAVE');
-    writeString(12, 'fmt ');
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true);
-    view.setUint16(22, 1, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, sampleRate * 2, true);
-    view.setUint16(32, 2, true);
-    view.setUint16(34, 16, true);
-    writeString(36, 'data');
-    view.setUint32(40, length * 2, true);
-    let offset = 44;
-    for (const chunk of chunks) {
-        for (let i = 0; i < chunk.length; i++) {
-            const sample = Math.max(-1, Math.min(1, chunk[i]));
-            view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
-            offset += 2;
-        }
+type RecorderOptions = {
+    // 書き込みに失敗して録音を途中でやめたとき
+    onAbort?(): void;
+};
+
+// -1〜1 の音声を 16bit の PCM (リトルエンディアン) にする
+function toPcm16(samples: Float32Array): Int16Array {
+    const pcm = new Int16Array(samples.length);
+    for (let i = 0; i < samples.length; i++) {
+        const sample = Math.max(-1, Math.min(1, samples[i]));
+        pcm[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
     }
-    return new Uint8Array(buffer);
+    return pcm;
 }
 
-export function useRecorder() {
+type Session = {
+    context: AudioContext;
+    stream: MediaStream;
+    node: AudioWorkletNode;
+    timer: number;
+    recordingId: string;
+    // まだ main へ送っていない分
+    pending: Int16Array[];
+    pendingSamples: number;
+    samples: number;
+    // main への書き込みの順番待ち (前の書き込みが終わってから次を送る)
+    writes: Promise<void>;
+    failure: unknown;
+};
+
+export function useRecorder(options: RecorderOptions = {}) {
     const [state, setState] = React.useState<RecorderState>('idle');
     const [level, setLevel] = React.useState(0);
     const [elapsed, setElapsed] = React.useState(0);
     const [error, setError] = React.useState<string | null>(null);
-    const session = React.useRef<{
-        context: AudioContext;
-        stream: MediaStream;
-        node: AudioWorkletNode;
-        chunks: Float32Array[];
-        timer: number;
-    } | null>(null);
+    const session = React.useRef<Session | null>(null);
+    const onAbort = React.useRef(options.onAbort);
+    onAbort.current = options.onAbort;
 
-    const release = React.useCallback(() => {
-        const current = session.current;
-        if (!current) return;
-        session.current = null;
+    // マイクと音声処理を閉じる (録音のファイルは閉じない)
+    const closeInput = React.useCallback((current: Session) => {
         window.clearInterval(current.timer);
         current.node.port.onmessage = null;
         current.node.disconnect();
@@ -80,15 +81,50 @@ export function useRecorder() {
         void current.context.close();
     }, []);
 
+    // 送っていない分を main へ送る
+    const flush = React.useCallback((current: Session) => {
+        if (current.pending.length === 0) return;
+        const length = current.pending.reduce((sum, chunk) => sum + chunk.length, 0);
+        const pcm = new Int16Array(length);
+        let offset = 0;
+        for (const chunk of current.pending) {
+            pcm.set(chunk, offset);
+            offset += chunk.length;
+        }
+        current.pending = [];
+        current.pendingSamples = 0;
+        const bytes = new Uint8Array(pcm.buffer);
+        current.writes = current.writes.then(async () => {
+            if (current.failure) return;
+            try {
+                await window.kuraToolkit.voice.recording.append(current.recordingId, bytes);
+            } catch (caught) {
+                current.failure = caught;
+            }
+        });
+    }, []);
+
+    // 録音をやめて、書いたファイルも片付ける
+    const abandon = React.useCallback(
+        (current: Session) => {
+            closeInput(current);
+            const id = current.recordingId;
+            void current.writes.then(() => window.kuraToolkit.voice.recording.discard(id)).catch(() => undefined);
+        },
+        [closeInput]
+    );
+
     // 画面を離れた後に許可の確認などの待ちが終わった場合に、マイクを開いたままにしないための印
     const mounted = React.useRef(true);
     React.useEffect(() => {
         mounted.current = true;
         return () => {
             mounted.current = false;
-            release();
+            const current = session.current;
+            session.current = null;
+            if (current) abandon(current);
         };
-    }, [release]);
+    }, [abandon]);
 
     // 録音を始める。始められたら true
     const start = React.useCallback(async (): Promise<boolean> => {
@@ -97,10 +133,12 @@ export function useRecorder() {
         setState('starting');
         let stream: MediaStream | null = null;
         let context: AudioContext | null = null;
-        // 録音を始める前に失敗したり画面を離れたりした場合に、開いたマイクと音声処理を閉じる
+        let recordingId: string | null = null;
+        // 録音を始める前に失敗したり画面を離れたりした場合に、開いたマイクと音声処理、録音のファイルを閉じる
         const discard = () => {
             stream?.getTracks().forEach(track => track.stop());
             void context?.close();
+            if (recordingId) void window.kuraToolkit.voice.recording.discard(recordingId).catch(() => undefined);
         };
         try {
             stream = await navigator.mediaDevices.getUserMedia({
@@ -122,18 +160,32 @@ export function useRecorder() {
             } finally {
                 URL.revokeObjectURL(moduleUrl);
             }
+            recordingId = await window.kuraToolkit.voice.recording.begin(context.sampleRate);
             if (!mounted.current) {
                 discard();
                 return false;
             }
             const sourceNode = context.createMediaStreamSource(stream);
             const node = new AudioWorkletNode(context, 'kura-recorder');
-            const chunks: Float32Array[] = [];
+            const current: Session = {
+                context,
+                stream,
+                node,
+                timer: 0,
+                recordingId,
+                pending: [],
+                pendingSamples: 0,
+                samples: 0,
+                writes: Promise.resolve(),
+                failure: null,
+            };
             // 入力レベル (ピーク) をメーター表示に使う。音声の塊は 1 秒に数百回届くため、
-            // 画面への反映は下のタイマー (0.1 秒ごと) でまとめて行う
+            // 画面への反映と main への書き込み (1 秒分たまったとき) は下のタイマーでまとめて行う
             let peakSinceTick = 0;
             node.port.onmessage = (event: MessageEvent<Float32Array>) => {
-                chunks.push(event.data);
+                current.pending.push(toPcm16(event.data));
+                current.pendingSamples += event.data.length;
+                current.samples += event.data.length;
                 for (let i = 0; i < event.data.length; i++) {
                     peakSinceTick = Math.max(peakSinceTick, Math.abs(event.data[i]));
                 }
@@ -144,13 +196,26 @@ export function useRecorder() {
             mute.gain.value = 0;
             node.connect(mute).connect(context.destination);
             const startedAt = performance.now();
-            const timer = window.setInterval(() => {
+            current.timer = window.setInterval(() => {
+                // 書き込みに失敗した (ディスクの空きが無いなど) 場合は、その時点で録音をやめる
+                if (current.failure) {
+                    if (session.current === current) {
+                        session.current = null;
+                        setError(parseError(current.failure).raw);
+                        setState('idle');
+                        setLevel(0);
+                        abandon(current);
+                        onAbort.current?.();
+                    }
+                    return;
+                }
+                if (current.pendingSamples >= current.context.sampleRate * WRITE_SECONDS) flush(current);
                 setElapsed((performance.now() - startedAt) / 1000);
                 const peak = peakSinceTick;
                 peakSinceTick = 0;
                 setLevel(previous => Math.max(peak, previous * 0.6));
-            }, 100);
-            session.current = { context, stream, node, chunks, timer };
+            }, TICK_MS);
+            session.current = current;
             setElapsed(0);
             setState('recording');
             return true;
@@ -158,25 +223,39 @@ export function useRecorder() {
             discard();
             if (mounted.current) {
                 setState('idle');
-                setError(caught instanceof Error ? caught.message : String(caught));
+                setError(parseError(caught).raw);
             }
             return false;
         }
-    }, []);
+    }, [abandon, flush]);
 
-    // 録音を終えて WAV を返す。録音していなければ null
-    const stop = React.useCallback((): RecordedAudio | null => {
+    // 録音を終え、main が書き終えた録音を返す。録音していない・何も録れていなければ null。
+    // 書き込みに失敗した場合は失敗を返す
+    const stop = React.useCallback(async (): Promise<RecordedAudio | null> => {
         const current = session.current;
         if (!current) return null;
-        const sampleRate = current.context.sampleRate;
-        const chunks = current.chunks;
-        release();
-        setState('idle');
+        session.current = null;
+        setState('stopping');
         setLevel(0);
-        const samples = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
-        if (samples === 0) return null;
-        return { wav: encodeWav(chunks, sampleRate), durationSec: samples / sampleRate };
-    }, [release]);
+        closeInput(current);
+        flush(current);
+        try {
+            await current.writes;
+            if (current.failure) throw current.failure;
+            if (current.samples === 0) {
+                await window.kuraToolkit.voice.recording.discard(current.recordingId);
+                return null;
+            }
+            await window.kuraToolkit.voice.recording.finish(current.recordingId);
+            return { recordingId: current.recordingId, durationSec: current.samples / current.context.sampleRate };
+        } catch (caught) {
+            void window.kuraToolkit.voice.recording.discard(current.recordingId).catch(() => undefined);
+            if (mounted.current) setError(parseError(caught).raw);
+            return null;
+        } finally {
+            if (mounted.current) setState('idle');
+        }
+    }, [closeInput, flush]);
 
     return { state, level, elapsed, error, start, stop };
 }

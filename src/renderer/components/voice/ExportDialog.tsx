@@ -38,7 +38,7 @@ import {
 export type ExportEntry = {
     key: string;
     label: string;
-    // ファイル名の接尾辞 (ボーカル・伴奏など。翻訳済み)
+    // ファイル名の接尾辞 (ボーカル・伴奏など。翻訳済み)。空なら元のファイル名だけ
     suffix: string;
     // 書き出す音声 (作業ディレクトリ内)。複数の音を重ねる必要があるものは書き出し時に作る
     resolve(jobId: string): Promise<string>;
@@ -51,6 +51,8 @@ type Props = {
     entries: ExportEntry[];
     // 元のファイルのパス (ファイル名と既定の書き出し先に使う)
     sourcePath: string;
+    // ファイル名の元 (拡張子なし)。省略時は元のファイルの名前を使う
+    baseFileName?: string;
     // 書き出す結果がある作業
     workKey: string;
 };
@@ -61,8 +63,10 @@ function extension(format: AudioExportFormat): string {
     return format === 'mp3' ? 'mp3' : 'flac';
 }
 
-// 音声の書き出し。書き出しの設定は音声機能で共通で、変えた時点で保存する
-export default function ExportDialog({ open, onClose, entries, sourcePath, workKey }: Props) {
+// 音声の書き出し。書き出しの設定は音声機能で共通で、変えた時点で保存する。
+// 書き出すものが複数ある場合は、書き出し先ディレクトリと項目ごとのファイル名を指定する。
+// 1 つだけの場合は、形式の設定だけを示し、書き出すときに保存先とファイル名をファイルの保存ダイアログで選ぶ
+export default function ExportDialog({ open, onClose, entries, sourcePath, baseFileName, workKey }: Props) {
     const { t } = useTranslation();
     const { settings, update } = useSettingsStore();
     // 設定は起動時に読み込み済み (読み込む前は画面を描画しない)
@@ -72,7 +76,7 @@ export default function ExportDialog({ open, onClose, entries, sourcePath, workK
     const [overwrite, setOverwrite] = React.useState<string[] | null>(null);
     const { job, run, cancel } = useJobRunner();
     const ext = extension(exportSettings.format);
-    const base = sanitizeFileName(baseName(sourcePath) || 'output');
+    const base = sanitizeFileName(baseFileName || baseName(sourcePath) || 'output');
 
     // 開くたびに既定値 (元のファイルと同じ場所・自動のファイル名) に戻す
     React.useEffect(() => {
@@ -86,7 +90,8 @@ export default function ExportDialog({ open, onClose, entries, sourcePath, workK
         // eslint-disable-next-line react-hooks/exhaustive-deps -- 開いた時点の内容で初期化する
     }, [open]);
 
-    const autoName = (entry: ExportEntry) => sanitizeFileName(`${base}_${entry.suffix}`);
+    const single = entries.length === 1 ? entries[0] : null;
+    const autoName = (entry: ExportEntry) => sanitizeFileName(entry.suffix ? `${base}_${entry.suffix}` : base);
     const fileNameOf = (entry: ExportEntry) => {
         const state = states[entry.key];
         const name = state?.name.trim() ? state.name.trim() : autoName(entry);
@@ -105,8 +110,10 @@ export default function ExportDialog({ open, onClose, entries, sourcePath, workK
         void update({ voice: { export: { ...exportSettings, ...patch } } });
     };
 
-    const start = async (confirmed: boolean) => {
-        const destinations = selected.map(destOf);
+    // 書き出す。targets を渡した場合はその書き出し先 (保存ダイアログで選び、上書きの確認も済んでいるもの) に書く
+    const start = async (confirmed: boolean, targets?: { entry: ExportEntry; dest: string }[]) => {
+        const items = targets ?? selected.map(entry => ({ entry, dest: destOf(entry) }));
+        const destinations = items.map(item => item.dest);
         // 同じ書き出し先が複数あると、後から書いたもので上書きされてしまうため止める
         // (Windows と macOS のファイル名は大文字小文字を区別しない)
         const normalized = destinations.map(item => item.split('\\').join('/').toLowerCase());
@@ -114,7 +121,7 @@ export default function ExportDialog({ open, onClose, entries, sourcePath, workK
             showNotice('error', t('voice.export.duplicate'), 10000);
             return;
         }
-        if (!confirmed) {
+        if (!confirmed && !targets) {
             const existing = await window.kuraToolkit.voice.export.existing(destinations);
             if (existing.length > 0) {
                 setOverwrite(existing);
@@ -123,9 +130,9 @@ export default function ExportDialog({ open, onClose, entries, sourcePath, workK
         }
         try {
             const result = await run(t('voice.export.running'), async jobId => {
-                const items = [];
-                for (const entry of selected) items.push({ source: await entry.resolve(jobId), dest: destOf(entry) });
-                return window.kuraToolkit.voice.export.run(jobId, workKey, items, exportSettings);
+                const resolved = [];
+                for (const item of items) resolved.push({ source: await item.entry.resolve(jobId), dest: item.dest });
+                return window.kuraToolkit.voice.export.run(jobId, workKey, resolved, exportSettings);
             });
             if (result.cancelled) {
                 showNotice('warning', t('voice.common.cancelled'));
@@ -216,109 +223,130 @@ export default function ExportDialog({ open, onClose, entries, sourcePath, workK
                                 </Select>
                             </FormControl>
                         </Stack>
-                        <PathField
-                            label={t('voice.export.outputDir')}
-                            value={outputDir}
-                            onChange={setOutputDir}
-                            onBrowse={() =>
-                                window.kuraToolkit.dialog.openDirectory({ defaultPath: outputDir || undefined })
-                            }
-                        />
-                        <Box>
-                            {entries.map(entry => {
-                                const state = states[entry.key];
-                                if (!state) return null;
-                                return (
-                                    <Stack
-                                        key={entry.key}
-                                        direction='row'
-                                        spacing={1}
-                                        sx={{ alignItems: 'center', py: 0.5 }}
-                                    >
-                                        <Checkbox
-                                            checked={state.checked}
-                                            onChange={(_e, checked) =>
-                                                setStates(previous => ({
-                                                    ...previous,
-                                                    [entry.key]: { ...state, checked },
-                                                }))
-                                            }
-                                        />
-                                        <Typography variant='body2' sx={{ width: 160, flexShrink: 0 }}>
-                                            {entry.label}
-                                        </Typography>
-                                        {state.customPath ? (
-                                            <Typography
-                                                variant='body2'
-                                                color='text.secondary'
-                                                sx={{ flexGrow: 1, wordBreak: 'break-all' }}
+                        {!single && (
+                            <>
+                                <PathField
+                                    label={t('voice.export.outputDir')}
+                                    value={outputDir}
+                                    onChange={setOutputDir}
+                                    onBrowse={() =>
+                                        window.kuraToolkit.dialog.openDirectory({ defaultPath: outputDir || undefined })
+                                    }
+                                />
+                                <Box>
+                                    {entries.map(entry => {
+                                        const state = states[entry.key];
+                                        if (!state) return null;
+                                        return (
+                                            <Stack
+                                                key={entry.key}
+                                                direction='row'
+                                                spacing={1}
+                                                sx={{ alignItems: 'center', py: 0.5 }}
                                             >
-                                                {destOf(entry)}
-                                            </Typography>
-                                        ) : (
-                                            <TextField
-                                                size='small'
-                                                fullWidth
-                                                disabled={!state.checked}
-                                                value={state.name}
-                                                placeholder={`${autoName(entry)}.${ext}`}
-                                                onChange={event =>
-                                                    setStates(previous => ({
-                                                        ...previous,
-                                                        [entry.key]: { ...state, name: event.target.value },
-                                                    }))
-                                                }
-                                            />
-                                        )}
-                                        {state.customPath && (
-                                            <Tooltip title={t('voice.export.resetPath')}>
-                                                <IconButton
-                                                    aria-label={t('voice.export.resetPath')}
-                                                    onClick={() =>
+                                                <Checkbox
+                                                    checked={state.checked}
+                                                    onChange={(_e, checked) =>
                                                         setStates(previous => ({
                                                             ...previous,
-                                                            [entry.key]: { ...state, customPath: null },
+                                                            [entry.key]: { ...state, checked },
                                                         }))
                                                     }
-                                                >
-                                                    <CloseIcon fontSize='small' />
-                                                </IconButton>
-                                            </Tooltip>
-                                        )}
-                                        <Tooltip title={t('voice.export.chooseFile')}>
-                                            <span>
-                                                <IconButton
-                                                    aria-label={t('voice.export.chooseFile')}
-                                                    disabled={!state.checked}
-                                                    onClick={async () => {
-                                                        const chosen = await window.kuraToolkit.dialog.saveFile({
-                                                            defaultPath: destOf(entry),
-                                                            filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
-                                                        });
-                                                        if (chosen) {
+                                                />
+                                                <Typography variant='body2' sx={{ width: 160, flexShrink: 0 }}>
+                                                    {entry.label}
+                                                </Typography>
+                                                {state.customPath ? (
+                                                    <Typography
+                                                        variant='body2'
+                                                        color='text.secondary'
+                                                        sx={{ flexGrow: 1, wordBreak: 'break-all' }}
+                                                    >
+                                                        {destOf(entry)}
+                                                    </Typography>
+                                                ) : (
+                                                    <TextField
+                                                        size='small'
+                                                        fullWidth
+                                                        disabled={!state.checked}
+                                                        value={state.name}
+                                                        placeholder={`${autoName(entry)}.${ext}`}
+                                                        onChange={event =>
                                                             setStates(previous => ({
                                                                 ...previous,
-                                                                [entry.key]: { ...state, customPath: chosen },
-                                                            }));
+                                                                [entry.key]: { ...state, name: event.target.value },
+                                                            }))
                                                         }
-                                                    }}
-                                                >
-                                                    <FolderOpenIcon fontSize='small' />
-                                                </IconButton>
-                                            </span>
-                                        </Tooltip>
-                                    </Stack>
-                                );
-                            })}
-                        </Box>
+                                                    />
+                                                )}
+                                                {state.customPath && (
+                                                    <Tooltip title={t('voice.export.resetPath')}>
+                                                        <IconButton
+                                                            aria-label={t('voice.export.resetPath')}
+                                                            onClick={() =>
+                                                                setStates(previous => ({
+                                                                    ...previous,
+                                                                    [entry.key]: { ...state, customPath: null },
+                                                                }))
+                                                            }
+                                                        >
+                                                            <CloseIcon fontSize='small' />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                )}
+                                                <Tooltip title={t('voice.export.chooseFile')}>
+                                                    <span>
+                                                        <IconButton
+                                                            aria-label={t('voice.export.chooseFile')}
+                                                            disabled={!state.checked}
+                                                            onClick={async () => {
+                                                                const chosen = await window.kuraToolkit.dialog.saveFile(
+                                                                    {
+                                                                        defaultPath: destOf(entry),
+                                                                        filters: [
+                                                                            {
+                                                                                name: ext.toUpperCase(),
+                                                                                extensions: [ext],
+                                                                            },
+                                                                        ],
+                                                                    }
+                                                                );
+                                                                if (chosen) {
+                                                                    setStates(previous => ({
+                                                                        ...previous,
+                                                                        [entry.key]: { ...state, customPath: chosen },
+                                                                    }));
+                                                                }
+                                                            }}
+                                                        >
+                                                            <FolderOpenIcon fontSize='small' />
+                                                        </IconButton>
+                                                    </span>
+                                                </Tooltip>
+                                            </Stack>
+                                        );
+                                    })}
+                                </Box>
+                            </>
+                        )}
                     </Stack>
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={onClose}>{t('common.cancel')}</Button>
                     <Button
                         variant='contained'
-                        disabled={selected.length === 0 || (needsOutputDir && !outputDir.trim())}
-                        onClick={() => void start(false)}
+                        disabled={!single && (selected.length === 0 || (needsOutputDir && !outputDir.trim()))}
+                        onClick={async () => {
+                            if (!single) {
+                                void start(false);
+                                return;
+                            }
+                            const dest = await window.kuraToolkit.dialog.saveFile({
+                                defaultPath: destOf(single),
+                                filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
+                            });
+                            if (dest) void start(true, [{ entry: single, dest }]);
+                        }}
                     >
                         {t('voice.export.run')}
                     </Button>
@@ -358,6 +386,7 @@ export default function ExportDialog({ open, onClose, entries, sourcePath, workK
                 percent={job?.percent}
                 current={job?.current}
                 total={job?.total}
+                status={job?.status}
                 message={job?.message ?? ''}
                 onCancel={cancel}
             />

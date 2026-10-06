@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { getSettings } from '../settings';
 import { isCancelled, registerChild } from '../job-manager';
+import { discardLater, toolTempEnv } from '../work-dir';
 import type { FfmpegDetectResult } from '../../../shared/types';
 
 // ffmpeg/ffprobe の実行基盤。
@@ -112,10 +113,15 @@ function createLineSplitter(callback?: (line: string) => void): (chunk: string) 
     };
 }
 
-// 外部コマンドを実行して出力を収集する (shell 不使用)
+// 外部コマンドを実行して出力を収集する (shell 不使用)。
+// 一時ファイルの置き場は、プロセスごとに作業ディレクトリに作って TEMP / TMP / TMPDIR に渡し、終了したら消す
 export function runTool(command: string, args: string[], options: RunOptions = {}): Promise<RunResult> {
-    return new Promise((resolve, reject) => {
-        const child = spawn(command, args, { windowsHide: true });
+    const temp = toolTempEnv();
+    const release = () => {
+        if (temp) discardLater(temp.dir);
+    };
+    return new Promise<RunResult>((resolve, reject) => {
+        const child = spawn(command, args, { windowsHide: true, ...(temp ? { env: temp.env } : {}) });
         if (options.jobId) {
             registerChild(options.jobId, child);
         }
@@ -140,7 +146,7 @@ export function runTool(command: string, args: string[], options: RunOptions = {
         child.on('close', code => {
             resolve({ code, stdout, stderr });
         });
-    });
+    }).finally(release);
 }
 
 export type FfmpegRunOptions = RunOptions & {
@@ -181,7 +187,7 @@ export async function runFfmpeg(args: string[], options: FfmpegRunOptions = {}):
         throw new Error('KURA_CANCELLED');
     }
     if (result.code !== 0) {
-        throw new Error(`FFMPEG_FAILED: ${result.stderr.slice(-2000)}`);
+        throw new Error(`FFMPEG_FAILED: ${result.stderr}`);
     }
     return result;
 }

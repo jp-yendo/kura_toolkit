@@ -25,6 +25,7 @@ import {
 } from '@mui/material';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { useTranslation } from 'react-i18next';
+import { errorMessage } from '../../components/common/errorMessage';
 import AppDialog from '../../components/common/AppDialog';
 import FileDropZone from '../../components/common/FileDropZone';
 import PathField from '../../components/common/PathField';
@@ -44,10 +45,6 @@ import type {
 } from '@shared/types';
 
 const VIDEO_EXTENSIONS = ['mp4', 'mkv', 'webm', 'mov', 'm4v', 'ts', 'avi', 'mp3', 'm4a', 'flac', 'ogg'];
-const VIDEO_FILTERS = [
-    { name: 'Media Files', extensions: VIDEO_EXTENSIONS },
-    { name: 'All Files', extensions: ['*'] },
-];
 
 // 字幕コーデックの通称 (ffprobe の codec_name -> 一般的な呼び方)
 const SUBTITLE_FORMAT_NAMES: Record<string, string> = {
@@ -59,13 +56,17 @@ const SUBTITLE_FORMAT_NAMES: Record<string, string> = {
     mov_text: 'MP4 tx3g',
     dvd_subtitle: 'DVD VOBSUB',
     hdmv_pgs_subtitle: 'Blu-ray PGS',
-    hdmv_text_subtitle: 'Blu-ray テキスト',
     dvb_subtitle: 'DVB',
     dvb_teletext: 'Teletext',
     eia_608: 'CC (EIA-608)',
     // ffmpeg 側の表記ゆれ
     cea_608: 'CC (EIA-608)',
-    arib_caption: 'ARIB 字幕',
+};
+
+// 字幕コーデックの呼び方のうち、翻訳が必要なもの (ffprobe の codec_name -> 翻訳のキー)
+const SUBTITLE_FORMAT_KEYS: Record<string, string> = {
+    hdmv_text_subtitle: 'chapterPage.subtitleFormats.hdmvText',
+    arib_caption: 'chapterPage.subtitleFormats.arib',
 };
 
 function formatTime(sec: number): string {
@@ -85,6 +86,10 @@ type RunningJob = {
 
 export default function ChapterCutPage() {
     const { t } = useTranslation();
+    const videoFilters = [
+        { name: t('common.fileTypes.media'), extensions: VIDEO_EXTENSIONS },
+        { name: t('common.fileTypes.all'), extensions: ['*'] },
+    ];
     const store = useChapterStore();
     const [job, setJob] = React.useState<RunningJob | null>(null);
     const [loading, setLoading] = React.useState(false);
@@ -123,16 +128,12 @@ export default function ChapterCutPage() {
 
     const formatError = (error: unknown): string => {
         const message = error instanceof Error ? error.message : String(error);
-        if (message.includes('FFMPEG_NOT_FOUND')) return t('common.ffmpegNotFound');
-        if (message.includes('FFPROBE_NOT_FOUND')) return t('common.ffprobeNotFound');
         if (message.includes('NO_CHAPTERS')) return t('chapterPage.noChapters');
         if (message.includes('INVALID_RANGE')) return t('chapterPage.invalidRange');
         if (message.includes('NO_SPLIT_POINT')) return t('chapterPage.noSplitPoint');
         if (message.includes('DUPLICATE_OUTPUTS')) return t('chapterPage.duplicateOutputs');
         if (message.includes('OUTPUT_EQUALS_INPUT')) return t('chapterPage.outputEqualsInput');
-        const workDir = /WORK_DIR_MISSING: (.*)/.exec(message);
-        if (workDir) return t('common.workDirMissing', { detail: workDir[1] });
-        return message;
+        return errorMessage(t, error);
     };
 
     // 出力ファイル名の入力。パスが貼り付けられた場合はディレクトリ部を出力先へ移し、
@@ -269,7 +270,8 @@ export default function ChapterCutPage() {
         }[stream.kind];
         const parts: string[] = [stream.codec || '?'];
         // 字幕は形式が分かりにくいため、通称を併記する (subrip → SRT など)
-        const subtitleName = SUBTITLE_FORMAT_NAMES[stream.codec];
+        const subtitleKey = SUBTITLE_FORMAT_KEYS[stream.codec];
+        const subtitleName = SUBTITLE_FORMAT_NAMES[stream.codec] ?? (subtitleKey ? t(subtitleKey) : undefined);
         if (stream.kind === 'subtitle' && subtitleName) parts.push(`(${subtitleName})`);
         if (stream.kind === 'video') {
             if (stream.width && stream.height) parts.push(`${stream.width}x${stream.height}`);
@@ -325,7 +327,7 @@ export default function ChapterCutPage() {
         <PageContainer>
             <FileDropZone
                 onFiles={loadFile}
-                filters={VIDEO_FILTERS}
+                filters={videoFilters}
                 hint={store.input ?? t('chapterPage.dropHint')}
                 // 読み込むまでは画面全体を受け皿にし、読み込み後は上部の細いバーにする
                 sx={

@@ -45,7 +45,7 @@ def _unsafe_reason(error: Exception) -> str:
     if names:
         return f"{type(error).__name__}: Unsupported global: {', '.join(names)}"
     first_line = next((line.strip() for line in text.splitlines() if line.strip()), "")
-    return f"{type(error).__name__}: {first_line}"[:500]
+    return f"{type(error).__name__}: {first_line}"
 
 
 def _instance(device: str) -> Any:
@@ -62,6 +62,7 @@ def _instance(device: str) -> Any:
     runtime.patch_faiss_unicode_paths()
     runtime.block_wget_downloads()
     runtime.patch_applio_model_paths()
+    runtime.write_wav_as_float()
     from rvc.configs.config import Config
     from rvc.infer.infer import VoiceConverter
 
@@ -72,25 +73,8 @@ def _instance(device: str) -> Any:
         safetensors with the settings in JSON, and the same checkpoint is built from them in memory.
         """
 
-        # Applio rewrites "trained" to "added" anywhere in the index path before using it, which breaks
-        # paths that contain the word (D:\pretrained\... and so on). The pipeline gets the real path instead.
-        index_path = ""
-
         def load_model(self, weight_root: str) -> None:
             self.cpt = _stored_checkpoint(weight_root)
-
-        def setup_vc_instance(self) -> None:
-            super().setup_vc_instance()
-            if self.vc is None:
-                return
-            pipeline = self.vc.pipeline
-
-            def run(*args: Any, **kwargs: Any) -> Any:
-                if "file_index" in kwargs:
-                    kwargs["file_index"] = self.index_path
-                return pipeline(*args, **kwargs)
-
-            self.vc.pipeline = run
 
     # Applio itself only picks CUDA or the CPU; setting the device also covers MPS and the CPU retry.
     Config().device = device
@@ -99,41 +83,138 @@ def _instance(device: str) -> Any:
     return _converter
 
 
+# The conversion is done in chunks of about this length (seconds), cut at the quietest point near each boundary.
+# Each chunk is converted with this much real audio before and after it (seconds), which is cut off again at exact
+# sample positions, so the chunks join without a gap or an overlap.
+#
+# Applio's own splitting (pipeline() for long input) is not used: a chunk can come back one feature frame (10 ms)
+# short, which drops the end of that chunk and moves everything after it 10 ms earlier, and each chunk is scaled
+# down on its own when its peak exceeds 0.99, which changes the level from chunk to chunk. Here a short result only
+# loses part of the context that is cut off anyway, and nothing is rescaled.
+_CHUNK_SECONDS = 20
+_CHUNK_CONTEXT_SECONDS = 1
+_CHUNK_SEARCH_SECONDS = 2
+# At each boundary the result passes from one chunk to the next over this length (seconds). Both chunks cover it
+# (the previous one with its context), so the two renderings of the same audio are crossfaded instead of being
+# butted together, which would leave a step in the waveform (a click).
+_CHUNK_CROSSFADE_SECONDS = 0.02
+
+
+def _chunk_bounds(audio: Any, sample_rate: int, window: int) -> list:
+    """Chunk boundaries (samples, multiples of the frame size) at the quietest frames near every _CHUNK_SECONDS."""
+    import numpy as np
+
+    frames = len(audio) // window
+    energy = np.square(audio[: frames * window].reshape(frames, window)).sum(axis=1)
+    bounds = [0]
+    step = _CHUNK_SECONDS * sample_rate // window
+    search = _CHUNK_SEARCH_SECONDS * sample_rate // window
+    target = step
+    while target + search < frames:
+        lo, hi = target - search, target + search
+        cut = lo + int(np.argmin(energy[lo:hi]))
+        bounds.append(cut * window)
+        target = cut + step
+    bounds.append(len(audio))
+    return list(zip(bounds[:-1], bounds[1:]))
+
+
+def _convert_chunk(vc: Any, models: dict, audio: Any, params: dict) -> Any:
+    """Convert one chunk (16 kHz) the way Applio's pipeline() converts one segment, without rescaling the result."""
+    import numpy as np
+    import torch
+    from rvc.infer.pipeline import AudioProcessor, ah, bh
+    from scipy import signal
+
+    audio = signal.filtfilt(bh, ah, audio)
+    audio_pad = np.pad(audio, (vc.t_pad, vc.t_pad), mode="reflect")
+    p_len = audio_pad.shape[0] // vc.window
+    pitch = pitchf = None
+    if models["pitchGuidance"]:
+        pitch, pitchf = vc.get_f0(audio_pad, p_len, str(params["f0Method"]), int(params["pitch"]), False, 1.0, False, 155.0)
+        pitch = torch.tensor(pitch[:p_len], device=vc.device).unsqueeze(0).long()
+        pitchf = torch.tensor(np.asarray(pitchf[:p_len], dtype=np.float32), device=vc.device).unsqueeze(0).float()
+    converted = vc.voice_conversion(
+        models["hubert"], models["netG"], models["sid"], audio_pad, pitch, pitchf, models["index"], models["bigNpy"],
+        float(params["indexRate"]), models["version"], float(params["protect"]),
+    )[vc.t_pad_tgt : -vc.t_pad_tgt]
+    volume_envelope = float(params["volumeEnvelope"])
+    if volume_envelope != 1:
+        converted = AudioProcessor.change_rms(audio, vc.sample_rate, converted, vc.tgt_sr, volume_envelope)
+    return converted
+
+
 def rpc_convert(params: dict, context: Context) -> dict:
+    """Convert the voice in chunks and write the result as it is made (model's sampling rate, mono, 32-bit float)."""
     output = params["output"]
-    index = params["index"]
-    kwargs = dict(
-        audio_input_path=params["input"],
-        audio_output_path=output,
-        model_path=params["model"],
-        index_path=index,
-        pitch=int(params["pitch"]),
-        f0_method=str(params["f0Method"]),
-        index_rate=float(params["indexRate"]),
-        volume_envelope=float(params["volumeEnvelope"]),
-        protect=float(params["protect"]),
-        hop_length=128,
-        split_audio=False,
-        f0_autotune=False,
-        f0_autotune_strength=1.0,
-        embedder_model=str(params["embedder"]),
-        embedder_model_custom=None,
-        clean_audio=False,
-        clean_strength=0.5,
-        export_format="WAV",
-        post_process=False,
-        resample_sr=0,
-        # The app always converts with the first speaker of the model
-        sid=0,
-        proposed_pitch=False,
-        proposed_pitch_threshold=155.0,
-        formant_shifting=False,
-    )
+    index_path = params["index"]
+    embedder = str(params["embedder"])
     context.progress(0.05, "load")
-    def convert(device: str) -> Any:
+
+    def convert(device: str) -> None:
+        import numpy as np
+        import soundfile
+        import torch
+        from rvc.lib.utils import load_audio_infer
+
+        context.phase("loadModel")
+
         converter = _instance(device)
-        converter.index_path = index
-        return converter.convert_audio(**kwargs)
+        # The app always converts with the first speaker of the model
+        converter.get_vc(params["model"], 0)
+        if not converter.hubert_model or embedder != converter.last_embedder_model:
+            converter.load_hubert(embedder, None)
+            converter.last_embedder_model = embedder
+        vc = converter.vc
+        index = big_npy = None
+        if index_path and os.path.exists(index_path) and float(params["indexRate"]) > 0:
+            import faiss
+
+            index = faiss.read_index(index_path)
+            big_npy = index.reconstruct_n(0, index.ntotal)
+        models = {
+            "hubert": converter.hubert_model,
+            "netG": converter.net_g,
+            "sid": torch.tensor(0, device=vc.device).unsqueeze(0).long(),
+            "index": index,
+            "bigNpy": big_npy,
+            "version": converter.version,
+            "pitchGuidance": converter.use_f0,
+        }
+        audio = load_audio_infer(params["input"], vc.sample_rate)
+        # As Applio does for the whole input: keep the input below full scale
+        peak = np.abs(audio).max() / 0.95
+        if peak > 1:
+            audio = audio / peak
+        ratio = vc.tgt_sr / vc.sample_rate
+        context_samples = _CHUNK_CONTEXT_SECONDS * vc.sample_rate
+        chunks = _chunk_bounds(audio, vc.sample_rate, vc.window)
+        crossfade = max(1, round(_CHUNK_CROSSFADE_SECONDS * vc.tgt_sr))
+        # The previous chunk's result just after its end (overlaps the start of the next chunk)
+        carry = None
+        context.phase("convert", 0.0)
+        with soundfile.SoundFile(output, "w", samplerate=vc.tgt_sr, channels=1, subtype="FLOAT") as out:
+            for number, (start, end) in enumerate(chunks):
+                begin = max(0, start - context_samples)
+                piece = audio[begin : end + context_samples]
+                # After the end of the input, silence stands in for the context
+                missing = end + context_samples - min(len(audio), end + context_samples)
+                if missing > 0:
+                    piece = np.concatenate([piece, np.zeros(missing, dtype=piece.dtype)])
+                converted = _convert_chunk(vc, models, piece, params)
+                first = round((start - begin) * ratio)
+                length = round(end * ratio) - round(start * ratio)
+                kept = np.array(converted[first : first + length], dtype=np.float32)
+                if len(kept) < length:
+                    raise KuraError("CONVERSION_FAILED", f"chunk {number + 1}: {len(kept)} < {length} samples")
+                if carry is not None:
+                    count = min(len(carry), len(kept))
+                    fade = np.linspace(0.0, 1.0, count, endpoint=False, dtype=np.float32)
+                    kept[:count] = carry[:count] * (1.0 - fade) + kept[:count] * fade
+                carry = np.asarray(converted[first + length : first + length + crossfade], dtype=np.float32)
+                out.write(kept)
+                context.progress(0.05 + 0.95 * (number + 1) / len(chunks), "convert")
+                context.phase("convert", (number + 1) / len(chunks))
 
     runtime.run_with_cpu_fallback(convert, unload)
     if not os.path.exists(output) or os.path.getsize(output) <= 44:
@@ -248,7 +329,7 @@ def rpc_inspect_model(params: dict, context: Context) -> dict:
     try:
         checkpoint, _safe = _load_checkpoint(params["path"], allow_unsafe=False)
     except UnsafeModel as error:
-        return {"safe": False, "detail": str(error)[:2000]}
+        return {"safe": False, "detail": str(error)}
     _weights, meta = _extract(checkpoint)
     return {"safe": True, "meta": _public(meta)}
 
@@ -262,7 +343,7 @@ def rpc_sanitize_model(params: dict, context: Context) -> dict:
     try:
         checkpoint, safe = _load_checkpoint(params["path"], allow_unsafe=bool(params["allowUnsafe"]))
     except UnsafeModel as error:
-        raise KuraError("UNSAFE_MODEL", str(error)[:2000]) from error
+        raise KuraError("UNSAFE_MODEL", str(error)) from error
     weights, meta = _extract(checkpoint)
     del checkpoint
     save_file(weights, os.path.join(out_dir, "model.safetensors"))
@@ -274,21 +355,25 @@ def rpc_sanitize_model(params: dict, context: Context) -> dict:
 # --- final mix ------------------------------------------------------------------------
 
 
-def _read(path: str, sample_rate: int) -> Any:
-    import numpy as np
-    from pedalboard.io import AudioFile
+# Length of one block when mixing (seconds). The audio is read, processed and written block by block, so only
+# one block of each input is held in memory regardless of the length of the song.
+_MIX_BLOCK_SECONDS = 10
 
-    with AudioFile(path).resampled_to(sample_rate) as handle:
-        audio = handle.read(handle.frames)
-    if audio.shape[0] == 1:
-        audio = np.vstack([audio, audio])
-    return audio[:2].astype(np.float32)
+
+def _stereo(block: Any) -> Any:
+    import numpy as np
+
+    if block.shape[0] == 1:
+        block = np.vstack([block, block])
+    return block[:2].astype(np.float32)
 
 
 def rpc_mix(params: dict, context: Context) -> dict:
     """Vocal / accompaniment balance, reverb on the vocals and the master volume.
 
     The preview and the export use this same rendering, so they always sound the same.
+    Processed block by block; the effects keep their state between blocks (reset=False), so the result is the
+    same as processing the whole audio at once.
     """
     import numpy as np
     from pedalboard import Gain, Limiter, Pedalboard, Reverb
@@ -297,8 +382,6 @@ def rpc_mix(params: dict, context: Context) -> dict:
     sample_rate = int(params["sampleRate"])
     settings = params["params"]
     reverb = settings["reverb"]
-    context.progress(0.1, "read")
-    vocals = _read(params["vocals"], sample_rate)
     chain = [Gain(gain_db=float(settings["vocalGainDb"]))]
     if reverb["enabled"]:
         chain.append(
@@ -311,27 +394,45 @@ def rpc_mix(params: dict, context: Context) -> dict:
                 freeze_mode=0.0,
             )
         )
-    vocals = Pedalboard(chain)(vocals, sample_rate)
-    mix = vocals
-    accompaniment_path = params["accompaniment"]
-    if accompaniment_path:
-        accompaniment = _read(accompaniment_path, sample_rate)
-        accompaniment = Pedalboard([Gain(gain_db=float(settings["accompanimentGainDb"]))])(accompaniment, sample_rate)
-        length = max(vocals.shape[1], accompaniment.shape[1])
-        mix = np.zeros((2, length), dtype=np.float32)
-        mix[:, : vocals.shape[1]] += vocals
-        mix[:, : accompaniment.shape[1]] += accompaniment
-    context.progress(0.6, "master")
+    vocal_board = Pedalboard(chain)
+    accompaniment_board = Pedalboard([Gain(gain_db=float(settings["accompanimentGainDb"]))])
     master = [Gain(gain_db=float(settings["masterGainDb"]))]
     if settings["limiter"]:
         master.append(Limiter(threshold_db=-1.0, release_ms=100.0))
-    mix = Pedalboard(master)(mix.astype(np.float32), sample_rate)
-    if int(params["channels"]) == 1:
-        mix = mix.mean(axis=0, keepdims=True)
-    output = params["output"]
-    with AudioFile(output, "w", samplerate=sample_rate, num_channels=mix.shape[0], bit_depth=32) as handle:
-        handle.write(mix.astype(np.float32))
-    context.progress(1.0, "done")
+    master_board = Pedalboard(master)
+    channels = 1 if int(params["channels"]) == 1 else 2
+    block = _MIX_BLOCK_SECONDS * sample_rate
+
+    vocals = AudioFile(params["vocals"]).resampled_to(sample_rate)
+    accompaniment = (
+        AudioFile(params["accompaniment"]).resampled_to(sample_rate) if params["accompaniment"] else None
+    )
+    try:
+        total = max(vocals.frames, accompaniment.frames if accompaniment else 0)
+        output = params["output"]
+        with AudioFile(output, "w", samplerate=sample_rate, num_channels=channels, bit_depth=32) as handle:
+            done = 0
+            while done < total:
+                size = min(block, total - done)
+                mix = np.zeros((2, size), dtype=np.float32)
+                # When the lengths differ, the shorter input is silent after it ends.
+                if vocals.tell() < vocals.frames:
+                    part = _stereo(vocals.read(min(size, vocals.frames - vocals.tell())))
+                    mix[:, : part.shape[1]] += vocal_board(part, sample_rate, reset=False)
+                if accompaniment and accompaniment.tell() < accompaniment.frames:
+                    part = _stereo(accompaniment.read(min(size, accompaniment.frames - accompaniment.tell())))
+                    mix[:, : part.shape[1]] += accompaniment_board(part, sample_rate, reset=False)
+                mix = master_board(mix, sample_rate, reset=False)
+                if channels == 1:
+                    mix = mix.mean(axis=0, keepdims=True)
+                handle.write(mix.astype(np.float32))
+                done += size
+                context.progress(done / total, "mix")
+                context.phase("mix", done / total)
+    finally:
+        vocals.close()
+        if accompaniment:
+            accompaniment.close()
     return {"path": output}
 
 

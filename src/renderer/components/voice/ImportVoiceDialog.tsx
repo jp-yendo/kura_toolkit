@@ -293,9 +293,7 @@ export default function ImportVoiceDialog({ open, feature, existing, onClose, on
                             label={t('voice.models.name')}
                             value={name}
                             onChange={event => setName(event.target.value)}
-                            helperText={
-                                hasSameVoiceName(t, existing, name) ? t('voice.models.duplicateName') : undefined
-                            }
+                            helperText={hasSameVoiceName(existing, name) ? t('voice.models.duplicateName') : undefined}
                             slotProps={{ formHelperText: { sx: { color: 'warning.main', whiteSpace: 'pre-line' } } }}
                         />
                         {inspection.tts?.engine === 'multilingual' && (

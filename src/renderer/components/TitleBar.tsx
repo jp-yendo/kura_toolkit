@@ -11,7 +11,8 @@ import {
     Divider,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
+import { useGuardedNavigate } from '../stores/navigationGuard';
 import type { AppInfo } from '@shared/types';
 import MinimizeIcon from '@mui/icons-material/Minimize';
 import CropSquareIcon from '@mui/icons-material/CropSquare';
@@ -35,7 +36,7 @@ type Props = {
 
 export default function TitleBar({ info }: Props) {
     const { t } = useTranslation();
-    const navigate = useNavigate();
+    const navigate = useGuardedNavigate();
     const location = useLocation();
     const isMac = info?.os === 'darwin';
     const pageTitle = t(titleKeyForRoute(location.pathname));

@@ -1,5 +1,5 @@
 import { probeAudio } from './audio-tools';
-import { mediaUrl } from './media-protocol';
+import { mediaUrl } from '../media-protocol';
 import type { MediaRef } from '../../../shared/voice/types';
 
 // 再生できる音声ファイルの情報 (長さ・チャンネル数と、renderer で再生するための URL)

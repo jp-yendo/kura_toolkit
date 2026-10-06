@@ -1,47 +1,60 @@
 import React from 'react';
-import { Box, IconButton, Slider, Stack, Tooltip, Typography } from '@mui/material';
+import { Box, IconButton, Tooltip, Typography } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import PauseIcon from '@mui/icons-material/Pause';
 import StopIcon from '@mui/icons-material/Stop';
 import { useTranslation } from 'react-i18next';
+import WaveformView from './WaveformView';
+import type { WaveformData } from '@shared/voice/types';
 
 export type PlayerSource = {
     // 再生対象を識別するキー (候補 ID と対象の組み合わせなど)
     key: string;
     url: string;
-    // 再生中の対象として表示する名前
-    label: string;
 };
 
 type Props = {
     source: PlayerSource | null;
-    // 再生対象が無いときの案内
-    emptyHint?: string;
+    // 行の右端に置く操作 (再生している対象の保存など)
+    actions?: React.ReactNode;
+    // 再生対象を切り替えたときに、再生位置と再生中かどうかを引き継ぐか (候補を聞き比べる場合)。
+    // false の場合は、新しい再生対象を先頭から、止めた状態で示す (作り直した音声を差し替える場合)
+    keepPosition?: boolean;
 };
 
+// 再生位置と長さの表示。音声編集ソフトの一般的な表記に合わせ、ミリ秒まで示す (分:秒.ミリ秒。1 時間以上は時:分:秒.ミリ秒)
 function formatTime(seconds: number): string {
-    if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
-    const total = Math.floor(seconds);
-    const m = Math.floor(total / 60);
-    const s = total % 60;
-    return `${m}:${String(s).padStart(2, '0')}`;
+    const total = Number.isFinite(seconds) && seconds > 0 ? Math.floor(seconds * 1000) : 0;
+    const ms = String(total % 1000).padStart(3, '0');
+    const s = String(Math.floor(total / 1000) % 60).padStart(2, '0');
+    const minutes = Math.floor(total / 60000);
+    if (minutes < 60) return `${minutes}:${s}.${ms}`;
+    return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}:${s}.${ms}`;
 }
 
 // 同期再生のプレーヤー。再生対象 (候補や出力) を切り替えても再生位置と再生中かどうかを引き継ぐ。
 // 2 つの audio 要素を交互に使い、切り替え先を読み込んで同じ位置へ合わせてから入れ替えるため、
 // 切り替えの瞬間に音が途切れる時間を短くできる。
-export default function SyncPlayer({ source, emptyHint }: Props) {
+// 再生・停止ボタンの内側の余白 (テーマの間隔の単位)
+const PLAYER_BUTTON_PADDING = 0.5;
+
+export default function SyncPlayer({ source, actions, keepPosition = true }: Props) {
     const { t } = useTranslation();
     const audioRefs = [React.useRef<HTMLAudioElement>(null), React.useRef<HTMLAudioElement>(null)];
     const [active, setActive] = React.useState(0);
     const activeRef = React.useRef(0);
+    // 実際に鳴っているか (audio 要素の playing / pause の通知で切り替える。押した時点では切り替えない)
     const [playing, setPlaying] = React.useState(false);
     const playingRef = React.useRef(false);
+    // 再生対象を読み込み終えたか (読み込み終えるまで再生させない。再生を始めてから読み込みを待って止まるのを避けるため)
+    const [ready, setReady] = React.useState(false);
     const [position, setPosition] = React.useState(0);
     const positionRef = React.useRef(0);
     const [duration, setDuration] = React.useState(0);
-    // 再生位置のつまみをドラッグしている間は、再生位置の更新でつまみを動かさない
+    // 波形の上をドラッグしている間は、ドラッグしている位置を示す (再生位置の更新では動かさない)
     const [dragValue, setDragValue] = React.useState<number | null>(null);
+    // 再生対象の波形。切り替え先の波形ができるまでは前の波形を示す (切り替えのたびに消えてちらつかないように)
+    const [waveform, setWaveform] = React.useState<WaveformData | null>(null);
     const loadedUrl = React.useRef<string | null>(null);
 
     const current = () => audioRefs[activeRef.current].current;
@@ -63,12 +76,34 @@ export default function SyncPlayer({ source, emptyHint }: Props) {
         // eslint-disable-next-line react-hooks/exhaustive-deps -- audio 要素の ref は再生中に変わらない
     }, [playing]);
 
+    React.useEffect(() => {
+        const url = source?.url ?? null;
+        if (!url) {
+            setWaveform(null);
+            return;
+        }
+        let cancelled = false;
+        window.kuraToolkit.voice.media
+            .waveform(url)
+            .then(data => {
+                if (!cancelled) setWaveform(data);
+            })
+            .catch(() => {
+                // 波形は表示の補助のため、作れない場合は波形なしで再生だけを続ける
+                if (!cancelled) setWaveform(null);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [source?.url]);
+
     // 再生対象の切り替え。位置と再生状態を引き継ぐ
     React.useEffect(() => {
         const url = source?.url ?? null;
         if (url === loadedUrl.current) return;
         loadedUrl.current = url;
         const previous = current();
+        setReady(false);
         if (!url) {
             previous?.pause();
             if (previous) previous.removeAttribute('src');
@@ -80,6 +115,13 @@ export default function SyncPlayer({ source, emptyHint }: Props) {
         const nextIndex = previous && previous.getAttribute('src') ? 1 - activeRef.current : activeRef.current;
         const next = audioRefs[nextIndex].current;
         if (!next) return;
+        if (!keepPosition) {
+            previous?.pause();
+            playingRef.current = false;
+            setPlaying(false);
+            positionRef.current = 0;
+            setPosition(0);
+        }
         const resumeAt = positionRef.current;
         const resume = playingRef.current;
         let cancelled = false;
@@ -92,6 +134,18 @@ export default function SyncPlayer({ source, emptyHint }: Props) {
                 if (previous && previous !== next) previous.pause();
                 activeRef.current = nextIndex;
                 setActive(nextIndex);
+                // 全体を読み込み終えてから再生できるようにする
+                if (next.readyState >= HTMLMediaElement.HAVE_ENOUGH_DATA) {
+                    setReady(true);
+                } else {
+                    next.addEventListener(
+                        'canplaythrough',
+                        () => {
+                            if (!cancelled) setReady(true);
+                        },
+                        { once: true }
+                    );
+                }
                 if (resume) {
                     void next.play().catch(() => undefined);
                 }
@@ -113,18 +167,15 @@ export default function SyncPlayer({ source, emptyHint }: Props) {
         // eslint-disable-next-line react-hooks/exhaustive-deps -- audio 要素の ref は変わらない
     }, [source?.url]);
 
+    // 再生中かどうかの表示は、実際に鳴り始めた・止まった通知 (handlePlaying / handlePause) で切り替える
     const togglePlay = () => {
         const audio = current();
         if (!audio || !audio.getAttribute('src')) return;
-        if (playingRef.current) {
+        if (!audio.paused) {
             audio.pause();
-            playingRef.current = false;
-            setPlaying(false);
         } else {
             if (audio.ended) audio.currentTime = 0;
             void audio.play().catch(() => undefined);
-            playingRef.current = true;
-            setPlaying(true);
         }
     };
 
@@ -135,8 +186,24 @@ export default function SyncPlayer({ source, emptyHint }: Props) {
         audio.currentTime = 0;
         positionRef.current = 0;
         setPosition(0);
+    };
+
+    const handlePlaying = (index: number) => {
+        if (index !== activeRef.current) return;
+        playingRef.current = true;
+        setPlaying(true);
+    };
+
+    // 止まった位置をそのまま示す (描画のたびの更新は止まるため)
+    const handlePause = (index: number) => {
+        if (index !== activeRef.current) return;
+        const audio = audioRefs[index].current;
         playingRef.current = false;
         setPlaying(false);
+        if (audio) {
+            positionRef.current = audio.currentTime;
+            setPosition(audio.currentTime);
+        }
     };
 
     const seek = (value: number) => {
@@ -160,8 +227,9 @@ export default function SyncPlayer({ source, emptyHint }: Props) {
             sx={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 1.5,
-                px: 1.5,
+                // 左右の端と各要素の間の見た目の間隔は、すべてこの 1 種類にそろえる
+                gap: 2,
+                px: 2,
                 py: 1,
                 border: 1,
                 borderColor: 'divider',
@@ -174,54 +242,61 @@ export default function SyncPlayer({ source, emptyHint }: Props) {
                     key={index}
                     ref={audioRefs[index]}
                     preload='auto'
+                    onPlaying={() => handlePlaying(index)}
+                    onPause={() => handlePause(index)}
                     onEnded={() => handleEnded(index)}
                     onDurationChange={event => {
                         if (index === active) setDuration(event.currentTarget.duration || 0);
                     }}
                 />
             ))}
-            <Tooltip title={playing ? t('voice.player.pause') : t('voice.player.play')}>
-                <span>
-                    <IconButton
-                        color='primary'
-                        aria-label={playing ? t('voice.player.pause') : t('voice.player.play')}
-                        onClick={togglePlay}
-                        disabled={disabled}
-                    >
-                        {playing ? <PauseIcon /> : <PlayArrowIcon />}
-                    </IconButton>
-                </span>
-            </Tooltip>
-            <Tooltip title={t('voice.player.stop')}>
-                <span>
-                    <IconButton size='small' aria-label={t('voice.player.stop')} onClick={stop} disabled={disabled}>
-                        <StopIcon fontSize='small' />
-                    </IconButton>
-                </span>
-            </Tooltip>
-            <Stack sx={{ flexGrow: 1, minWidth: 0 }}>
-                <Typography
-                    variant='body2'
-                    color={source ? 'text.primary' : 'text.secondary'}
-                    sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.6 }}
-                >
-                    {source ? source.label : (emptyHint ?? t('voice.player.empty'))}
-                </Typography>
-                <Slider
-                    size='small'
-                    min={0}
-                    max={Math.max(duration, 0.001)}
-                    step={0.01}
-                    value={Math.min(shownPosition, Math.max(duration, 0.001))}
+            {/* 再生と停止は同じ大きさにそろえる。ボタンの内側の余白は負のマージンで打ち消し、
+                外側の間隔が見た目どおりになるようにする */}
+            <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0, mx: -PLAYER_BUTTON_PADDING }}>
+                <Tooltip title={playing ? t('voice.player.pause') : t('voice.player.play')}>
+                    <span>
+                        <IconButton
+                            color='primary'
+                            sx={{ p: PLAYER_BUTTON_PADDING }}
+                            aria-label={playing ? t('voice.player.pause') : t('voice.player.play')}
+                            onClick={togglePlay}
+                            disabled={disabled || !ready}
+                        >
+                            {playing ? <PauseIcon /> : <PlayArrowIcon />}
+                        </IconButton>
+                    </span>
+                </Tooltip>
+                <Tooltip title={t('voice.player.stop')}>
+                    <span>
+                        <IconButton
+                            sx={{ p: PLAYER_BUTTON_PADDING }}
+                            aria-label={t('voice.player.stop')}
+                            onClick={stop}
+                            disabled={disabled}
+                        >
+                            <StopIcon />
+                        </IconButton>
+                    </span>
+                </Tooltip>
+            </Box>
+            <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                <WaveformView
+                    data={source ? waveform : null}
+                    duration={duration}
+                    position={shownPosition}
                     disabled={disabled}
-                    onChange={(_event, value) => setDragValue(value as number)}
-                    onChangeCommitted={(_event, value) => {
+                    label={t('voice.player.position')}
+                    valueText={formatTime(shownPosition)}
+                    onSeek={(value, commit) => {
+                        if (!commit) {
+                            setDragValue(value);
+                            return;
+                        }
                         setDragValue(null);
-                        seek(value as number);
+                        seek(value);
                     }}
-                    aria-label={t('voice.player.position')}
                 />
-            </Stack>
+            </Box>
             <Typography
                 variant='body2'
                 color='text.secondary'
@@ -229,6 +304,7 @@ export default function SyncPlayer({ source, emptyHint }: Props) {
             >
                 {formatTime(shownPosition)} / {formatTime(duration)}
             </Typography>
+            {actions && <Box sx={{ flexShrink: 0 }}>{actions}</Box>}
         </Box>
     );
 }

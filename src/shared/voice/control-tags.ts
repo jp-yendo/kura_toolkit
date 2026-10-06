@@ -10,10 +10,12 @@ import { accentReading, accentToKataTone, parseAccentNotation, type AccentErrorC
 import { parseIpa } from './ipa';
 import { LANGUAGE_DEFINITIONS, type PhonemeAlphabet, type VoiceLanguage } from './languages';
 import { isHanOnly, parsePinyin } from './pinyin';
+import type { TimelineOverflowMode } from './types';
 
-type ControlTagName = 'break' | 'prosody' | 'sub' | 'phoneme';
+// fit はタイミング指定の行だけで使う、このアプリ独自のタグ (行の時間内に収まらない場合の扱いを、その行だけ変える)
+type ControlTagName = 'break' | 'prosody' | 'sub' | 'phoneme' | 'fit';
 
-const CONTROL_TAG_NAMES: ControlTagName[] = ['break', 'prosody', 'sub', 'phoneme'];
+const CONTROL_TAG_NAMES: ControlTagName[] = ['break', 'prosody', 'sub', 'phoneme', 'fit'];
 
 // 各タグが受け付ける属性
 const TAG_ATTRIBUTES: Record<ControlTagName, string[]> = {
@@ -21,18 +23,22 @@ const TAG_ATTRIBUTES: Record<ControlTagName, string[]> = {
     prosody: ['rate', 'pitch', 'volume'],
     sub: ['alias'],
     phoneme: ['alphabet', 'ph'],
+    fit: ['mode'],
 };
 
 // 単独で完結するタグ (終端の「/」が省略されていても補って受け入れる)
-const EMPTY_TAGS = new Set<ControlTagName>(['break']);
+const EMPTY_TAGS = new Set<ControlTagName>(['break', 'fit']);
+
+// fit の mode に書ける値
+const FIT_MODES: TimelineOverflowMode[] = ['speedup', 'overlap', 'shift', 'warn'];
 // 内容に文章だけを持つタグ (タグの入れ子を許さない)
 const TEXT_ONLY_TAGS = new Set<ControlTagName>(['sub', 'phoneme']);
 
-// 話速・音高・音量の状態。入れ子の prosody は話速を掛け合わせ、音高と音量は足し合わせる
+// 話速・音の高さ・音量の状態。入れ子の prosody は話速を掛け合わせ、音の高さと音量は足し合わせる
 type ProsodyState = {
     // 話速の倍率 (1 = 既定)
     rate: number;
-    // 音高の変化 (半音)
+    // 音の高さの変化 (半音)
     pitch: number;
     // 音量の変化 (dB)。SILENT_DB 以下は無音
     volume: number;
@@ -41,14 +47,6 @@ type ProsodyState = {
 const DEFAULT_PROSODY: ProsodyState = { rate: 1, pitch: 0, volume: 0 };
 // volume="silent" を表す値 (JSON で受け渡せるよう -Infinity ではなく有限値にする)
 const SILENT_DB = -200;
-
-const RATE_MIN = 0.25;
-const RATE_MAX = 4;
-const PITCH_MIN = -24;
-const PITCH_MAX = 24;
-const VOLUME_MIN = -40;
-const VOLUME_MAX = 20;
-const BREAK_MAX_MS = 30000;
 
 const RATE_LABELS: Record<string, number> = {
     'x-slow': 0.5,
@@ -147,12 +145,9 @@ export type TagErrorCode =
     | 'accentSyntax'
     | 'ipaSymbol'
     | 'ipaWordCount'
-    // 字幕 (SRT / WebVTT) の書式の誤り (parseSubtitles が報告する)
-    | 'subtitleTimestamp'
-    | 'subtitleOrder'
-    | 'subtitleSequence'
-    | 'subtitleHeader'
-    | 'subtitleEmpty';
+    // fit をタイミング指定の行以外で使った / 1 つの行に複数書いた
+    | 'fitNotTimed'
+    | 'duplicateFit';
 
 // 値の書式の種類 (エラー表示で期待する書式を示すため)
 // phoneme タグの表記ごとに、その表記を使える言語以外で使った場合の誤り
@@ -162,7 +157,7 @@ const ALPHABET_LANGUAGE_ERRORS: Record<PhonemeAlphabet, TagErrorCode> = {
     'x-pinyin': 'pinyinNotChinese',
 };
 
-type ValueFormat = 'time' | 'strength' | 'rate' | 'pitch' | 'volume' | 'alphabet' | 'nonEmpty';
+type ValueFormat = 'time' | 'strength' | 'rate' | 'pitch' | 'volume' | 'alphabet' | 'nonEmpty' | 'fitMode';
 
 export type TagIssue = {
     code: TagErrorCode;
@@ -172,6 +167,8 @@ export type TagIssue = {
     // 1 始まりの行と文字位置
     line: number;
     column: number;
+    // タイミング指定で、誤りのある行 (表の 1 始まりの行番号。位置はその行のテキストの中のもの)
+    row?: number;
     tag?: string;
     attribute?: string;
     value?: string;
@@ -189,6 +186,8 @@ export type TagFix = {
     length: number;
     line: number;
     column: number;
+    // タイミング指定で、直す箇所のある行 (表の 1 始まりの行番号。位置はその行のテキストの中のもの)
+    row?: number;
     original: string;
     replacement: string;
 };
@@ -197,6 +196,8 @@ type ControlTagParseResult = {
     runs: SpeechRun[];
     errors: TagIssue[];
     fixes: TagFix[];
+    // fit で指定した、行の時間内に収まらない場合の扱い (指定が無ければ undefined)
+    fit?: TimelineOverflowMode;
 };
 
 type OpenElement = {
@@ -243,7 +244,7 @@ function parseBreakTime(value: string): number | null {
     const match = /^(\d+(?:\.\d+)?)\s*(ms|s)$/i.exec(value.trim());
     if (!match) return null;
     const ms = Number(match[1]) * (match[2].toLowerCase() === 's' ? 1000 : 1);
-    return ms >= 0 && ms <= BREAK_MAX_MS ? Math.round(ms) : null;
+    return Math.round(ms);
 }
 
 // 話速: ラベル、「120%」(既定に対する割合)、「+20%」「-20%」(既定からの増減)
@@ -254,24 +255,23 @@ function parseRate(value: string): number | null {
     if (!match) return null;
     const amount = Number(match[2]) / 100;
     const rate = match[1] === '+' ? 1 + amount : match[1] === '-' ? 1 - amount : amount;
-    return rate >= RATE_MIN && rate <= RATE_MAX ? rate : null;
+    // 値の大きさは制限しない。0 以下は話速として意味を持たないため誤りとする
+    return rate > 0 ? rate : null;
 }
 
-// 音高: ラベル、「+2st」「-3st」(半音)、「+10%」「-10%」(周波数の増減)。半音に換算して返す
+// 音の高さ: ラベル、「+2st」「-3st」(半音)、「+10%」「-10%」(周波数の増減)。半音に換算して返す
 function parsePitch(value: string): number | null {
     const text = value.trim().toLowerCase();
     if (Object.hasOwn(PITCH_LABELS, text)) return PITCH_LABELS[text];
     const semitone = /^([+-])(\d+(?:\.\d+)?)st$/.exec(text);
     if (semitone) {
-        const amount = Number(semitone[2]) * (semitone[1] === '-' ? -1 : 1);
-        return amount >= PITCH_MIN && amount <= PITCH_MAX ? amount : null;
+        return Number(semitone[2]) * (semitone[1] === '-' ? -1 : 1);
     }
     const percent = /^([+-])(\d+(?:\.\d+)?)%$/.exec(text);
     if (percent) {
         const ratio = 1 + (Number(percent[2]) / 100) * (percent[1] === '-' ? -1 : 1);
         if (ratio <= 0) return null;
-        const amount = 12 * Math.log2(ratio);
-        return amount >= PITCH_MIN && amount <= PITCH_MAX ? amount : null;
+        return 12 * Math.log2(ratio);
     }
     return null;
 }
@@ -282,8 +282,7 @@ function parseVolume(value: string): number | null {
     if (Object.hasOwn(VOLUME_LABELS, text)) return VOLUME_LABELS[text];
     const match = /^([+-])(\d+(?:\.\d+)?)db$/.exec(text);
     if (!match) return null;
-    const amount = Number(match[2]) * (match[1] === '-' ? -1 : 1);
-    return amount >= VOLUME_MIN && amount <= VOLUME_MAX ? amount : null;
+    return Number(match[2]) * (match[1] === '-' ? -1 : 1);
 }
 
 // 文書中の位置から行と文字位置 (いずれも 1 始まり) を求めるための索引
@@ -328,41 +327,36 @@ function matchTagCandidate(
 
 type ParseOptions = {
     language: VoiceLanguage;
-    // 文書中の位置を補正する量 (字幕の各区間を文書全体の位置で報告するため)
-    baseOffset?: number;
-    // 行と文字位置を求めるための文書全体 (省略時は text 自身)
-    documentText?: string;
+    // タイミング指定の行の文章か (fit を使えるのはタイミング指定の行だけ)
+    timed?: boolean;
 };
 
 // 文章を解析して合成の単位に分け、誤りと一括で直せる注意を返す
 export function parseControlTags(text: string, options: ParseOptions): ControlTagParseResult {
-    const baseOffset = options.baseOffset ?? 0;
-    const documentText = options.documentText ?? text;
-    const lineStarts = buildLineIndex(documentText);
+    const lineStarts = buildLineIndex(text);
     const errors: TagIssue[] = [];
     const fixes: TagFix[] = [];
     const runs: SpeechRun[] = [];
     const stack: OpenElement[] = [];
+    let fit: TimelineOverflowMode | undefined;
 
     const issue = (code: TagErrorCode, offset: number, length: number, extra: Partial<TagIssue> = {}) => {
-        const absolute = offset + baseOffset;
         errors.push({
             code,
-            offset: absolute,
+            offset,
             length: Math.max(1, length),
-            ...locate(documentText, lineStarts, absolute),
+            ...locate(text, lineStarts, offset),
             ...extra,
         });
     };
     const fix = (code: TagFixCode, offset: number, original: string, replacement: string) => {
-        const absolute = offset + baseOffset;
         fixes.push({
             code,
-            offset: absolute,
+            offset,
             length: original.length,
             original,
             replacement,
-            ...locate(documentText, lineStarts, absolute),
+            ...locate(text, lineStarts, offset),
         });
     };
 
@@ -524,6 +518,16 @@ export function parseControlTags(text: string, options: ParseOptions): ControlTa
 
         if (EMPTY_TAGS.has(name)) {
             // 単独で完結するタグ。終端の「/」が無くても補って受け入れる
+            if (name === 'fit') {
+                if (!options.timed) {
+                    issue('fitNotTimed', tagStart, tagEnd - tagStart, { tag: name });
+                } else if (fit !== undefined) {
+                    issue('duplicateFit', tagStart, tagEnd - tagStart, { tag: name });
+                } else if (validated && !parent) {
+                    fit = validated.mode as TimelineOverflowMode;
+                }
+                continue;
+            }
             if (validated && !parent) {
                 runs.push({ kind: 'break', ms: breakMilliseconds(validated), start: tagStart, end: tagEnd });
             }
@@ -555,7 +559,7 @@ export function parseControlTags(text: string, options: ParseOptions): ControlTa
         }
     }
 
-    return { runs, errors, fixes };
+    return { runs, errors, fixes, fit };
 
     // --- 内部関数 (解析の状態を共有するためクロージャで定義する) ---
 
@@ -597,7 +601,7 @@ export function parseControlTags(text: string, options: ParseOptions): ControlTa
             result[lower] = attribute.value;
         }
         // 必須属性
-        const required: Partial<Record<ControlTagName, string>> = { sub: 'alias', phoneme: 'ph' };
+        const required: Partial<Record<ControlTagName, string>> = { sub: 'alias', phoneme: 'ph', fit: 'mode' };
         const requiredName = required[tag];
         const tagOffset = attributes.length > 0 ? attributes[0].nameOffset : tagStart;
         if (requiredName && !(requiredName in result) && !attributes.some(a => a.name.toLowerCase() === requiredName)) {
@@ -639,6 +643,8 @@ export function parseControlTags(text: string, options: ParseOptions): ControlTa
                 return parseVolume(value) === null ? 'volume' : null;
             case 'phoneme.alphabet':
                 return Object.hasOwn(ALPHABET_LANGUAGE_ERRORS, value) ? null : 'alphabet';
+            case 'fit.mode':
+                return FIT_MODES.includes(value.trim() as TimelineOverflowMode) ? null : 'fitMode';
             case 'sub.alias':
             case 'phoneme.ph':
                 return value.trim().length === 0 ? 'nonEmpty' : null;
@@ -794,11 +800,11 @@ export function parseControlTags(text: string, options: ParseOptions): ControlTa
 }
 
 // 一括修正を適用した文章を返す (後ろから置き換えて位置がずれないようにする)
-export function applyTagFixes(text: string, fixes: TagFix[], baseOffset = 0): string {
+export function applyTagFixes(text: string, fixes: TagFix[]): string {
     const sorted = [...fixes].sort((a, b) => b.offset - a.offset);
     let result = text;
     for (const item of sorted) {
-        const offset = item.offset - baseOffset;
+        const offset = item.offset;
         if (offset < 0 || offset + item.length > result.length) continue;
         result = result.slice(0, offset) + item.replacement + result.slice(offset + item.length);
     }

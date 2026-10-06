@@ -44,7 +44,6 @@ import { useTrainingSets } from '../../components/voice/useTrainingSets';
 import { audioInputFilters } from '../../components/voice/audioInput';
 import { formatDuration } from '../../components/voice/voiceFormat';
 import { isCancelledError, voiceErrorMessage } from '../../components/voice/voiceErrors';
-import { trainingStatus } from '../../components/voice/trainingProgress';
 import { useJobRunner } from '../../hooks/useJobRunner';
 import { showNotice } from '../../stores/noticeStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -267,12 +266,15 @@ export default function TtsTrainingPage() {
                                             )
                                         }
                                         onRecorded={async recorded => {
-                                            if (!recordingTarget) return;
+                                            if (!recordingTarget) {
+                                                void window.kuraToolkit.voice.recording.discard(recorded.recordingId);
+                                                return;
+                                            }
                                             try {
                                                 await window.kuraToolkit.voice.trainingSets.addRecording(
                                                     'tts',
                                                     recordingTarget.setId,
-                                                    recorded.wav,
+                                                    recorded.recordingId,
                                                     {
                                                         name: t('voice.training.recordingName', {
                                                             date: new Date().toLocaleString(),
@@ -317,16 +319,7 @@ export default function TtsTrainingPage() {
                                     </Alert>
                                 )}
                                 <SyncPlayer
-                                    source={
-                                        audio
-                                            ? {
-                                                  key: audio.id + audio.media.url,
-                                                  url: audio.media.url,
-                                                  label: audio.name,
-                                              }
-                                            : null
-                                    }
-                                    emptyHint={t('voice.training.noRecording')}
+                                    source={audio ? { key: audio.id + audio.media.url, url: audio.media.url } : null}
                                 />
                                 <Stack direction='row' spacing={1} sx={{ justifyContent: 'space-between' }}>
                                     <Button
@@ -407,7 +400,7 @@ export default function TtsTrainingPage() {
                 open={job !== null}
                 title={job?.title ?? ''}
                 percent={job?.percent}
-                status={trainingStatus(t, job?.payload)}
+                status={job?.status}
                 message={job?.message ?? ''}
                 onCancel={cancel}
             />

@@ -13,9 +13,17 @@ import {
 } from './installer';
 import { readManifest, updateManifest, type LibraryManifest } from './manifest';
 import { requiredItems } from '../../../shared/voice/requirements';
-import { envPythonExecutable, libraryPaths, modelPaths } from './paths';
+import { envPythonExecutable, libraryCacheDirOf, libraryPaths, modelPaths } from './paths';
 import { clearReadyModelOverride } from './ready-model-overrides';
-import { defaultStorageDir, getLibraryDir, getModelDir, getWorkDir, isSameOrNested, isSamePath } from '../storage';
+import {
+    defaultStorageDir,
+    getCacheDir,
+    getLibraryDir,
+    getModelDir,
+    getWorkDir,
+    isSameOrNested,
+    isSamePath,
+} from '../storage';
 import { getPlatformInfo } from './platform';
 import { buildPythonEnv } from './python-env';
 import { runProcess, WINDOWS_DLL_NOT_FOUND } from './process-runner';
@@ -60,7 +68,12 @@ import type {
     VoiceFeatureId,
     VoicePlatformInfo,
 } from '../../../shared/voice/types';
-import type { StorageMoveDecisions, StorageMovePlan, StorageMoveResult } from '../../../shared/types';
+import type {
+    MovableStorageKind,
+    StorageMoveDecisions,
+    StorageMovePlan,
+    StorageMoveResult,
+} from '../../../shared/types';
 import { checkMergeTarget, mergeStorage, planStorageMove, removeStorageRoot } from './storage-merge';
 import { whileStorageMoving } from './training-sets';
 
@@ -538,8 +551,12 @@ async function removeComponent(id: ComponentItemId): Promise<void> {
         await fs.promises.rm(lib.source('tts'), { recursive: true, force: true });
         removePartial(lib.sourceArchive('tts'));
     } else {
-        // ライブラリのディレクトリごと消す (仮想環境・ソース一式・キャッシュ)
+        // ライブラリのディレクトリごと消す (仮想環境・ソース一式)。キャッシュディレクトリのそのライブラリの
+        // ディレクトリ (ライブラリが作ったキャッシュ・分離のモデル一覧) も、使うものが無くなるため一緒に消す
         await fs.promises.rm(lib.library(spec.env), { recursive: true, force: true });
+        await fs.promises
+            .rm(libraryCacheDirOf(spec.env), { recursive: true, force: true })
+            .catch(error => console.warn(`failed to remove the cache of ${spec.env}`, error));
     }
     updateManifest(manifest => {
         delete manifest.components[id];
@@ -670,7 +687,14 @@ async function verifyVenv(component: VoiceComponentId, libraryRoot: string): Pro
     return result.code === 0;
 }
 
-type MovableStorage = 'library' | 'model';
+type MovableStorage = MovableStorageKind;
+
+// 今の保存場所
+function storageRoot(kind: MovableStorage): string {
+    if (kind === 'library') return getLibraryDir();
+    if (kind === 'model') return getModelDir();
+    return getCacheDir();
+}
 
 // 保存場所を移動する。中身を選んだフォルダへ移し (中身がある場合はまとまりごとにマージする)、
 // そのフォルダを新しい保存場所にする。targetDir が null の場合は既定の場所 (~/.kura_toolkit の下) へ戻す。
@@ -703,7 +727,7 @@ function moveTarget(kind: MovableStorage, targetDir: string | null): string {
 // 移動を始める前に、移動先を選べるかを確かめ、両方にあるまとまり (上書きするかを選ぶもの) を求める
 // (確認画面を出す前に知らせるため)
 export async function planStorageMoveTo(kind: MovableStorage, targetDir: string | null): Promise<StorageMovePlan> {
-    const oldRoot = kind === 'library' ? getLibraryDir() : getModelDir();
+    const oldRoot = storageRoot(kind);
     const newRoot = moveTarget(kind, targetDir);
     if (isSamePath(oldRoot, newRoot)) return { conflicts: [], transferCount: 0, transferBytes: 0 };
     checkMoveTarget(kind, oldRoot, newRoot);
@@ -714,8 +738,8 @@ export async function planStorageMoveTo(kind: MovableStorage, targetDir: string 
 // 中身のある移動先は、同じ種類の保存場所に限る (他のファイルと混ぜないため)
 function checkMoveTarget(kind: MovableStorage, oldRoot: string, newRoot: string): void {
     if (isSameOrNested(oldRoot, newRoot) || isSameOrNested(newRoot, oldRoot)) throw new Error('STORAGE_MOVE_NESTED');
-    const other = kind === 'library' ? getModelDir() : getLibraryDir();
-    if (isSameOrNested(other, newRoot) || isSameOrNested(getWorkDir(), newRoot)) {
+    const others = (['library', 'model', 'cache'] as const).filter(item => item !== kind).map(storageRoot);
+    if ([...others, getWorkDir()].some(other => isSameOrNested(other, newRoot))) {
         throw new Error('STORAGE_OVERLAP');
     }
     checkMergeTarget(kind, newRoot);
@@ -724,7 +748,8 @@ function checkMoveTarget(kind: MovableStorage, oldRoot: string, newRoot: string)
 // 移動先を保存場所として設定に書き込む。書き込めなかった場合は、移動は終わっているが次の起動で元の場所を
 // 使ってしまうため SETTINGS_SAVE_FAILED で失敗として知らせる (起動中の設定も元の場所のまま変えない)
 function saveStorageSetting(kind: MovableStorage, setting: string): void {
-    saveSettings({ storage: kind === 'library' ? { libraryDir: setting } : { modelDir: setting } });
+    const keys = { library: 'libraryDir', model: 'modelDir', cache: 'cacheDir' } as const;
+    saveSettings({ storage: { [keys[kind]]: setting } });
 }
 
 const CANCELLED_MOVE: StorageMoveResult = { cancelled: true, rebuildRequired: [], remainingPath: null };
@@ -780,7 +805,7 @@ async function moveNow(
     if (isCancelled(jobId)) return CANCELLED_MOVE;
     await stopAllWorkersAndWait();
     if (isCancelled(jobId)) return CANCELLED_MOVE;
-    const oldRoot = kind === 'library' ? getLibraryDir() : getModelDir();
+    const oldRoot = storageRoot(kind);
     if (isSamePath(oldRoot, newRoot)) return { cancelled: false, rebuildRequired: [], remainingPath: null };
     checkMoveTarget(kind, oldRoot, newRoot);
 
@@ -804,7 +829,8 @@ async function moveNow(
         }
     }
     saveStorageSetting(kind, setting);
-    if (kind === 'library') forgetSeparatorModelList();
+    // 分離のモデル一覧はキャッシュディレクトリに置き、ライブラリの版で作り直すため、どちらを移しても読み直させる
+    if (kind === 'library' || kind === 'cache') forgetSeparatorModelList();
     // 移動元は、上書きしなかったまとまりも含めて最後に消す
     const removed = fs.existsSync(oldRoot) ? await removeStorageRoot(oldRoot) : true;
     if (relocateError !== null) throw relocateError;

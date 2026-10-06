@@ -11,6 +11,9 @@ const IPC_CHANNELS = {
     WINDOW_MINIMIZE: 'window:minimize',
     WINDOW_MAXIMIZE_OR_RESTORE: 'window:maximizeOrRestore',
     WINDOW_CLOSE: 'window:close',
+    // 閉じる前の確認 (main -> renderer の問い合わせと、renderer からの閉じてよいという返事)
+    WINDOW_CLOSE_REQUESTED: 'window:closeRequested',
+    WINDOW_CONFIRM_CLOSE: 'window:confirmClose',
     WINDOW_IS_MAXIMIZED: 'window:isMaximized',
     MAIN_CONSOLE: 'main:console',
     UPDATER_CHECK: 'updater:check',
@@ -61,12 +64,16 @@ const IPC_CHANNELS = {
     VOICE_LIBRARY_MARK_PROMPTED: 'voice:library:markPrompted',
     VOICE_OPEN_EXTERNAL: 'voice:openExternal',
     VOICE_REQUEST_MICROPHONE: 'voice:requestMicrophone',
+    VOICE_RECORDING_BEGIN: 'voice:recording:begin',
+    VOICE_RECORDING_APPEND: 'voice:recording:append',
+    VOICE_RECORDING_FINISH: 'voice:recording:finish',
+    VOICE_RECORDING_DISCARD: 'voice:recording:discard',
     VOICE_MEDIA_PREPARE: 'voice:media:prepare',
     VOICE_MEDIA_MIX: 'voice:media:mix',
     VOICE_MEDIA_DISCARD: 'voice:media:discard',
     VOICE_MEDIA_DISCARD_WORK: 'voice:media:discardWork',
-    VOICE_MEDIA_TRANSFER: 'voice:media:transfer',
     VOICE_MEDIA_REF: 'voice:media:ref',
+    VOICE_MEDIA_WAVEFORM: 'voice:media:waveform',
     VOICE_SEPARATION_MODELS: 'voice:separation:models',
     VOICE_SEPARATION_RUN: 'voice:separation:run',
     VOICE_CONVERSION_RUN: 'voice:conversion:run',
@@ -133,6 +140,16 @@ const api: IpcApi = {
     },
     async close() {
         return ipcRenderer.invoke(IPC_CHANNELS.WINDOW_CLOSE);
+    },
+    onCloseRequested(listener: () => void) {
+        const handler = () => listener();
+        ipcRenderer.on(IPC_CHANNELS.WINDOW_CLOSE_REQUESTED, handler);
+        return () => {
+            ipcRenderer.removeListener(IPC_CHANNELS.WINDOW_CLOSE_REQUESTED, handler);
+        };
+    },
+    async confirmClose() {
+        return ipcRenderer.invoke(IPC_CHANNELS.WINDOW_CONFIRM_CLOSE);
     },
     settings: {
         async get() {
@@ -220,8 +237,8 @@ const api: IpcApi = {
         async convert(path, params) {
             return ipcRenderer.invoke(IPC_CHANNELS.VECTORIZER_CONVERT, path, params);
         },
-        async saveSvg(path, svg) {
-            return ipcRenderer.invoke(IPC_CHANNELS.VECTORIZER_SAVE_SVG, path, svg);
+        async saveSvg(resultId, path) {
+            return ipcRenderer.invoke(IPC_CHANNELS.VECTORIZER_SAVE_SVG, resultId, path);
         },
     },
     cleanup: {
@@ -255,16 +272,21 @@ const api: IpcApi = {
         },
         openExternal: url => invoke(IPC_CHANNELS.VOICE_OPEN_EXTERNAL, url),
         requestMicrophone: () => invoke(IPC_CHANNELS.VOICE_REQUEST_MICROPHONE),
+        recording: {
+            begin: sampleRate => invoke(IPC_CHANNELS.VOICE_RECORDING_BEGIN, sampleRate),
+            append: (id, pcm) => invoke(IPC_CHANNELS.VOICE_RECORDING_APPEND, id, pcm),
+            finish: id => invoke(IPC_CHANNELS.VOICE_RECORDING_FINISH, id),
+            discard: id => invoke(IPC_CHANNELS.VOICE_RECORDING_DISCARD, id),
+        },
         media: {
             prepareInput: (jobId, workKey, sourcePath) =>
                 invoke(IPC_CHANNELS.VOICE_MEDIA_PREPARE, jobId, workKey, sourcePath),
             mix: (jobId, workKey, paths, channels) =>
                 invoke(IPC_CHANNELS.VOICE_MEDIA_MIX, jobId, workKey, paths, channels),
             discard: (workKey, paths) => invoke(IPC_CHANNELS.VOICE_MEDIA_DISCARD, workKey, paths),
-            transfer: (fromWorkKey, toWorkKey, paths) =>
-                invoke(IPC_CHANNELS.VOICE_MEDIA_TRANSFER, fromWorkKey, toWorkKey, paths),
             discardWork: workKey => invoke(IPC_CHANNELS.VOICE_MEDIA_DISCARD_WORK, workKey),
             ref: (workKey, path) => invoke(IPC_CHANNELS.VOICE_MEDIA_REF, workKey, path),
+            waveform: url => invoke(IPC_CHANNELS.VOICE_MEDIA_WAVEFORM, url),
         },
         separation: {
             listModels: () => invoke(IPC_CHANNELS.VOICE_SEPARATION_MODELS),
@@ -307,8 +329,8 @@ const api: IpcApi = {
                 invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_CREATE, feature, name, language),
             rename: (feature, id, name) => invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_RENAME, feature, id, name),
             remove: (feature, id) => invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_REMOVE, feature, id),
-            addRecording: (feature, id, wav, target) =>
-                invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_ADD_RECORDING, feature, id, wav, target),
+            addRecording: (feature, id, recordingId, target) =>
+                invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_ADD_RECORDING, feature, id, recordingId, target),
             addFiles: (jobId, feature, id, paths, sentenceId) =>
                 invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_ADD_FILES, jobId, feature, id, paths, sentenceId),
             removeAudio: (feature, id, audioId) =>

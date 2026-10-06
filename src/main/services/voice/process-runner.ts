@@ -2,6 +2,7 @@ import type { ChildProcess, SpawnOptions } from 'child_process';
 import { killTree, spawnGroup } from '../../utils/process-tree';
 import { onJobCancel } from '../job-manager';
 import { newTempDir, discardLater } from '../work-dir';
+import { createLineReader } from './output-lines';
 
 // 外部プロセス (Python: pip・学習スクリプト・動作確認など) を行単位の出力を受け取りながら実行する。
 // ジョブがキャンセルされたら子孫プロセスごと終了させ、KURA_CANCELLED で失敗させる。
@@ -10,8 +11,9 @@ import { newTempDir, discardLater } from '../work-dir';
 
 type ProcessResult = {
     code: number | null;
-    // 標準エラー (と標準出力) の末尾 (失敗時の原因の表示用)
-    tail: string[];
+    // 標準出力と標準エラーのすべての行 (失敗時の原因の表示用)。
+    // \r で書き換えられた行は、端末に最後に残る内容だけを持つ
+    output: string[];
 };
 
 type ProcessOptions = Omit<SpawnOptions, 'env'> & {
@@ -19,15 +21,10 @@ type ProcessOptions = Omit<SpawnOptions, 'env'> & {
     env: NodeJS.ProcessEnv;
     jobId?: string;
     onLine?(line: string, stream: 'stdout' | 'stderr'): void;
-    // 末尾として残す行数
-    tailLines?: number;
 };
 
-// 失敗時に返す出力の行数
-const DEFAULT_TAIL = 40;
-
 export function runProcess(command: string, args: string[], options: ProcessOptions): Promise<ProcessResult> {
-    const { jobId, onLine, tailLines = DEFAULT_TAIL, env: baseEnv, ...spawnOptions } = options;
+    const { jobId, onLine, env: baseEnv, ...spawnOptions } = options;
     const temp = newTempDir();
     const env = { ...baseEnv, TEMP: temp, TMP: temp, TMPDIR: temp };
     const running = new Promise<ProcessResult>((resolve, reject) => {
@@ -45,23 +42,22 @@ export function runProcess(command: string, args: string[], options: ProcessOpti
                   killTree(child);
               })
             : () => undefined;
-        const tail: string[] = [];
+        const output: string[] = [];
         const handle = (stream: 'stdout' | 'stderr') => {
-            let buffer = '';
-            return (chunk: Buffer) => {
-                buffer += chunk.toString('utf-8');
-                // tqdm などは \r で行を書き換えるため、\r も行の区切りとして扱う
-                const parts = buffer.split(/\r\n|\r|\n/);
-                buffer = parts.pop() ?? '';
-                for (const part of parts) {
-                    const line = part.trimEnd();
-                    if (!line) continue;
-                    tail.push(line);
-                    if (tail.length > tailLines) tail.shift();
-                    onLine?.(line, stream);
+            // この出力の直前の行の位置 (\r で書き換えられたときに置き換える)
+            let last = -1;
+            return createLineReader((line, overwrite) => {
+                if (overwrite && last >= 0) {
+                    output[last] = line;
+                } else {
+                    last = output.push(line) - 1;
                 }
-            };
+                onLine?.(line, stream);
+            });
         };
+        // 文字の途中で区切られた出力を正しく読むため、文字列として受け取る
+        child.stdout?.setEncoding('utf-8');
+        child.stderr?.setEncoding('utf-8');
         child.stdout?.on('data', handle('stdout'));
         child.stderr?.on('data', handle('stderr'));
         child.on('error', error => {
@@ -74,7 +70,7 @@ export function runProcess(command: string, args: string[], options: ProcessOpti
                 reject(new Error('KURA_CANCELLED'));
                 return;
             }
-            resolve({ code, tail });
+            resolve({ code, output });
         });
     });
     // プロセスが終了したら一時ファイルを消す (close はプロセスの終了後に来る)

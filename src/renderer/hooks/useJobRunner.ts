@@ -1,6 +1,17 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import type { JobEvent } from '@shared/types';
+import type { TFunction } from 'i18next';
+import type { JobEvent, JobPhase } from '@shared/types';
+
+// 残り時間を示し始めるまでの経過時間 (秒)。始まった直後の見積もりは大きく外れるため
+const ETA_MIN_ELAPSED_SEC = 3;
+
+// 今の段階と、残り時間の見積もりに使う値
+type PhaseState = JobPhase & {
+    // 段階が始まった時刻 (ms) と、そのときの進み具合
+    startedAt: number;
+    startFraction: number;
+};
 
 export type RunningJob = {
     jobId: string;
@@ -15,7 +26,52 @@ export type RunningJob = {
     waiting?: boolean;
     // 途中で中止できる処理か (中止できない処理では中止のボタンを出さない)
     cancellable: boolean;
+    phase?: PhaseState;
+    // 進捗ダイアログの状況の行 (今の段階と残り時間)
+    status?: string;
 };
+
+// 残り時間の表記。長さに応じて丸める (10 秒未満は 1 秒、1 分未満は 5 秒、10 分未満は 10 秒、1 時間未満は 1 分、
+// それ以上は 5 分単位)
+export function formatEta(t: TFunction, seconds: number): string {
+    if (seconds < 10) return t('jobEta.seconds', { seconds: Math.max(1, Math.ceil(seconds)) });
+    if (seconds < 60) return t('jobEta.seconds', { seconds: Math.max(10, Math.round(seconds / 5) * 5) });
+    if (seconds < 600) {
+        const total = Math.round(seconds / 10) * 10;
+        const minutes = Math.floor(total / 60);
+        const rest = total % 60;
+        return rest > 0 ? t('jobEta.minutesSeconds', { minutes, seconds: rest }) : t('jobEta.minutes', { minutes });
+    }
+    if (seconds < 3600) return t('jobEta.minutes', { minutes: Math.round(seconds / 60) });
+    const total = Math.round(seconds / 300) * 5;
+    const hours = Math.floor(total / 60);
+    const minutes = total % 60;
+    return minutes > 0 ? t('jobEta.hours', { hours, minutes }) : t('jobEta.hoursOnly', { hours });
+}
+
+// 段階の文言 (回数で数えられる段階は回数を添える) と、見積もった残り時間
+function phaseStatus(t: TFunction, phase: PhaseState, now: number): string {
+    const counted = phase.current !== undefined && phase.total !== undefined;
+    const text = counted
+        ? t(`jobPhasesCounted.${phase.id}`, { current: phase.current, total: phase.total })
+        : t(`jobPhases.${phase.id}`);
+    const elapsed = (now - phase.startedAt) / 1000;
+    const done = (phase.fraction ?? 0) - phase.startFraction;
+    if (phase.fraction === undefined || phase.fraction >= 1 || done <= 0 || elapsed < ETA_MIN_ELAPSED_SEC) return text;
+    const remaining = (elapsed / done) * (1 - phase.fraction);
+    return `${text}  ${t('jobEta.left', { time: formatEta(t, remaining) })}`;
+}
+
+// 新しい段階の通知を反映する。段階が変わったとき、または同じ段階で進み具合が戻ったとき (アンサンブルの次のモデル
+// など) は、そこから見積もり直す
+function nextPhase(previous: PhaseState | undefined, phase: JobPhase): PhaseState {
+    const restart =
+        !previous ||
+        previous.id !== phase.id ||
+        (phase.fraction !== undefined && previous.fraction !== undefined && phase.fraction < previous.fraction);
+    if (restart) return { ...phase, startedAt: Date.now(), startFraction: phase.fraction ?? 0 };
+    return { ...previous, ...phase };
+}
 
 // 長時間処理 (ジョブ) の実行と進捗の購読。進捗ダイアログに渡す状態を持つ
 export function useJobRunner() {
@@ -44,6 +100,7 @@ export function useJobRunner() {
                           total: event.total ?? previous.total,
                           message: event.message ?? previous.message,
                           payload: event.payload ?? previous.payload,
+                          phase: event.phase ? nextPhase(previous.phase, event.phase) : previous.phase,
                       }
                     : previous
             );
@@ -73,11 +130,21 @@ export function useJobRunner() {
         if (job) void window.kuraToolkit.jobs.cancel(job.jobId);
     }, [job]);
 
+    // 段階がある間は、残り時間の表示を 1 秒ごとに更新する
+    const [now, setNow] = React.useState(() => Date.now());
+    const hasPhase = !!job?.phase;
+    React.useEffect(() => {
+        if (!hasPhase) return;
+        const timer = window.setInterval(() => setNow(Date.now()), 1000);
+        return () => window.clearInterval(timer);
+    }, [hasPhase]);
+
     // GPU の順番を待っている間は、進捗の欄にその旨を出す
-    const shown = React.useMemo(
-        () => (job?.waiting ? { ...job, message: t('voice.common.waitingGpu') } : job),
-        [job, t]
-    );
+    const shown = React.useMemo(() => {
+        if (!job) return job;
+        const status = job.phase ? phaseStatus(t, job.phase, Math.max(now, Date.now())) : undefined;
+        return job.waiting ? { ...job, status, message: t('voice.common.waitingGpu') } : { ...job, status };
+    }, [job, t, now]);
 
     return { job: shown, run, cancel };
 }

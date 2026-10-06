@@ -16,6 +16,7 @@ import FitScreenIcon from '@mui/icons-material/FitScreen';
 import ZoomInIcon from '@mui/icons-material/ZoomIn';
 import ZoomOutIcon from '@mui/icons-material/ZoomOut';
 import { useTranslation } from 'react-i18next';
+import { errorMessage } from '../../components/common/errorMessage';
 import FileDropZone from '../../components/common/FileDropZone';
 import ProgressDialog from '../../components/common/ProgressDialog';
 import PageContainer from '../../components/common/PageContainer';
@@ -27,10 +28,6 @@ import { useVectorizerStore } from '../../stores/vectorizerStore';
 import type { VectorizerColorMode, VectorizerHierarchical, VectorizerPathMode } from '@shared/types';
 
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'bmp', 'gif', 'tiff'];
-const IMAGE_FILTERS = [
-    { name: 'Image Files', extensions: IMAGE_EXTENSIONS },
-    { name: 'All Files', extensions: ['*'] },
-];
 
 type SliderRowProps = {
     label: string;
@@ -66,6 +63,10 @@ function SliderRow({ label, value, min, max, step, decimals, onChange }: SliderR
 
 export default function SvgConverterPage() {
     const { t } = useTranslation();
+    const imageFilters = [
+        { name: t('common.fileTypes.image'), extensions: IMAGE_EXTENSIONS },
+        { name: t('common.fileTypes.all'), extensions: ['*'] },
+    ];
     const store = useVectorizerStore();
     const [busy, setBusy] = React.useState(false);
     // 変換パラメータは設定ファイルへ保存せず、起動のたびに既定値から始める
@@ -74,16 +75,7 @@ export default function SvgConverterPage() {
     const [previewScale, setPreviewScale] = React.useState<number | null>(null);
     const [previewEffectiveScale, setPreviewEffectiveScale] = React.useState(1);
 
-    // SVG は数 MB になり得るため、変換結果が変わったときだけ URL を作り直す
-    const svgUrl = React.useMemo(
-        () => (store.svg ? URL.createObjectURL(new Blob([store.svg], { type: 'image/svg+xml' })) : null),
-        [store.svg]
-    );
-    React.useEffect(() => {
-        return () => {
-            if (svgUrl) URL.revokeObjectURL(svgUrl);
-        };
-    }, [svgUrl]);
+    const svgUrl = store.svg?.url ?? null;
 
     // 変換し直したら全体表示へ戻す
     React.useEffect(() => {
@@ -95,9 +87,9 @@ export default function SvgConverterPage() {
         if (!imagePath) return;
         try {
             const preview = await window.kuraToolkit.vectorizer.loadImage(imagePath);
-            store.setImage(imagePath, preview.dataUrl);
+            store.setImage(imagePath, preview.url);
         } catch (error) {
-            showNotice('warning', error instanceof Error ? error.message : String(error));
+            showNotice('warning', errorMessage(t, error));
         }
     };
 
@@ -106,10 +98,10 @@ export default function SvgConverterPage() {
         setBusy(true);
         try {
             const result = await window.kuraToolkit.vectorizer.convert(store.imagePath, params);
-            store.setSvg(result.svg);
+            store.setSvg(result);
             showNotice('success', t('svgPage.converted'));
         } catch (error) {
-            showNotice('warning', error instanceof Error ? error.message : String(error));
+            showNotice('warning', errorMessage(t, error));
         } finally {
             setBusy(false);
         }
@@ -122,16 +114,16 @@ export default function SvgConverterPage() {
         const target = await window.kuraToolkit.dialog.saveFile({
             defaultPath: `${stem}.svg`,
             filters: [
-                { name: 'SVG Files', extensions: ['svg'] },
-                { name: 'All Files', extensions: ['*'] },
+                { name: t('common.fileTypes.svg'), extensions: ['svg'] },
+                { name: t('common.fileTypes.all'), extensions: ['*'] },
             ],
         });
         if (!target) return;
         try {
-            await window.kuraToolkit.vectorizer.saveSvg(target, store.svg);
+            await window.kuraToolkit.vectorizer.saveSvg(store.svg.id, target);
             showNotice('success', t('svgPage.saved', { path: target }));
         } catch (error) {
-            showNotice('warning', error instanceof Error ? error.message : String(error));
+            showNotice('warning', errorMessage(t, error));
         }
     };
 
@@ -210,16 +202,16 @@ export default function SvgConverterPage() {
                         </SectionLabel>
                         <FileDropZone
                             onFiles={loadImage}
-                            filters={IMAGE_FILTERS}
+                            filters={imageFilters}
                             accept={IMAGE_EXTENSIONS}
                             onRejected={() => showNotice('warning', t('svgPage.unsupportedImage'))}
                             hint={t('svgPage.dropHint')}
                             sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}
                         >
-                            {store.imageDataUrl ? (
+                            {store.imageUrl ? (
                                 <Box
                                     component='img'
-                                    src={store.imageDataUrl}
+                                    src={store.imageUrl}
                                     alt={t('svgPage.original')}
                                     sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
                                 />

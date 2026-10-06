@@ -2,7 +2,15 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { saveSettings } from './settings';
-import { defaultStorageDir, getLibraryDir, getModelDir, getWorkDir, isSameOrNested, isSamePath } from './storage';
+import {
+    defaultStorageDir,
+    getCacheDir,
+    getLibraryDir,
+    getModelDir,
+    getWorkDir,
+    isSameOrNested,
+    isSamePath,
+} from './storage';
 
 // 作業ディレクトリ (アプリ全体の一時ファイルの置き場) の管理。
 // 設定する作業ディレクトリは一時ディレクトリそのもの (既定は OS の一時ディレクトリ。Linux は ~/.kura_toolkit/temp)。
@@ -40,14 +48,14 @@ function isDefaultWorkDir(dir: string): boolean {
 
 // 作業ディレクトリの変更先を確かめる (空文字は既定の場所)。今と同じ場所なら null を返す。
 // 一時ディレクトリそのものを選ぶため、中にほかのファイルがあってもよい。
-// ライブラリ・モデルディレクトリ (またはその中) は選べない
+// ライブラリ・モデル・キャッシュディレクトリ (またはその中) は選べない
 export function checkWorkDirChange(dir: string): string | null {
     const trimmed = dir.trim();
     const target = trimmed ? path.resolve(trimmed) : defaultStorageDir('work');
     if (isSamePath(target, getWorkDir())) return null;
     // 既定の場所 (Linux の ~/.kura_toolkit/temp) は、無ければ使うときに作る
     if (!fs.existsSync(target) && !isDefaultWorkDir(target)) throw new Error(`WORK_DIR_MISSING: ${target}`);
-    if (isSameOrNested(target, getLibraryDir()) || isSameOrNested(target, getModelDir())) {
+    if ([getLibraryDir(), getModelDir(), getCacheDir()].some(dir => isSameOrNested(target, dir))) {
         throw new Error('STORAGE_OVERLAP');
     }
     return target;
@@ -98,6 +106,19 @@ function createFolder(id: string): string {
 // 呼び出し側が discardLater で消す
 export function newTempDir(): string {
     return createFolder(newId());
+}
+
+// Python 以外の外部のプロセス (ffmpeg・ffprobe・nvidia-smi・PowerShell) 1 つ分の一時ファイルの置き場を作り、
+// TEMP / TMP / TMPDIR をそこへ向けた環境変数を返す。プロセスが終了したら、呼び出し側が dir を discardLater で消す。
+// 作業ディレクトリを使えない場合 (選んだフォルダが無いなど) は null を返し、呼び出し側は OS の一時ディレクトリのまま
+// 起動する (ffmpeg の検出や音声の解析など、作業ディレクトリが無くても動く必要がある処理のため)
+export function toolTempEnv(): { env: NodeJS.ProcessEnv; dir: string } | null {
+    try {
+        const dir = newTempDir();
+        return { env: { ...process.env, TEMP: dir, TMP: dir, TMPDIR: dir }, dir };
+    } catch {
+        return null;
+    }
 }
 
 // 作業の識別子は renderer が作るランダムな値で、そのままフォルダ名に使うため、パスとして安全な文字に限る

@@ -4,7 +4,8 @@ import path from 'path';
 import { Readable } from 'stream';
 import { protocol } from 'electron';
 
-// プレビュー再生用に、ローカルの音声ファイルを renderer の <audio> へ渡す独自スキーム。
+// プレビュー用に、ローカルの音声・画像ファイルを renderer の <audio> / <img> へ渡す独自スキーム。
+// ファイルの中身を renderer のメモリに文字列として持たせず (dataURL を使わず)、必要な分だけ読ませる。
 // renderer は開発時 http://localhost、配布時 file:// から読み込まれるため file:// を直接参照できない。
 // 任意のファイルを読ませないよう、main が登録したファイルだけを推測できない識別子で公開する。
 // シーク (Range 要求) に対応しないと再生位置を合わせた切り替えができないため、部分応答を返す。
@@ -14,12 +15,19 @@ const MEDIA_SCHEME = 'kura-media';
 const tokenToPath = new Map<string, string>();
 const pathToToken = new Map<string, string>();
 
-// 公開する音声の形式 (処理の結果と、学習用に追加・録音した音声)
+// 公開するファイルの形式 (音声: 処理の結果と、学習用に追加・録音した音声。画像: SVG 変換の元画像と変換結果)
 const CONTENT_TYPES: Record<string, string> = {
     '.wav': 'audio/wav',
     '.mp3': 'audio/mpeg',
     '.flac': 'audio/flac',
     '.ogg': 'audio/ogg',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.bmp': 'image/bmp',
+    '.gif': 'image/gif',
+    '.tiff': 'image/tiff',
+    '.svg': 'image/svg+xml',
 };
 
 // app の ready より前に呼ぶ必要がある
@@ -67,6 +75,19 @@ export function forgetMedia(filePath: string): void {
     if (!token) return;
     pathToToken.delete(resolved);
     tokenToPath.delete(token);
+}
+
+// 公開している URL のファイルのパス (公開していない URL は null)
+export function mediaPathOf(url: string): string | null {
+    let parsed: URL;
+    try {
+        parsed = new URL(url);
+    } catch {
+        return null;
+    }
+    if (parsed.protocol !== `${MEDIA_SCHEME}:`) return null;
+    const token = parsed.pathname.split('/').filter(Boolean)[0] ?? '';
+    return tokenToPath.get(token) ?? null;
 }
 
 function handleRequest(request: Request): Response {

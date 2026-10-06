@@ -2,7 +2,6 @@ import path from 'path';
 import { Worker } from 'worker_threads';
 import {
     ADS_CHUNK_SIZE,
-    MAX_SCAN_ERRORS,
     scanAdsCandidates,
     scanCleanupDirectory,
     type CleanupScanConfig,
@@ -68,7 +67,7 @@ export async function walkCleanupTargets(options: WalkOptions): Promise<WalkResu
             const result = await walkWithWorkers(options, seed);
             return {
                 items: [...seed.items, ...result.items],
-                errors: [...seed.errors, ...result.errors].slice(0, MAX_SCAN_ERRORS),
+                errors: [...seed.errors, ...result.errors],
                 cancelled: result.cancelled,
             };
         } catch (error) {
@@ -110,10 +109,7 @@ async function seedQueue(options: WalkOptions): Promise<SeedResult> {
             scanCleanupDirectory(dir, options.config, out);
             visitedDirs += 1;
             if (out.items.length > 0) items.push(...out.items);
-            for (const entry of out.errors) {
-                if (errors.length >= MAX_SCAN_ERRORS) break;
-                errors.push(entry);
-            }
+            errors.push(...out.errors);
             next.push(...out.subdirs);
             // 展開したディレクトリ自身の ADS 判定はワーカーへ回す (main を止めないため)
             for (let offset = 0; offset < out.adsCandidates.length; offset += ADS_CHUNK_SIZE) {
@@ -224,7 +220,7 @@ function walkWithWorkers(options: WalkOptions, seed: SeedResult): Promise<WalkRe
         // 少なくとも待ち続けて終わらなくなることは避ける
         const markDead = (index: number, reason: string) => {
             if (settled || dead.has(index)) return;
-            if (errors.length < MAX_SCAN_ERRORS) errors.push(`walker#${index}: ${reason}`);
+            errors.push(`walker#${index}: ${reason}`);
             if (idle.delete(index)) Atomics.sub(flags, FLAG_IDLE_WORKERS, 1);
             dead.add(index);
             workerPaths[index] = null;
@@ -241,10 +237,7 @@ function walkWithWorkers(options: WalkOptions, seed: SeedResult): Promise<WalkRe
                 if (settled) return;
                 if (message.type === 'report') {
                     if (message.items.length > 0) items.push(...message.items);
-                    for (const entry of message.errors) {
-                        if (errors.length >= MAX_SCAN_ERRORS) break;
-                        errors.push(entry);
-                    }
+                    errors.push(...message.errors);
                     visitedDirs += message.dirs;
                     workerPaths[message.index] = message.current;
                     return;
@@ -309,10 +302,7 @@ async function walkInProcess(options: WalkOptions): Promise<WalkResult> {
         scanAdsCandidates(out.adsCandidates, out.items);
         visitedDirs += 1;
         if (out.items.length > 0) items.push(...out.items);
-        for (const entry of out.errors) {
-            if (errors.length >= MAX_SCAN_ERRORS) break;
-            errors.push(entry);
-        }
+        errors.push(...out.errors);
         for (const subdir of out.subdirs) stack.push(subdir);
 
         if (Date.now() - lastProgressAt >= PROGRESS_INTERVAL_MS) {

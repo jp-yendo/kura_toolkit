@@ -15,6 +15,7 @@ import {
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useTranslation } from 'react-i18next';
+import { errorMessage } from '../../components/common/errorMessage';
 import AppDialog from '../../components/common/AppDialog';
 import ProgressDialog from '../../components/common/ProgressDialog';
 import PageContainer from '../../components/common/PageContainer';
@@ -274,7 +275,7 @@ export default function CleanupPage() {
                 setNoneFoundOpen(true);
             }
         } catch (error) {
-            showNotice('warning', error instanceof Error ? error.message : String(error));
+            showNotice('warning', errorMessage(t, error));
         } finally {
             setJob(null);
         }
@@ -294,7 +295,7 @@ export default function CleanupPage() {
                 store.items.filter(item => !store.checked.includes(item.path) || failedPaths.has(item.path))
             );
         } catch (error) {
-            showNotice('warning', error instanceof Error ? error.message : String(error));
+            showNotice('warning', errorMessage(t, error));
         } finally {
             setJob(null);
         }

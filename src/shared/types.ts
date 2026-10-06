@@ -58,6 +58,18 @@ export type JobEvent = {
     scan?: ScanProgress;
     // kind='wait': 他の処理が GPU を使い終わるのを待っているか (音声機能)
     waiting?: boolean;
+    // 今の段階 (画面に「〜しています」と示し、段階の中の進み具合から残り時間を見積もる)
+    phase?: JobPhase;
+};
+
+// 処理の段階。id は画面の文言の名前 (音声機能は voice.phases.<id>)
+export type JobPhase = {
+    id: string;
+    // 段階の中の進み具合 (0-1)。分からない段階では省略し、残り時間を示さない
+    fraction?: number;
+    // 回数で数えられる段階 (学習の回数など) の現在の回数と総数
+    current?: number;
+    total?: number;
 };
 
 // ディレクトリ走査の進捗。走査スレッドごとの現在位置を含む
@@ -230,8 +242,17 @@ export type VectorizeParams = {
 };
 
 export type ImagePreview = {
-    dataUrl: string;
+    // 表示用の URL (kura-media://)
+    url: string;
     fileName: string;
+};
+
+// SVG の変換結果 (main が作業ディレクトリに置いたファイル)
+export type SvgResult = {
+    // 保存のときに渡す識別子
+    id: string;
+    // 表示用の URL (kura-media://)
+    url: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -322,6 +343,11 @@ type StorageSettings = {
     modelDir: string;
     // 作業ディレクトリ (全機能の一時ファイル)。空文字 = 既定 (OS の一時ディレクトリの中の kura_toolkit)
     workDir: string;
+    // キャッシュディレクトリ (消しても作り直せるもの。中はライブラリごとのディレクトリ)。
+    // 空文字 = 既定 (~/.kura_toolkit/cache)
+    cacheDir: string;
+    // キャッシュの保持期間 (日)。これより長く使われていないもの・作り直されていないものを起動時に消す
+    cacheRetentionDays: number;
 };
 
 // 音声分離・音声変換・読み上げの設定
@@ -334,8 +360,11 @@ type VoiceSettings = {
     updatePromptVersion: string;
 };
 
-// 保存場所の種類 (ライブラリ・モデル・作業ディレクトリ)
-export type StorageKind = 'library' | 'model' | 'work';
+// 保存場所の種類 (ライブラリ・モデル・キャッシュ・作業ディレクトリ)
+export type StorageKind = 'library' | 'model' | 'cache' | 'work';
+
+// 中身を移動する保存場所 (作業ディレクトリは一時ファイルの置き場のため移動しない)
+export type MovableStorageKind = Exclude<StorageKind, 'work'>;
 
 // 保存場所の状態 (設定画面の表示用)
 export type StorageInfo = {
@@ -347,7 +376,6 @@ export type StorageInfo = {
     nonAscii: Record<StorageKind, boolean>;
 };
 
-// 保存場所 (ライブラリ・モデルディレクトリ) の移動結果
 // 保存場所の移動で比べる、まとまり (単位) の中身。ファイル数・合計サイズ・最終更新日時 (中のファイルで最も新しいもの)
 export type StorageUnitStats = {
     fileCount: number;

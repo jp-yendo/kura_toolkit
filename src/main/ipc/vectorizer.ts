@@ -9,11 +9,10 @@ export function registerVectorizerIpcHandlers() {
     });
 
     ipcMain.handle(IPC_CHANNELS.VECTORIZER_CONVERT, async (_e, path: string, params: VectorizeParams) => {
-        const svg = await convertImage(path, params);
-        return { svg };
+        return convertImage(path, params);
     });
 
-    ipcMain.handle(IPC_CHANNELS.VECTORIZER_SAVE_SVG, (_e, path: string, svg: string) => {
-        return saveSvgFile(path, svg);
+    ipcMain.handle(IPC_CHANNELS.VECTORIZER_SAVE_SVG, (_e, resultId: string, path: string) => {
+        return saveSvgFile(resultId, path);
     });
 }

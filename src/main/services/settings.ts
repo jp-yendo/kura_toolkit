@@ -3,7 +3,7 @@ import os from 'os';
 import path from 'path';
 import { nativeTheme } from 'electron';
 import { getAppRootDir } from '../../shared/constants';
-import { SEARCH_THREADS_MAX, SEARCH_THREADS_MIN } from '../../shared/search';
+import { SEARCH_THREADS_MIN } from '../../shared/search';
 import type { AppSettings, DeepPartial, SettingsLoadError, SettingsUpdateResult } from '../../shared/types';
 
 // 設定ファイルのパス
@@ -28,6 +28,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
         libraryDir: '',
         modelDir: '',
         workDir: '',
+        cacheDir: '',
+        cacheRetentionDays: 30,
     },
     audioNormalizer: {
         outputDir: '',
@@ -207,5 +209,5 @@ export function initializeSearchThreads(): void {
 export function resolveSearchThreads(): number {
     const threads = getSettings().search.threads;
     if (!Number.isFinite(threads)) return SEARCH_THREADS_MIN;
-    return Math.max(SEARCH_THREADS_MIN, Math.min(SEARCH_THREADS_MAX, Math.floor(threads)));
+    return Math.max(SEARCH_THREADS_MIN, Math.floor(threads));
 }

@@ -114,3 +114,12 @@ export function emitJobEvent(event: JobEvent): void {
         mainWindow.webContents.send(IPC_CHANNELS.JOB_EVENT, event);
     }
 }
+
+// 今の段階を知らせる (fraction は段階の中の進み具合 0-1。分からない段階では省略する)
+export function emitPhase(
+    jobId: string,
+    id: string,
+    progress: { fraction?: number; current?: number; total?: number } = {}
+): void {
+    emitJobEvent({ jobId, kind: 'progress', phase: { id, ...progress } });
+}

@@ -21,9 +21,11 @@ import TtsTrainingPage from './pages/voice/TtsTrainingPage';
 import VoiceUpdatePrompt from './components/voice/VoiceUpdatePrompt';
 import VoiceLibraryDialog from './components/voice/VoiceLibraryDialog';
 import SettingsLoadErrorDialog from './components/settings/SettingsLoadErrorDialog';
+import UnsavedChangesDialog from './components/common/UnsavedChangesDialog';
 import { useSettingsStore } from './stores/settingsStore';
 import { showNotice } from './stores/noticeStore';
 import { featureOf, leaveFeature } from './stores/featureWork';
+import { handleCloseRequest } from './stores/navigationGuard';
 
 // 別の機能へ移ったときに前の機能の作業を破棄し、機能に入ったときに要らなくなった一時ファイルを消す
 function FeatureWorkLifecycle() {
@@ -47,6 +49,9 @@ export default function App() {
     React.useEffect(() => {
         void init();
     }, [init]);
+
+    // アプリを閉じる前の問い合わせに答える (保存していない入力があれば確認してから閉じる)
+    React.useEffect(() => window.kuraToolkit.onCloseRequested(handleCloseRequest), []);
 
     // 設定の保存に失敗したら通知する (起動中の設定は反映されている)
     React.useEffect(() => {
@@ -123,6 +128,8 @@ export default function App() {
                 <VoiceUpdatePrompt />
                 {/* 音声機能のダウンロード。必要な箇所から呼び出すダイアログ */}
                 <VoiceLibraryDialog />
+                {/* 保存していない入力がある機能から、別の機能へ移る前の確認 */}
+                <UnsavedChangesDialog />
             </HashRouter>
             {/* アップデート通知と画面内の一時通知をまとめて右下に表示する */}
             <NotificationArea />

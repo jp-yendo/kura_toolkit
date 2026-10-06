@@ -11,7 +11,7 @@ import json
 import os
 import sys
 import threading
-from typing import Any
+from typing import Any, Optional
 
 
 class KuraError(Exception):
@@ -72,6 +72,13 @@ class Context:
     def progress(self, fraction: float, message: str = "") -> None:
         fraction = max(0.0, min(1.0, float(fraction)))
         self.event(kind="progress", fraction=fraction, message=message)
+
+    def phase(self, name: str, fraction: Optional[float] = None) -> None:
+        """The current step (shown as "doing ..." with the time left estimated from ``fraction`` within the step)."""
+        payload: dict = {"kind": "phase", "phase": name}
+        if fraction is not None:
+            payload["fraction"] = max(0.0, min(1.0, float(fraction)))
+        self.event(**payload)
 
 
 class StandaloneContext(Context):

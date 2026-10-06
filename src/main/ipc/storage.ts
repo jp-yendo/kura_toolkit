@@ -5,21 +5,26 @@ import { getStorageInfo } from '../services/storage';
 import { changeWorkDir, checkWorkDirChange, runCleanup } from '../services/work-dir';
 import { moveStorage, planStorageMoveTo } from '../services/voice/library';
 import { stopAllWorkersAndWait } from '../services/voice/python-worker';
-import type { StorageMoveDecisions } from '../../shared/types';
+import type { MovableStorageKind, StorageMoveDecisions } from '../../shared/types';
 
-// 保存場所 (ライブラリ・モデル・作業ディレクトリ) の IPC。保存場所はアプリ全体で共有する。
-// ライブラリ・モデルディレクトリの移動は、中身 (仮想環境に記録された Python 本体の場所など) を扱う
+// 保存場所 (ライブラリ・モデル・キャッシュ・作業ディレクトリ) の IPC。保存場所はアプリ全体で共有する。
+// ライブラリ・モデル・キャッシュディレクトリの移動は、中身 (仮想環境に記録された Python 本体の場所など) を扱う
 // ライブラリ管理に任せる (現在のライブラリとモデルは音声機能のもの)
+
+function isMovableKind(kind: unknown): kind is MovableStorageKind {
+    return kind === 'library' || kind === 'model' || kind === 'cache';
+}
+
 export function registerStorageIpcHandlers() {
     ipcMain.handle(IPC_CHANNELS.STORAGE_GET_INFO, () => getStorageInfo());
     ipcMain.handle(IPC_CHANNELS.STORAGE_PLAN_MOVE, (_e, kind: unknown, targetDir: string | null) => {
-        if (kind !== 'library' && kind !== 'model') throw new Error(`invalid storage kind: ${String(kind)}`);
+        if (!isMovableKind(kind)) throw new Error(`invalid storage kind: ${String(kind)}`);
         return planStorageMoveTo(kind, targetDir);
     });
     ipcMain.handle(
         IPC_CHANNELS.STORAGE_MOVE,
         (_e, jobId: string, kind: unknown, targetDir: string | null, decisions: StorageMoveDecisions) => {
-            if (kind !== 'library' && kind !== 'model') throw new Error(`invalid storage kind: ${String(kind)}`);
+            if (!isMovableKind(kind)) throw new Error(`invalid storage kind: ${String(kind)}`);
             return moveStorage(jobId, kind, targetDir, decisions);
         }
     );

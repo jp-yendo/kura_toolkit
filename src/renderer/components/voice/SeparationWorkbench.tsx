@@ -316,38 +316,19 @@ export default function SeparationWorkbench({ store, disabled }: Props) {
     if (play.kind === 'original') {
         const path = inputTrack?.paths.length === 1 ? inputTrack.paths[0] : null;
         const media = path === source.media.path ? source.media : null;
-        if (media)
-            playerSource = { key: `original-${stage.id}`, url: media.url, label: t('voice.separation.playOriginal') };
+        if (media) playerSource = { key: `original-${stage.id}`, url: media.url };
         else if (inputTrack && path) {
             const candidateStem = stages
                 .flatMap(item => item.candidates)
                 .flatMap(candidate => candidate.stems)
                 .find(stem => stem.media.path === path);
-            if (candidateStem)
-                playerSource = {
-                    key: `input-${stage.id}`,
-                    url: candidateStem.media.url,
-                    label: t('voice.separation.playInput', { name: trackLabel(t, inputTrack) }),
-                };
+            if (candidateStem) playerSource = { key: `input-${stage.id}`, url: candidateStem.media.url };
         }
     } else if (playCandidate) {
-        const assigned = assignRoles(
-            category,
-            playCandidate.stems.map(stem => stem.name)
-        );
-        const stemsLabel = playStems.map(stem => stemLabel(t, category, stem.name, assigned[stem.name])).join(' + ');
         if (playStems.length === 1) {
-            playerSource = {
-                key: `${playCandidate.id}-${playStems[0].name}`,
-                url: playStems[0].media.url,
-                label: `${candidateLabel(playCandidate)} - ${stemsLabel}`,
-            };
+            playerSource = { key: `${playCandidate.id}-${playStems[0].name}`, url: playStems[0].media.url };
         } else if (playStems.length > 1 && overlay?.key === mixKey) {
-            playerSource = {
-                key: `${playCandidate.id}-mix-${mixKey}`,
-                url: overlay.media.url,
-                label: `${candidateLabel(playCandidate)} - ${stemsLabel}`,
-            };
+            playerSource = { key: `${playCandidate.id}-mix-${mixKey}`, url: overlay.media.url };
         }
     }
 
@@ -762,6 +743,7 @@ export default function SeparationWorkbench({ store, disabled }: Props) {
                 open={job !== null}
                 title={job?.title ?? ''}
                 percent={job?.percent}
+                status={job?.status}
                 message={job?.message ?? ''}
                 onCancel={cancel}
             />

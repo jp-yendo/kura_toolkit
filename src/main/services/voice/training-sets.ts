@@ -5,8 +5,9 @@ import { emitJobEvent, finishJob, isCancelled, startJob } from '../job-manager';
 import { encodeTrainingWav, probeAudio } from './audio-tools';
 import { corpusSentences } from './corpus';
 import { readJsonFile, writeJsonFile } from './json-file';
-import { forgetMedia, forgetMediaUnder, mediaUrl } from './media-protocol';
+import { forgetMedia, forgetMediaUnder, mediaUrl } from '../media-protocol';
 import { modelPaths } from './paths';
+import { discardRecording, moveRecordingTo } from './recording';
 import { moveToTrash } from '../../utils/trash';
 import type { VoiceLanguage } from '../../../shared/voice/languages';
 import type {
@@ -347,18 +348,23 @@ async function registerAudio(
 export async function addTrainingRecording(
     feature: VoiceModelFeature,
     setId: string,
-    wav: Uint8Array,
+    recordingId: string,
     target: { name: string; sentenceId?: string }
 ): Promise<TrainingAudio> {
-    return whileAdding(feature, setId, async () => {
-        const data = readSet(feature, setId);
-        checkSentence(data, target.sentenceId);
-        const audioId = crypto.randomUUID();
-        const file = audioPath(feature, setId, audioId);
-        fs.mkdirSync(path.dirname(file), { recursive: true });
-        fs.writeFileSync(file, Buffer.from(wav));
-        return registerAudio(data, audioId, target.name, 'recording', target.sentenceId);
-    });
+    try {
+        return await whileAdding(feature, setId, async () => {
+            const data = readSet(feature, setId);
+            checkSentence(data, target.sentenceId);
+            const audioId = crypto.randomUUID();
+            const file = audioPath(feature, setId, audioId);
+            fs.mkdirSync(path.dirname(file), { recursive: true });
+            moveRecordingTo(recordingId, file);
+            return registerAudio(data, audioId, target.name, 'recording', target.sentenceId);
+        });
+    } finally {
+        // 加えられなかった場合も録音のファイルを残さない (移した場合は何もしない)
+        discardRecording(recordingId);
+    }
 }
 
 // 音声ファイル (動画の音声も含む) を、録音と同じ形式にして学習セットに加える。

@@ -18,7 +18,7 @@ import type {
     ImportInspection,
     RvcModelMeta,
     TtsModelMeta,
-    VoiceModelCategory,
+    VoiceModelOrigin,
     VoiceModelFeature,
     VoiceModelInfo,
 } from '../../../shared/voice/types';
@@ -144,8 +144,9 @@ type SbvConfig = {
     data?: { style2id?: Record<string, number>; spk2id?: Record<string, number>; sampling_rate?: number };
 };
 
-function sortedKeys(map: Record<string, number> | undefined, fallback: string[]): string[] {
-    if (!map || typeof map !== 'object') return fallback;
+// 名前 -> 番号の対応を、番号の順の名前の一覧にする。対応が無ければ空 (モデルに無いものを補わない)
+function sortedKeys(map: Record<string, number> | undefined): string[] {
+    if (!map || typeof map !== 'object') return [];
     return Object.entries(map)
         .filter(([, value]) => typeof value === 'number')
         .sort((a, b) => a[1] - b[1])
@@ -159,8 +160,8 @@ export function ttsMetaFromConfig(config: SbvConfig): TtsModelMeta {
     return {
         engine,
         languages: languagesForEngine(engine),
-        styles: sortedKeys(config.data?.style2id, ['Neutral']),
-        speakers: sortedKeys(config.data?.spk2id, []),
+        styles: sortedKeys(config.data?.style2id),
+        speakers: sortedKeys(config.data?.spk2id),
         version,
     };
 }
@@ -238,7 +239,7 @@ function readyModelInfo(name: string, overrides: Record<string, ReadyModelOverri
         feature: 'tts',
         name: override.name ?? '',
         distributedName: name,
-        category: 'ready',
+        origin: 'existing',
         createdAt,
         readyItemId: readyItemId(name),
         tts: meta,
@@ -260,7 +261,8 @@ export function listVoices(feature: VoiceModelFeature): VoiceModelInfo[] {
             if (isItemInstalled(readyItemId(name))) result.push(readyModelInfo(name, overrides));
         }
     }
-    return result.sort((a, b) => a.category.localeCompare(b.category) || b.createdAt - a.createdAt);
+    // 区分では分けず、新しい順に並べる
+    return result.sort((a, b) => b.createdAt - a.createdAt);
 }
 
 type ResolvedVoice = {
@@ -290,7 +292,7 @@ export function ttsModelFiles(voice: ResolvedVoice): { weights: string; config: 
 
 // 重みのファイル。すぐに使えるモデルは配布時のファイル名のため、拡張子で探す
 function ttsWeightsFile(voice: ResolvedVoice): string {
-    if (voice.info.category === 'ready') {
+    if (voice.info.readyItemId) {
         const name = fs.readdirSync(voice.dir).find(item => item.endsWith('.safetensors'));
         if (!name) throw new Error(`MODEL_FILE_MISSING: ${voice.dir}`);
         return path.join(voice.dir, name);
@@ -307,7 +309,7 @@ export function renameVoice(feature: VoiceModelFeature, id: string, name: string
     if (!trimmed) throw new Error('VOICE_NAME_EMPTY');
     const readyModel = readyModelName(id);
     if (feature === 'tts' && readyModel) {
-        // 名前は変えられるが、すぐに使えるモデルという区分は保持する
+        // ダウンロードしたモデルのファイルは変えず、名前の変更は別の記録に残す
         getVoice(feature, id);
         const overrides = readReadyModelOverrides();
         overrides[readyModel] = { ...overrides[readyModel], name: trimmed };
@@ -358,7 +360,7 @@ type VoiceManifest = {
     format?: string;
     feature?: string;
     name?: string;
-    category?: VoiceModelCategory;
+    origin?: VoiceModelOrigin;
     // 読み上げモデルが対応する言語 (多言語版は利用者が選んだもの)
     tts?: { languages?: unknown };
 };
@@ -383,7 +385,7 @@ export async function exportVoice(feature: VoiceModelFeature, id: string, destPa
         format: VOICE_FILE_FORMAT,
         feature,
         name: voice.info.name || voice.info.distributedName || id,
-        category: voice.info.category,
+        origin: voice.info.origin,
         ...(voice.info.tts ? { tts: { languages: voice.info.tts.languages } } : {}),
     };
     await writeZip(destPath, [...files, { name: VOICE_FILE_MANIFEST, text: JSON.stringify(manifest, null, 2) }]);
@@ -484,8 +486,8 @@ async function inspectKuraFile(feature: VoiceModelFeature, file: string, staging
             token,
             source: 'kura',
             suggestedName: manifest.name ?? path.basename(file, path.extname(file)),
-            // 本アプリで書き出したファイルは、元の区分を復元する
-            category: manifest.category === 'trained' || manifest.category === 'ready' ? manifest.category : 'imported',
+            // 本アプリで書き出したファイルは、元の区分 (ユーザーモデルか) を復元する
+            origin: manifest.origin === 'user' ? 'user' : 'existing',
             safe,
             unsafeDetail,
             rvc,
@@ -558,7 +560,7 @@ async function applyChoice(pending: PendingImport, choices: ImportChoices): Prom
     pending.inspection = {
         token: pending.inspection.token,
         source: 'external',
-        category: 'imported',
+        origin: 'existing',
         choices,
         ...fields,
     };
@@ -601,7 +603,7 @@ async function inspectExternal(feature: VoiceModelFeature, paths: string[], stag
             token: crypto.randomUUID(),
             source: 'external',
             suggestedName: '',
-            category: 'imported',
+            origin: 'existing',
             safe: true,
         },
     };
@@ -713,7 +715,7 @@ export async function commitImport(
             id,
             feature,
             name,
-            category: inspection.category,
+            origin: inspection.origin,
             createdAt: Date.now(),
             rvc,
             tts,
@@ -744,7 +746,7 @@ export function registerTrainedVoice(
     name: string,
     extra: { rvc?: RvcModelMeta; tts?: TtsModelMeta }
 ): Promise<VoiceModelInfo> {
-    return finishVoice({ id, feature, name, category: 'trained', createdAt: Date.now(), ...extra });
+    return finishVoice({ id, feature, name, origin: 'user', createdAt: Date.now(), ...extra });
 }
 
 // 作成中の置き場を消す

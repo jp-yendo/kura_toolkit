@@ -20,7 +20,7 @@ export async function probeJson<T = unknown>(args: string[], options: FfprobeOpt
         throw new Error('KURA_CANCELLED');
     }
     if (result.code !== 0) {
-        throw new Error(`FFPROBE_FAILED: ${result.stderr.slice(-2000)}`);
+        throw new Error(`FFPROBE_FAILED: ${result.stderr}`);
     }
     try {
         return JSON.parse(result.stdout) as T;

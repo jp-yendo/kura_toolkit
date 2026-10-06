@@ -1,15 +1,18 @@
 import path from 'path';
 import { app } from 'electron';
+import { libraryCacheDir } from '../cache-dir';
 import { getLibraryDir, getModelDir } from '../storage';
 import type { VoiceComponentId, VoiceModelFeature } from '../../../shared/voice/types';
 
 // 音声機能 (分離・変換・読み上げ) が使う場所の解決。
 // 保存場所そのもの (ライブラリ・モデル・作業ディレクトリ) はアプリ全体の設定 (storage.ts) で、
 // ここではその中での音声機能の配置を決める。
-// - ライブラリディレクトリ: Python 本体と、ライブラリごとのディレクトリ (仮想環境・ソース一式・キャッシュ)
+// - ライブラリディレクトリ: Python 本体と、ライブラリごとのディレクトリ (仮想環境・ソース一式)
+// - キャッシュディレクトリ: ライブラリごとのディレクトリ (ライブラリが作るキャッシュ・分離のモデル一覧など)
 // - モデルディレクトリ: audio/<separation|conversion|tts>/ (ダウンロードしたモデル・声のモデル)
 
 // コンポーネント (仮想環境の単位) と、それを収めるライブラリディレクトリ内のディレクトリ
+// (キャッシュディレクトリの中も同じ名前で分ける)
 const LIBRARY_NAMES: Record<VoiceComponentId, string> = {
     separator: 'audio-separator',
     converter: 'applio',
@@ -40,9 +43,12 @@ export function libraryPaths(root = getLibraryDir()) {
         source: (component: 'converter' | 'tts') => path.join(library(component), 'source'),
         // ソース一式の書庫 (展開先と同じディスクに取得し、展開したら消す)
         sourceArchive: (component: 'converter' | 'tts') => path.join(library(component), 'source.tar.gz'),
-        // 各ライブラリが既定でホームディレクトリ配下に書き込むキャッシュの書き込み先
-        cache: (component: VoiceComponentId) => path.join(library(component), 'cache'),
     };
+}
+
+// キャッシュディレクトリの中の、ライブラリのディレクトリ
+export function libraryCacheDirOf(component: VoiceComponentId): string {
+    return libraryCacheDir(LIBRARY_NAMES[component]);
 }
 
 // モデルディレクトリ内の構成

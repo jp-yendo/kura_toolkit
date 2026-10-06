@@ -25,19 +25,26 @@ type Props = {
     errorRanges: EditorRange[];
     placeholder?: string;
     disabled?: boolean;
+    // 中身に合わせて高さを変える (表の中の入力欄。スクロールせず、余白も小さくする)
+    autoHeight?: boolean;
+    onFocus?(): void;
+    // 支援技術に伝える名前 (見出しの無い入力欄で使う)
+    ariaLabel?: string;
 };
 
 const FONT_SIZE = 14;
 const LINE_HEIGHT = 1.7;
 const PADDING = 12;
+const AUTO_HEIGHT_PADDING = 6;
 
 // 制御タグと誤りを強調表示する文章入力欄。
 // 透明な textarea の背後に同じ文字組みの要素を置き、その要素側で範囲に色を付ける。
 // 両者の折り返し位置を一致させるため、フォント・余白・スクロールバーの幅をそろえる。
 const TagEditor = React.forwardRef<TagEditorHandle, Props>(function TagEditor(
-    { value, onChange, tagRanges, errorRanges, placeholder, disabled },
+    { value, onChange, tagRanges, errorRanges, placeholder, disabled, autoHeight = false, onFocus, ariaLabel },
     ref
 ) {
+    const padding = autoHeight ? AUTO_HEIGHT_PADDING : PADDING;
     const theme = useTheme();
     const textareaRef = React.useRef<HTMLTextAreaElement>(null);
     const backdropRef = React.useRef<HTMLDivElement>(null);
@@ -97,7 +104,12 @@ const TagEditor = React.forwardRef<TagEditorHandle, Props>(function TagEditor(
             // 選択位置の行が見えるようにスクロールする
             const line = value.slice(0, offset).split('\n').length - 1;
             const lineHeightPx = FONT_SIZE * LINE_HEIGHT;
-            textarea.scrollTop = Math.max(0, line * lineHeightPx - textarea.clientHeight / 3);
+            if (autoHeight) {
+                // 高さが中身に合っているため、入力欄そのものが見えるようにする
+                textarea.scrollIntoView({ block: 'nearest' });
+            } else {
+                textarea.scrollTop = Math.max(0, line * lineHeightPx - textarea.clientHeight / 3);
+            }
             syncScroll();
         },
     }));
@@ -125,7 +137,7 @@ const TagEditor = React.forwardRef<TagEditorHandle, Props>(function TagEditor(
         position: 'absolute',
         inset: 0,
         m: 0,
-        p: `${PADDING}px`,
+        p: `${padding}px`,
         border: 0,
         fontFamily: theme.typography.fontFamily,
         fontSize: FONT_SIZE,
@@ -133,9 +145,10 @@ const TagEditor = React.forwardRef<TagEditorHandle, Props>(function TagEditor(
         letterSpacing: 'normal',
         whiteSpace: 'pre-wrap',
         overflowWrap: 'anywhere',
-        overflowY: 'scroll',
+        // 高さを中身に合わせる場合はスクロールさせない (両方の折り返し位置をそろえるため、どちらにもスクロールバーを出さない)
+        overflowY: autoHeight ? 'hidden' : 'scroll',
         overflowX: 'hidden',
-        scrollbarGutter: 'stable',
+        scrollbarGutter: autoHeight ? 'auto' : 'stable',
         boxSizing: 'border-box',
         tabSize: 4,
     } as const;
@@ -144,8 +157,8 @@ const TagEditor = React.forwardRef<TagEditorHandle, Props>(function TagEditor(
         <Box
             sx={{
                 position: 'relative',
-                flexGrow: 1,
-                minHeight: 160,
+                flexGrow: autoHeight ? 0 : 1,
+                minHeight: autoHeight ? undefined : 160,
                 border: 1,
                 borderColor: 'divider',
                 borderRadius: 2,
@@ -154,7 +167,17 @@ const TagEditor = React.forwardRef<TagEditorHandle, Props>(function TagEditor(
                 '&:focus-within': { borderColor: 'primary.main' },
             }}
         >
-            <Box ref={backdropRef} aria-hidden sx={{ ...sharedSx, color: 'transparent', pointerEvents: 'none' }}>
+            {/* 高さを中身に合わせる場合は、背後の要素を文書の流れに置いて高さを決めさせ、入力欄をその上に重ねる */}
+            <Box
+                ref={backdropRef}
+                aria-hidden
+                sx={{
+                    ...sharedSx,
+                    ...(autoHeight ? { position: 'relative', inset: 'auto' } : {}),
+                    color: 'transparent',
+                    pointerEvents: 'none',
+                }}
+            >
                 {segments.map((segment, index) => (
                     <Box
                         key={index}
@@ -173,8 +196,8 @@ const TagEditor = React.forwardRef<TagEditorHandle, Props>(function TagEditor(
                         {segment.text}
                     </Box>
                 ))}
-                {/* 末尾の改行の高さを確保する */}
-                {'\n '}
+                {/* 末尾の改行の高さを確保する (高さを中身に合わせる場合は、空のときと末尾が改行のときだけ 1 行分) */}
+                {autoHeight ? (value === '' || value.endsWith('\n') ? ' ' : '') : '\n '}
             </Box>
             <Box
                 component='textarea'
@@ -183,6 +206,8 @@ const TagEditor = React.forwardRef<TagEditorHandle, Props>(function TagEditor(
                 placeholder={placeholder}
                 disabled={disabled}
                 spellCheck={false}
+                aria-label={ariaLabel}
+                onFocus={onFocus}
                 onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) => onChange(event.target.value)}
                 onScroll={syncScroll}
                 sx={{

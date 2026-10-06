@@ -4,6 +4,21 @@ export default {
     appTitle: 'Kura Toolkit',
     common: {
         cancel: 'Cancel',
+        unsavedTitle: 'Unsaved changes',
+        unsavedMessage: 'Unsaved changes will be lost. Leave this screen?',
+        discardAndLeave: 'Discard and Leave',
+        unsavedCloseMessage: 'Unsaved changes will be lost. Quit the app?',
+        discardAndClose: 'Discard and Quit',
+        failed: 'The operation failed. ({{detail}})',
+        // Names of file types in file dialogs
+        fileTypes: {
+            audio: 'Audio files',
+            media: 'Video and audio files',
+            image: 'Image files',
+            svg: 'SVG files',
+            executable: 'Executables',
+            all: 'All files',
+        },
         close: 'Close',
         done: 'Done',
         showDetails: 'Show details',
@@ -15,6 +30,44 @@ export default {
         ffprobeNotFound: 'ffprobe not found. Please set its path in App Settings.',
         workDirMissing: 'The work directory was not found. Check it under Storage in App Settings. ({{detail}})',
         dropHint: 'Drag & drop files here\nor click to select',
+    },
+    jobPhases: {
+        prepare: 'Preparing',
+        decodeInput: 'Loading the audio',
+        loadModel: 'Loading the model',
+        separate: 'Separating the audio',
+        finishStems: 'Finishing the separated audio',
+        convert: 'Converting the voice',
+        loudness: 'Matching the volume',
+        pitchShift: 'Changing the key of the accompaniment',
+        mixPreview: 'Mixing with the accompaniment',
+        mix: 'Mixing',
+        synthesize: 'Creating the audio',
+        stretch: 'Adjusting the speed',
+        assemble: 'Joining the audio',
+        encode: 'Exporting',
+        training: {
+            prepare: 'Preparing for training',
+            preprocess: 'Preprocessing the audio',
+            extract: 'Extracting features',
+            train: 'Training',
+            index: 'Building the index',
+            finalize: 'Finishing the model',
+        },
+    },
+    jobPhasesCounted: {
+        encode: 'Exporting ({{current}} / {{total}})',
+        training: {
+            train: 'Training (epoch {{current}} / {{total}})',
+        },
+    },
+    jobEta: {
+        left: 'About {{time}} left',
+        seconds: '{{seconds}} s',
+        minutes: '{{minutes}} min',
+        minutesSeconds: '{{minutes}} min {{seconds}} s',
+        hours: '{{hours}} h {{minutes}} min',
+        hoursOnly: '{{hours}} h',
     },
     nav: {
         dashboard: 'Dashboard',
@@ -99,6 +152,10 @@ export default {
         unsupportedCodec: 'Skipped due to unsupported codec',
     },
     chapterPage: {
+        subtitleFormats: {
+            hdmvText: 'Blu-ray text',
+            arib: 'ARIB captions',
+        },
         dropHint: 'Drag & drop a video file here\nor click to select',
         chapters: 'Chapters',
         colId: 'ID',
@@ -247,7 +304,7 @@ export default {
         searchSection: 'File search',
         searchThreads: 'Search threads',
         searchThreadsHint:
-            'Number of threads used to scan directories (1-100). Higher values are faster on SSDs, but may be slower on HDDs or network drives.',
+            'Number of threads used to scan directories (1 or more). Higher values are faster on SSDs, but may be slower on HDDs or network drives.',
         ffmpegSection: 'ffmpeg / ffprobe',
         ffmpegPath: 'Path to ffmpeg executable',
         ffprobePath: 'Path to ffprobe executable',
@@ -261,6 +318,10 @@ export default {
             libraryHint: 'Where the libraries used by the app are stored.',
             model: 'Model directory',
             modelHint: 'Where the models used by the app are stored.',
+            cache: 'Cache directory',
+            cacheHint:
+                'Where files that can be recreated (such as caches made by the libraries) are stored. Files not used for longer than the retention period are removed at startup.',
+            cacheRetention: 'Cache retention (days)',
             work: 'Work directory',
             workHint:
                 'The temporary directory for files used during processing (the operating system temporary directory by default). The app creates folders starting with "kura_toolkit_" in it for each task and removes them when the task ends.',
@@ -316,7 +377,7 @@ export default {
             errors: {
                 STORAGE_MOVE_NESTED: 'It cannot be moved into its current location or into a folder that contains it.',
                 STORAGE_OVERLAP:
-                    'A location that overlaps another storage location (library, model or work directory) cannot be chosen.',
+                    'A location that overlaps another storage location (library, model, cache or work directory) cannot be chosen.',
                 STORAGE_TARGET_NOT_EMPTY:
                     'The chosen folder contains files that do not belong to this storage location. Choose an empty folder or a folder that was used as the same kind of storage location. ({{detail}})',
                 STORAGE_MOVE_UNDECIDED: 'Some items have no overwrite choice. ({{detail}})',

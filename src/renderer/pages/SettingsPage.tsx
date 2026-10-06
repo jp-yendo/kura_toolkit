@@ -7,7 +7,7 @@ import SectionLabel from '../components/common/SectionLabel';
 import Panel from '../components/common/Panel';
 import PathField from '../components/common/PathField';
 import StorageSection from '../components/settings/StorageSection';
-import { SEARCH_THREADS_MAX, SEARCH_THREADS_MIN } from '@shared/search';
+import { SEARCH_THREADS_MIN } from '@shared/search';
 import type { AppLanguage, AppTheme, FfmpegDetectResult } from '@shared/types';
 
 export default function SettingsPage() {
@@ -24,7 +24,7 @@ export default function SettingsPage() {
     const commitSearchThreads = React.useCallback(() => {
         const parsed = Number.parseInt(searchThreads, 10);
         const threads = Number.isFinite(parsed)
-            ? Math.max(SEARCH_THREADS_MIN, Math.min(SEARCH_THREADS_MAX, parsed))
+            ? Math.max(SEARCH_THREADS_MIN, parsed)
             : (savedThreads ?? SEARCH_THREADS_MIN);
         setSearchThreads(String(threads));
         if (threads !== savedThreads) void update({ search: { threads } });
@@ -43,7 +43,7 @@ export default function SettingsPage() {
 
     if (!settings) return null;
 
-    const executableFilters = [{ name: 'Executable', extensions: ['exe', '*'] }];
+    const executableFilters = [{ name: t('common.fileTypes.executable'), extensions: ['exe', '*'] }];
 
     return (
         <PageContainer sx={{ maxWidth: 760, mx: 'auto', width: '100%' }}>
@@ -95,7 +95,7 @@ export default function SettingsPage() {
                         type='number'
                         label={t('settingsPage.searchThreads')}
                         sx={{ width: 220 }}
-                        slotProps={{ htmlInput: { min: SEARCH_THREADS_MIN, max: SEARCH_THREADS_MAX, step: 1 } }}
+                        slotProps={{ htmlInput: { min: SEARCH_THREADS_MIN, step: 1 } }}
                         value={searchThreads}
                         onChange={event => setSearchThreads(event.target.value)}
                         onBlur={() => commitSearchThreads()}

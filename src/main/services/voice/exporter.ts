@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { emitJobEvent, finishJob, isCancelled, startJob } from '../job-manager';
+import { voicePhase } from './job-progress';
 import { isCancelledError } from '../ffmpeg/ffmpeg';
 import { encodeExport } from './audio-tools';
 import { isInsideWork } from '../work-dir';
@@ -35,11 +36,18 @@ export async function exportAudio(
                 total: items.length,
                 message: path.basename(item.dest),
             });
+            voicePhase(jobId, 'encode', { fraction: index / items.length, current: index + 1, total: items.length });
             try {
                 if (!isInsideWork(workKey, item.source)) throw new Error('INVALID_PATH');
                 const folder = path.dirname(item.dest);
                 if (!fs.existsSync(folder)) throw new Error(`EXPORT_FOLDER_MISSING: ${folder}`);
-                await encodeExport(item.source, item.dest, settings, jobId);
+                await encodeExport(item.source, item.dest, settings, jobId, percent =>
+                    voicePhase(jobId, 'encode', {
+                        fraction: (index + percent / 100) / items.length,
+                        current: index + 1,
+                        total: items.length,
+                    })
+                );
                 outputs.push(item.dest);
             } catch (error) {
                 if (isCancelledError(error) || isCancelled(jobId)) break;

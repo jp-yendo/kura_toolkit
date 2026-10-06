@@ -22,11 +22,12 @@ import type {
     FfmpegDetectResult,
     FileFilter,
     ImagePreview,
+    SvgResult,
     JobEvent,
     SettingsLoadError,
     SettingsUpdateResult,
+    MovableStorageKind,
     StorageInfo,
-    StorageKind,
     StorageMoveDecisions,
     StorageMovePlan,
     StorageMoveResult,
@@ -49,6 +50,7 @@ import type {
     MediaRef,
     MixParams,
     MixRenderRequest,
+    WaveformData,
     PreparedInput,
     PresetKind,
     PresetRecord,
@@ -56,7 +58,6 @@ import type {
     SeparationModelList,
     SeparationPresetParams,
     SeparationRunRequest,
-    TtsInputKind,
     TtsRunRequest,
     TtsRunResult,
     TrainingAudio,
@@ -88,16 +89,25 @@ export type VoiceApi = {
     openExternal(url: string): Promise<void>;
     // マイクの利用許可 (macOS)
     requestMicrophone(): Promise<boolean>;
+    // マイク録音の書き込み (16bit・モノラルの PCM を少しずつ送り、main が作業ディレクトリの WAV へ追記する)
+    recording: {
+        begin(sampleRate: number): Promise<string>;
+        append(id: string, pcm: Uint8Array): Promise<void>;
+        // 書き込みを終える (その後 trainingSets.addRecording に渡す)
+        finish(id: string): Promise<void>;
+        // 使わなくなった録音を片付ける
+        discard(id: string): Promise<void>;
+    };
     media: {
         prepareInput(jobId: string, workKey: string, sourcePath: string): Promise<PreparedInput>;
         mix(jobId: string, workKey: string, paths: string[], channels: number): Promise<MediaRef>;
         // その作業の置き場の中のものに限る
         discard(workKey: string, paths: string[]): Promise<void>;
-        // 別の機能の作業へ渡す音声を、渡す先の作業の置き場へ移す (移した後の音声を、渡したパスの順に返す)
-        transfer(fromWorkKey: string, toWorkKey: string, paths: string[]): Promise<MediaRef[]>;
         discardWork(workKey: string): Promise<void>;
         // 作業ディレクトリ内の音声を再生できるようにする
         ref(workKey: string, path: string): Promise<MediaRef>;
+        // 再生用の URL で公開している音声の波形
+        waveform(url: string): Promise<WaveformData>;
     };
     separation: {
         listModels(): Promise<SeparationModelList>;
@@ -111,7 +121,8 @@ export type VoiceApi = {
     tts: {
         run(jobId: string, request: TtsRunRequest): Promise<TtsRunResult>;
         cancelConfirmation(token: string): Promise<void>;
-        loadText(path: string): Promise<{ text: string; kind: TtsInputKind }>;
+        // 文章ファイルの内容 (改行は LF)
+        loadText(path: string): Promise<string>;
         saveText(path: string, text: string): Promise<void>;
     };
     models: {
@@ -147,10 +158,11 @@ export type VoiceApi = {
         rename(feature: VoiceModelFeature, id: string, name: string): Promise<TrainingSetSummary>;
         // ごみ箱に移す
         remove(feature: VoiceModelFeature, id: string): Promise<void>;
+        // recording.finish を終えた録音を加える (録音のファイルは学習セットへ移す)
         addRecording(
             feature: VoiceModelFeature,
             id: string,
-            wav: Uint8Array,
+            recordingId: string,
             target: { name: string; sentenceId?: string }
         ): Promise<TrainingAudio>;
         // 読み上げの学習セットでは、文を指定してファイルを 1 つ渡す
@@ -187,6 +199,10 @@ export type IpcApi = {
     maximizeOrRestore(): Promise<boolean>;
     isMaximized(): Promise<boolean>;
     close(): Promise<void>;
+    // ウィンドウを閉じる前の問い合わせ (保存していない入力があれば確認するため)。戻り値は登録解除関数
+    onCloseRequested(listener: () => void): () => void;
+    // 閉じてよいことを伝え、ウィンドウを閉じる
+    confirmClose(): Promise<void>;
     // 永続設定
     settings: {
         get(): Promise<AppSettings>;
@@ -204,7 +220,7 @@ export type IpcApi = {
         // そのフォルダを新しい場所にする (進捗は job:event)。targetDir が null の場合は既定の場所へ戻す
         move(
             jobId: string,
-            kind: Exclude<StorageKind, 'work'>,
+            kind: MovableStorageKind,
             targetDir: string | null,
             decisions: StorageMoveDecisions
         ): Promise<StorageMoveResult>;
@@ -213,7 +229,7 @@ export type IpcApi = {
         // 要らなくなった一時ファイルを消す (機能の画面に入ったとき。完了は待たない)
         cleanupWork(): Promise<void>;
         // 移動を始める前に、移動先を選べるかを確かめ、両方にあるまとまり (上書きするかを選ぶもの) を求める
-        planMove(kind: Exclude<StorageKind, 'work'>, targetDir: string | null): Promise<StorageMovePlan>;
+        planMove(kind: MovableStorageKind, targetDir: string | null): Promise<StorageMovePlan>;
     };
     // ffmpeg/ffprobe の自動検出
     ffmpeg: {
@@ -256,8 +272,9 @@ export type IpcApi = {
     // 画像 SVG 変換
     vectorizer: {
         loadImage(path: string): Promise<ImagePreview>;
-        convert(path: string, params: VectorizeParams): Promise<{ svg: string }>;
-        saveSvg(path: string, svg: string): Promise<void>;
+        convert(path: string, params: VectorizeParams): Promise<SvgResult>;
+        // 変換結果 (resultId) を path へ保存する
+        saveSvg(resultId: string, path: string): Promise<void>;
     };
     // クリーンアップ
     cleanup: {

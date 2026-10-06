@@ -21,11 +21,12 @@ import {
     listSeparationModels,
     mixStems,
     prepareInput,
-    transferMedia,
     runSeparation,
 } from '../services/voice/separation';
 import { loadTextFile, saveTextFile } from '../services/voice/text-files';
 import { mediaRef } from '../services/voice/media';
+import { mediaWaveform } from '../services/voice/waveform';
+import { appendRecording, beginRecording, discardRecording, finishRecording } from '../services/voice/recording';
 import { isInsideWork } from '../services/work-dir';
 import { startRvcTraining, startTtsTraining } from '../services/voice/training';
 import {
@@ -115,6 +116,10 @@ export function registerVoiceIpcHandlers() {
     ipcMain.handle(IPC_CHANNELS.VOICE_LIBRARY_PENDING_UPDATES, () => getPendingUpdates());
     ipcMain.handle(IPC_CHANNELS.VOICE_LIBRARY_MARK_PROMPTED, () => markUpdatePrompted());
     ipcMain.handle(IPC_CHANNELS.VOICE_OPEN_EXTERNAL, (_e, url: string) => openHttps(url));
+    ipcMain.handle(IPC_CHANNELS.VOICE_RECORDING_BEGIN, (_e, sampleRate: number) => beginRecording(sampleRate));
+    ipcMain.handle(IPC_CHANNELS.VOICE_RECORDING_APPEND, (_e, id: string, pcm: Uint8Array) => appendRecording(id, pcm));
+    ipcMain.handle(IPC_CHANNELS.VOICE_RECORDING_FINISH, (_e, id: string) => finishRecording(id));
+    ipcMain.handle(IPC_CHANNELS.VOICE_RECORDING_DISCARD, (_e, id: string) => discardRecording(id));
     ipcMain.handle(IPC_CHANNELS.VOICE_REQUEST_MICROPHONE, async () => {
         // macOS ではマイクの利用を OS に許可してもらう必要がある (他の OS は録音開始時にブラウザ側で扱う)
         if (process.platform !== 'darwin') return true;
@@ -134,10 +139,9 @@ export function registerVoiceIpcHandlers() {
     ipcMain.handle(IPC_CHANNELS.VOICE_MEDIA_DISCARD, (_e, workKey: string, paths: string[]) =>
         discardPaths(workKey, paths)
     );
-    ipcMain.handle(IPC_CHANNELS.VOICE_MEDIA_TRANSFER, (_e, fromWorkKey: string, toWorkKey: string, paths: string[]) =>
-        transferMedia(fromWorkKey, toWorkKey, paths)
-    );
     ipcMain.handle(IPC_CHANNELS.VOICE_MEDIA_DISCARD_WORK, (_e, workKey: string) => discardWork(workKey));
+    // 公開している URL のものに限る (公開していない URL は INVALID_PATH)
+    ipcMain.handle(IPC_CHANNELS.VOICE_MEDIA_WAVEFORM, (_e, url: string) => mediaWaveform(url));
     ipcMain.handle(IPC_CHANNELS.VOICE_MEDIA_REF, (_e, workKey: string, filePath: string) => {
         // 任意のファイルを公開しないよう、その作業の置き場の中のものに限る
         if (!isInsideWork(workKey, filePath)) throw new Error('INVALID_PATH');
@@ -233,8 +237,8 @@ export function registerVoiceIpcHandlers() {
     );
     ipcMain.handle(
         IPC_CHANNELS.VOICE_TRAINING_SETS_ADD_RECORDING,
-        (_e, feature: unknown, id: string, wav: Uint8Array, target: { name: string; sentenceId?: string }) =>
-            addTrainingRecording(checkFeatureId(feature), id, wav, target)
+        (_e, feature: unknown, id: string, recordingId: string, target: { name: string; sentenceId?: string }) =>
+            addTrainingRecording(checkFeatureId(feature), id, recordingId, target)
     );
     ipcMain.handle(
         IPC_CHANNELS.VOICE_TRAINING_SETS_ADD_FILES,

@@ -1,12 +1,12 @@
 import path from 'path';
 import { resolveFfmpegPath, resolveFfprobePath } from '../ffmpeg/ffmpeg';
-import { libraryPaths, modelPaths } from './paths';
+import { libraryCacheDirOf, libraryPaths, modelPaths } from './paths';
 import { TTS_NLTK_DIR } from './spec';
 import type { VoiceComponentId } from '../../../shared/voice/types';
 
 // Python を起動するときの環境変数。
 // 各ライブラリは既定でホームディレクトリ配下にキャッシュやモデルを書き込むため、キャッシュの書き込み先を
-// ライブラリディレクトリ内のそのライブラリのディレクトリに向け、モデルはモデルディレクトリから読ませる
+// キャッシュディレクトリ内のそのライブラリのディレクトリに向け、モデルはモデルディレクトリから読ませる
 // (削除後の残留と、利用者の確認を経ないダウンロードの両方を防ぐ)。
 // 一時ファイルの置き場 (TEMP / TMP / TMPDIR) は、プロセスを起動する側がプロセスごとに作業ディレクトリに作って渡す
 // (process-runner.ts / python-worker.ts)。
@@ -60,9 +60,9 @@ export function buildPythonEnv(
     });
 
     if (component) {
-        // キャッシュはそのライブラリのディレクトリに置く (仮想環境を使わない処理 (pip など) はこれらを使わない)。
-        // フォルダは各ライブラリが書き込むときに作る
-        const cache = (name: string) => path.join(lib.cache(component), name);
+        // キャッシュはキャッシュディレクトリのそのライブラリのディレクトリに置き、中身は各ライブラリに任せる
+        // (仮想環境を使わない処理 (pip など) はこれらを使わない)。フォルダは各ライブラリが書き込むときに作る
+        const cache = (name: string) => path.join(libraryCacheDirOf(component), name);
         Object.assign(env, {
             HF_HOME: cache('huggingface'),
             TORCH_HOME: cache('torch'),

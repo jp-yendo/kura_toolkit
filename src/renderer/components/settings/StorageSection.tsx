@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Box, Button, IconButton, Menu, MenuItem, Stack, Tooltip, Typography } from '@mui/material';
+import { Alert, Box, Button, IconButton, Menu, MenuItem, Stack, TextField, Tooltip, Typography } from '@mui/material';
 import DriveFileMoveIcon from '@mui/icons-material/DriveFileMove';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
@@ -15,18 +15,55 @@ import { showNotice } from '../../stores/noticeStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { notifyVoiceLibraryChanged, openVoiceLibrary } from '../../stores/voiceLibraryStore';
 import StorageMoveDialog from './StorageMoveDialog';
-import type { StorageInfo, StorageKind, StorageMoveDecisions, StorageMovePlan } from '@shared/types';
+import { CACHE_RETENTION_DAYS_MIN } from '@shared/cache';
+import type {
+    MovableStorageKind,
+    StorageInfo,
+    StorageKind,
+    StorageMoveDecisions,
+    StorageMovePlan,
+} from '@shared/types';
 import type { LibraryItem } from '@shared/voice/types';
 
-// アプリ全体の保存場所 (ライブラリ・モデル・作業ディレクトリ)。3 つはそれぞれ独立して変更する。
-// ライブラリとモデルは、中身を選んだフォルダへ移動する。作業ディレクトリは一時ファイルの置き場のため移動しない。
-// 既定の場所へ戻す操作は、誤って押さないよう各項目のメニューに置く
+// アプリ全体の保存場所 (ライブラリ・モデル・キャッシュ・作業ディレクトリ)。4 つはそれぞれ独立して変更する。
+// ライブラリ・モデル・キャッシュは、中身を選んだフォルダへ移動する。作業ディレクトリは一時ファイルの置き場のため
+// 移動しない。既定の場所へ戻す操作は、誤って押さないよう各項目のメニューに置く
 
-type MovableKind = Exclude<StorageKind, 'work'>;
 // target が null の場合は既定の場所へ戻す。plan は移動先と比べた結果 (両方にあるまとまり)
-type MoveRequest = { kind: MovableKind; target: string | null; plan: StorageMovePlan; items: LibraryItem[] };
+type MoveRequest = { kind: MovableStorageKind; target: string | null; plan: StorageMovePlan; items: LibraryItem[] };
 
-const KINDS: StorageKind[] = ['library', 'model', 'work'];
+const KINDS: StorageKind[] = ['library', 'model', 'cache', 'work'];
+
+// キャッシュの保持期間 (日)。入力途中は文字列のまま保持し、確定時に範囲へ収めて保存する
+function CacheRetentionField() {
+    const { t } = useTranslation();
+    const saved = useSettingsStore(state => state.settings?.storage.cacheRetentionDays);
+    const update = useSettingsStore(state => state.update);
+    const [value, setValue] = React.useState('');
+    React.useEffect(() => {
+        if (saved !== undefined) setValue(String(saved));
+    }, [saved]);
+    const commit = () => {
+        const parsed = Number.parseInt(value, 10);
+        const days = Number.isFinite(parsed)
+            ? Math.max(CACHE_RETENTION_DAYS_MIN, parsed)
+            : (saved ?? CACHE_RETENTION_DAYS_MIN);
+        setValue(String(days));
+        if (days !== saved) void update({ storage: { cacheRetentionDays: days } });
+    };
+    return (
+        <TextField
+            size='small'
+            type='number'
+            label={t('settingsPage.storage.cacheRetention')}
+            sx={{ width: 220, mt: 1.5 }}
+            slotProps={{ htmlInput: { min: CACHE_RETENTION_DAYS_MIN, step: 1 } }}
+            value={value}
+            onChange={event => setValue(event.target.value)}
+            onBlur={commit}
+        />
+    );
+}
 
 function storageErrorMessage(t: TFunction, error: unknown): string {
     const parsed = parseVoiceError(error);
@@ -104,7 +141,7 @@ export default function StorageSection() {
     };
 
     // 移動先を選べるかを確かめ、移動先にもあるまとまりを求めてから、確認画面を出す
-    const askMove = async (kind: MovableKind, target: string | null) => {
+    const askMove = async (kind: MovableStorageKind, target: string | null) => {
         setChecking(true);
         try {
             const [plan, status] = await Promise.all([
@@ -119,7 +156,7 @@ export default function StorageSection() {
         }
     };
 
-    // 選んだフォルダをそのまま新しい場所にする (ライブラリとモデルは、中身をそのフォルダへ移す)
+    // 選んだフォルダをそのまま新しい場所にする (作業ディレクトリ以外は、中身をそのフォルダへ移す)
     const browse = async (kind: StorageKind) => {
         const current = info.dirs[kind];
         const dir = await window.kuraToolkit.dialog.openDirectory({
@@ -195,6 +232,7 @@ export default function StorageSection() {
                             >
                                 {t(`settingsPage.storage.${kind}Hint`)}
                             </Typography>
+                            {kind === 'cache' && <CacheRetentionField />}
                             {info.nonAscii[kind] && (
                                 <Alert severity='warning' sx={{ mt: 1 }}>
                                     {t('settingsPage.storage.nonAscii')}

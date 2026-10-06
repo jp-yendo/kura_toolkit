@@ -3,16 +3,16 @@ import fs from 'fs';
 import path from 'path';
 import { emitJobEvent, finishJob, startJob } from '../job-manager';
 import { resolveFfmpegPath } from '../ffmpeg/ffmpeg';
-import { centerCancel, convertChannels, decodeToWav, mixFiles } from './audio-tools';
+import { centerCancel, convertChannels, decodeToWav, mixFiles, padEnd, probeAudio } from './audio-tools';
 import { isComponentCurrent, isItemInstalled } from './library';
-import { forgetMedia, forgetMediaUnder } from './media-protocol';
+import { forgetMedia, forgetMediaUnder } from '../media-protocol';
 import { mediaRef } from './media';
 import { modelPaths } from './paths';
 import { getWorker } from './python-worker';
 import { ensureSeparatorModelList, readSeparatorModelList, separatorModelInstalled } from './separator-models';
 import { separatorItemId } from './spec';
 import { withGpu } from './gpu-lock';
-import { isFileBusyError } from '../../utils/rename-retry';
+import { ffmpegPhase, voicePhase, workerEvents } from './job-progress';
 import { discardLater, isInsideWork, newId, produceShared, removeSession, sessionDir, sessionPath } from '../work-dir';
 import type {
     VerifiedEnsemble,
@@ -36,7 +36,11 @@ export async function prepareInput(jobId: string, workKey: string, sourcePath: s
         const dir = sessionDir(workKey, 'input');
         const output = path.join(dir, `${newId()}.wav`);
         try {
-            const info = await decodeToWav(sourcePath, output, { jobId, channels: 'keep' });
+            const info = await decodeToWav(sourcePath, output, {
+                jobId,
+                channels: 'keep',
+                onProgress: ffmpegPhase(jobId, 'decodeInput'),
+            });
             return { media: await mediaRef(output), channels: Math.min(2, info.channels), sourcePath };
         } catch (error) {
             // 失敗・キャンセルした場合は書きかけを消す
@@ -129,6 +133,9 @@ function usedParams(request: SeparationRunRequest): Partial<SeparationParams> {
     return result;
 }
 
+// 分離の入力の末尾に足す無音 (秒)
+const SEPARATION_PAD_SECONDS = 1;
+
 export async function runSeparation(jobId: string, request: SeparationRunRequest): Promise<SeparationCandidate> {
     startJob(jobId);
     try {
@@ -157,7 +164,7 @@ async function separateInto(
     if (request.method.kind === 'centerCancel') {
         const vocals = path.join(dir, 'Vocals.wav');
         const instrumental = path.join(dir, 'Instrumental.wav');
-        await centerCancel(request.input, vocals, instrumental, jobId);
+        await centerCancel(request.input, vocals, instrumental, jobId, ffmpegPhase(jobId, 'separate'));
         stems = [
             { name: 'Vocals', path: vocals },
             { name: 'Instrumental', path: instrumental },
@@ -170,32 +177,37 @@ async function separateInto(
             .filter(itemId => !isItemInstalled(itemId));
         if (missing.length > 0) throw new Error(`MODEL_NOT_INSTALLED: ${missing.join(', ')}`);
         const raw = path.join(dir, 'raw');
+        // 末尾に無音を足した入力で分離し、結果を元の長さに切りそろえる (末尾を短く返すモデルがあるため)
+        voicePhase(jobId, 'prepare');
+        const { durationSec } = await probeAudio(request.input, jobId);
+        const padded = path.join(raw, 'input.wav');
+        fs.mkdirSync(raw, { recursive: true });
+        await padEnd(request.input, padded, SEPARATION_PAD_SECONDS, jobId);
         const worker = getWorker('separator');
         const result = await withGpu(jobId, 'separator', () =>
             worker.request<{ stems: { name: string; path: string }[] }>(
                 'separate',
                 {
                     modelDir: modelPaths().group('separator'),
-                    outputDir: raw,
-                    input: request.input,
+                    outputDir: path.join(raw, 'stems'),
+                    input: padded,
                     method: request.method,
                     params: request.params,
                 },
                 {
                     jobId,
-                    onEvent: event => {
-                        if (event.kind === 'progress' && typeof event.fraction === 'number') {
-                            emitJobEvent({ jobId, kind: 'progress', percent: event.fraction * 95 });
-                        }
-                    },
+                    onEvent: workerEvents(jobId, 0, 95),
                 }
             )
         );
         stems = [];
-        for (const stem of result.stems) {
+        voicePhase(jobId, 'finishStems', { fraction: 0 });
+        for (const [index, stem] of result.stems.entries()) {
             const target = path.join(dir, `${sanitizeStem(stem.name)}.wav`);
-            // 分離結果は常にステレオで出力されるため、元の音源がモノラルならモノラルに戻す
-            await convertChannels(stem.path, target, request.channels, jobId);
+            // 分離結果は常にステレオで出力されるため、元の音源がモノラルならモノラルに戻す。長さは入力にそろえる
+            await convertChannels(stem.path, target, request.channels, jobId, durationSec, percent =>
+                voicePhase(jobId, 'finishStems', { fraction: (index + percent / 100) / result.stems.length })
+            );
             stems.push({ name: stem.name, path: target });
         }
         discardLater(raw);
@@ -231,7 +243,7 @@ export async function mixStems(jobId: string, workKey: string, paths: string[], 
             .digest('hex')
             .slice(0, 16);
         const output = path.join(sessionDir(workKey, 'mixes'), `${key}.wav`);
-        await produceShared(output, target => mixFiles(paths, target, channels, jobId));
+        await produceShared(output, target => mixFiles(paths, target, { channels }, jobId));
         return await mediaRef(output);
     } finally {
         finishJob(jobId);
@@ -246,34 +258,6 @@ export function discardPaths(workKey: string, paths: string[]): void {
     for (const item of paths) {
         forgetMedia(item);
         discardLater(item);
-    }
-}
-
-// 別の機能の作業へ渡す音声を、渡す先の作業の置き場へ移す (渡した元の作業を破棄しても消えないようにするため)。
-// 同じ作業ディレクトリの中の移動のため、名前の変更で移す。移した後の音声を、渡したパスの順に返す
-export async function transferMedia(fromWorkKey: string, toWorkKey: string, paths: string[]): Promise<MediaRef[]> {
-    for (const item of paths) {
-        if (!isInsideWork(fromWorkKey, item)) throw new Error('INVALID_PATH');
-    }
-    // 途中で失敗したら、移したものを元へ戻す (送り元の画面が、移す前の音声をそのまま使い続けられるようにするため)
-    const moved = new Map<string, string>();
-    try {
-        for (const item of new Set(paths.map(entry => path.resolve(entry)))) {
-            const dest = path.join(sessionDir(toWorkKey, 'received'), `${newId()}${path.extname(item)}`);
-            await fs.promises.rename(item, dest);
-            moved.set(item, dest);
-        }
-        const refs = await Promise.all(paths.map(entry => mediaRef(moved.get(path.resolve(entry)) as string)));
-        for (const item of moved.keys()) forgetMedia(item);
-        return refs;
-    } catch (error) {
-        for (const [item, dest] of moved) {
-            await fs.promises
-                .rename(dest, item)
-                .catch(rollbackError => console.warn(`failed to move ${dest} back to ${item}`, rollbackError));
-        }
-        if (isFileBusyError(error)) throw new Error(`MEDIA_IN_USE: ${(error as NodeJS.ErrnoException).path ?? ''}`);
-        throw error;
     }
 }
 

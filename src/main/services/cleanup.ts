@@ -7,6 +7,7 @@ import { getSettings, resolveSearchThreads } from './settings';
 import { emitJobEvent, finishJob, isCancelled, startJob } from './job-manager';
 import { buildCleanupScanConfig } from './cleanup-targets';
 import { walkCleanupTargets } from './dir-walker';
+import { discardLater, toolTempEnv } from './work-dir';
 import type {
     CleanupItem,
     CleanupRemoveResult,
@@ -35,6 +36,8 @@ type WinLogicalDisk = {
 // DriveType により CD/DVD (5) を書き込みテストなしで判別できる。
 // 取得するフィールドはすべて ASCII のため出力の文字コードに依存しない。
 async function queryWindowsDrives(): Promise<WinLogicalDisk[] | null> {
+    // 一時ファイルの置き場は作業ディレクトリに作り、終了したら消す
+    const temp = toolTempEnv();
     try {
         const result = await new Promise<{ code: number | null; stdout: string }>((resolve, reject) => {
             const child = spawn(
@@ -45,7 +48,7 @@ async function queryWindowsDrives(): Promise<WinLogicalDisk[] | null> {
                     '-Command',
                     'Get-CimInstance Win32_LogicalDisk | Select-Object DeviceID,DriveType,Size | ConvertTo-Json -Compress',
                 ],
-                { windowsHide: true }
+                { windowsHide: true, ...(temp ? { env: temp.env } : {}) }
             );
             let stdout = '';
             child.stdout.setEncoding('utf-8');
@@ -68,6 +71,8 @@ async function queryWindowsDrives(): Promise<WinLogicalDisk[] | null> {
         return disks.length > 0 ? disks : null;
     } catch {
         return null;
+    } finally {
+        if (temp) discardLater(temp.dir);
     }
 }
 

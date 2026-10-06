@@ -1,10 +1,7 @@
 import React from 'react';
 import { Box, Button, DialogActions, DialogContent, DialogTitle, Stack, Typography } from '@mui/material';
-import SaveAltIcon from '@mui/icons-material/SaveAlt';
-import RecordVoiceOverIcon from '@mui/icons-material/RecordVoiceOver';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
 import PageContainer from '../../components/common/PageContainer';
 import Panel from '../../components/common/Panel';
 import AppDialog from '../../components/common/AppDialog';
@@ -14,18 +11,18 @@ import ReadinessAlert, { useFeatureReadiness } from '../../components/voice/Read
 import VoiceFeatureHeader from '../../components/voice/VoiceFeatureHeader';
 import SeparationWorkbench, { trackLabel } from '../../components/voice/SeparationWorkbench';
 import ExportDialog, { type ExportEntry } from '../../components/voice/ExportDialog';
-import { computeTracks, SOURCE_KEY, vocalsAndAccompaniment } from '../../components/voice/separationTracks';
+import { computeTracks, SOURCE_KEY } from '../../components/voice/separationTracks';
 import { formatDuration } from '../../components/voice/voiceFormat';
 import { isCancelledError, voiceErrorMessage } from '../../components/voice/voiceErrors';
 import { AUDIO_INPUT_EXTENSIONS, audioInputFilters } from '../../components/voice/audioInput';
 import { useJobRunner } from '../../hooks/useJobRunner';
 import { showNotice } from '../../stores/noticeStore';
 import { useSeparationWorkStore } from '../../stores/separationWorkStore';
-import { sendToConversion } from '../../stores/voiceHandoffStore';
+import DownloadIcon from '@mui/icons-material/Download';
+import { openVoiceLibrary } from '../../stores/voiceLibraryStore';
 
 export default function SeparationPage() {
     const { t } = useTranslation();
-    const navigate = useNavigate();
     const readiness = useFeatureReadiness('separation');
     const { workKey, source, sourceName, stages, setSource, reset } = useSeparationWorkStore();
     const [exportOpen, setExportOpen] = React.useState(false);
@@ -66,11 +63,11 @@ export default function SeparationPage() {
                 : (await window.kuraToolkit.voice.media.mix(jobId, workKey, track.paths, source?.channels ?? 2)).path,
     }));
 
-    const { vocals, accompaniment } = vocalsAndAccompaniment(tracks);
-
     return (
         <PageContainer>
-            <VoiceFeatureHeader feature='separation' />
+            {/* 分離の画面は画面の切り替えが無いため、ダウンロード管理だけの行は音源を選ぶまで出し、
+                選んだ後は元の音源の行に置く (表示領域を行 1 つ分使わないため) */}
+            {!source && <VoiceFeatureHeader feature='separation' />}
             <ReadinessAlert state={readiness} />
             {!source ? (
                 <FileDropZone
@@ -103,35 +100,13 @@ export default function SeparationPage() {
                         </Button>
                         <Box sx={{ flexGrow: 1 }} />
                         <Button
-                            variant='outlined'
-                            startIcon={<RecordVoiceOverIcon />}
-                            disabled={!vocals}
-                            onClick={async () => {
-                                if (!vocals) return;
-                                try {
-                                    await sendToConversion(workKey, {
-                                        from: 'separation',
-                                        name: sourceName,
-                                        sourcePath: source.sourcePath,
-                                        sourceMedia: source.media,
-                                        vocals: vocals.paths,
-                                        accompaniment,
-                                        channels: source.channels,
-                                    });
-                                    navigate('/audio/conversion');
-                                } catch (error) {
-                                    showNotice('error', voiceErrorMessage(t, error), 10000);
-                                }
-                            }}
+                            size='small'
+                            startIcon={<DownloadIcon />}
+                            onClick={() => openVoiceLibrary({ focus: 'separation' })}
                         >
-                            {t('voice.separation.sendToConversion')}
+                            {t('voice.library.open')}
                         </Button>
-                        <Button
-                            variant='contained'
-                            startIcon={<SaveAltIcon />}
-                            disabled={outputs.length === 0}
-                            onClick={() => setExportOpen(true)}
-                        >
+                        <Button variant='contained' disabled={outputs.length === 0} onClick={() => setExportOpen(true)}>
                             {t('voice.export.open')}
                         </Button>
                     </Panel>
@@ -164,7 +139,13 @@ export default function SeparationPage() {
                 </DialogActions>
             </AppDialog>
 
-            <ProgressDialog open={job !== null} title={job?.title ?? ''} percent={job?.percent} onCancel={cancel} />
+            <ProgressDialog
+                open={job !== null}
+                title={job?.title ?? ''}
+                percent={job?.percent}
+                status={job?.status}
+                onCancel={cancel}
+            />
         </PageContainer>
     );
 }

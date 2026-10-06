@@ -16,7 +16,7 @@ Kura Toolkit is a desktop application that bundles utilities for audio, voice, v
 - Choose a model from the list provided by audio-separator, a verified ensemble combination, your own combination of models, or the classic center-channel cancellation for comparison
 - Every result is listed as a candidate. Compare the candidates with synchronized playback (switching keeps the playback position) and adopt the one you like
 - Separate the adopted results further, stage by stage (for example vocals, then lead and backing vocals, then de-reverb)
-- Export the results as MP3 or FLAC, or send them to Voice Conversion
+- Export the results as MP3 or FLAC
 
 ### Audio: Voice Conversion
 
@@ -29,13 +29,12 @@ Kura Toolkit is a desktop application that bundles utilities for audio, voice, v
 
 ### Audio: Text to Speech
 
-- Read text or subtitles (SRT / WebVTT) aloud in Japanese, English or Chinese (powered by Style-Bert-VITS2, with JP-Extra and multilingual voice models)
+- Read text aloud in Japanese, English or Chinese (powered by Style-Bert-VITS2, with JP-Extra and multilingual voice models). Text can also be entered as rows with start and end times (subtitle files in SRT, WebVTT, ASS, SSA or SBV can be opened, and rows are saved as SRT)
 - Control pauses, speed, pitch, volume and readings with control tags (a subset of SSML) checked as you type, set Japanese pitch accents with an accent notation, English pronunciations with IPA and Chinese pronunciations with pinyin
-- Subtitle cues are placed at their start times. Cues that do not fit can be sped up, overlapped with the next cue, push the following cues back, or just be reported
+- In timed input, each row is placed at its start time. Rows that do not fit between their start and end times can be sped up, overlapped with the next row, push the following rows back, or just be reported, and a control tag changes this for a single row
 - Like Voice Conversion, the screen has Read Aloud, Voice Models and Model Training tabs
 - Download ready-to-use voice models (JVNV corpus models) or import Style-Bert-VITS2 models
 - Train your own voice by reading the presented sentences aloud, in any order and skipping sentences you do not want to read, kept in named training sets (Windows with an NVIDIA GPU only)
-- Send the result to Voice Conversion
 
 ### Voice Feature Downloads
 
@@ -76,7 +75,8 @@ On macOS, Full Disk Access is required to search folders such as Desktop, Docume
 - Number of threads used to search directories (1-100). It starts at half of the CPU cores (up to 4);
   raising it speeds up the Cleanup search on SSDs, but may slow it down on HDDs or network drives
 - Paths to the ffmpeg / ffprobe executables (auto-detected from PATH when not set)
-- Storage locations (library, model and work directories), each changed independently. Changing the library or model directory moves its contents to the chosen folder. A folder that already holds a library or model directory (for example, one copied from another computer) can be chosen too: its contents are merged, and for items in both you choose whether to overwrite after comparing their last modified time, file count and size
+- Storage locations (library, model, cache and work directories), each changed independently. Changing the library, model or cache directory moves its contents to the chosen folder. A folder that already holds a library or model directory (for example, one copied from another computer) can be chosen too: its contents are merged, and for items in both you choose whether to overwrite after comparing their last modified time, file count and size
+- Cache retention period (30 days by default). Cache files not used for longer than this are removed at startup
 - Settings are stored in `~/.kura_toolkit/settings.json`
 
 ### Required External Tools
@@ -85,7 +85,7 @@ Audio Normalizer, Chapter Cut and the voice features (Audio Separation, Voice Co
 
 The voice features have these additional requirements:
 
-- Transposing the accompaniment (Voice Conversion) and fitting subtitle cues (Text to Speech) need an FFmpeg build that includes the rubberband filter, such as Gyan.FFmpeg from winget on Windows, the Homebrew `ffmpeg` on macOS or your distribution's `ffmpeg` on Linux. The app tells you when the configured FFmpeg lacks it
+- Transposing the accompaniment (Voice Conversion) and fitting timed rows into their time (Text to Speech) need an FFmpeg build that includes the rubberband filter, such as Gyan.FFmpeg from winget on Windows, the Homebrew `ffmpeg` on macOS or your distribution's `ffmpeg` on Linux. The app tells you when the configured FFmpeg lacks it
 - An Internet connection to download Python, the packages and the models (several GB in total; the CUDA build of PyTorch alone is about 1.9-2.8 GB)
 - Windows: the [Microsoft Visual C++ Redistributable](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist) (x64)
 - macOS: the Xcode Command Line Tools (`xcode-select --install`) to install the Audio Separation package set

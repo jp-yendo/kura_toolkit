@@ -13,12 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   (x64), macOS (Apple Silicon) and Linux (x64)
 - Voice model management and model training for Voice Conversion and Text to Speech
 - Downloads for the Python runtime, package sets and models used by the voice features
-- App Settings: storage locations for libraries, models and the work directory
+- App Settings: storage locations for libraries, models, the cache and the work directory
 
 ### Changed
 
 - The license changed from MIT to the GNU Affero General Public License v3.0 (AGPL-3.0).
 - Only one copy of the app runs at a time. Starting it again brings the open window to the front.
+- App Settings: "Search threads" no longer has an upper limit.
 - Chapter Cut: intermediate files are created in the work directory set in App Settings and are
   deleted when the cut or split ends.
 

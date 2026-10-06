@@ -2,17 +2,21 @@ import path from 'path';
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { setupConsoleBridge, setMainWindow } from './utils/console-bridge';
 import { registerIpcHandlers } from './ipc/index';
+import { IPC_CHANNELS } from '../shared/constants';
 import { initializeUpdater, scheduleStartupCheck, isInstallingUpdate } from './services/updater';
 import { applySavedTheme, getSettings, initializeSearchThreads, updateSettings } from './services/settings';
 import { cancelAllJobs, setJobWindow } from './services/job-manager';
-import { registerMediaProtocol, registerMediaSchemePrivileges } from './services/voice/media-protocol';
+import { registerMediaProtocol, registerMediaSchemePrivileges } from './services/media-protocol';
 import { removeLeftoverWorkFiles } from './services/work-dir';
+import { removeExpiredCache } from './services/cache-dir';
 import { removeVoiceStagingLeftovers } from './services/voice/voice-models';
 import { removeTrainingSetLeftovers } from './services/voice/training-sets';
 import { setGpuSwitchHandler } from './services/voice/gpu-lock';
 import { stopAllWorkers, unloadOtherWorkers } from './services/voice/python-worker';
 
 let mainWindow: BrowserWindow | null = null;
+// 画面が閉じてよいと返したか (保存していない入力の確認を済ませたか)
+let closeConfirmed = false;
 
 // ライブラリ・モデル・作業ディレクトリを複数のアプリが同時に書き換えないよう、起動できるのは 1 つだけにする。
 // 2 つ目を起動しようとした場合は、起動中のウィンドウを前面に出して終わる
@@ -72,6 +76,18 @@ function createWindow() {
     }
 
     mainWindow.on('ready-to-show', () => mainWindow?.show());
+    // 閉じる前に画面へ問い合わせる (保存していない入力があれば、画面が確認してから閉じてよいと返す)。
+    // 更新のインストールで閉じる場合は問い合わせない (終了と再起動を更新器に任せるため)
+    closeConfirmed = false;
+    mainWindow.on('close', event => {
+        if (closeConfirmed || isInstallingUpdate() || !mainWindow) return;
+        event.preventDefault();
+        mainWindow.webContents.send(IPC_CHANNELS.WINDOW_CLOSE_REQUESTED);
+    });
+    // 画面が落ちた場合は問い合わせに答えられないため、確認せずに閉じられるようにする
+    mainWindow.webContents.on('render-process-gone', () => {
+        closeConfirmed = true;
+    });
     mainWindow.on('closed', () => {
         // 実行中のジョブ (外部プロセス) をすべて停止する
         cancelAllJobs();
@@ -99,6 +115,8 @@ app.whenReady().then(async () => {
     removeLeftoverWorkFiles();
     removeVoiceStagingLeftovers();
     removeTrainingSetLeftovers();
+    // 保持期間を過ぎたキャッシュを裏で消す (起動は待たせない)
+    void removeExpiredCache();
     // 音声機能: プレビュー再生用のスキームを登録する
     registerMediaProtocol();
     // GPU を別のコンポーネントへ渡す前に、他の常駐プロセスが持つモデルを手放させる
@@ -151,6 +169,10 @@ app.whenReady().then(async () => {
     });
     ipcMain.handle('window:isMaximized', () => mainWindow?.isMaximized() ?? false);
     ipcMain.handle('window:close', () => {
+        mainWindow?.close();
+    });
+    ipcMain.handle(IPC_CHANNELS.WINDOW_CONFIRM_CLOSE, () => {
+        closeConfirmed = true;
         mainWindow?.close();
     });
     createWindow();

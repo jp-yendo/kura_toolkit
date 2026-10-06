@@ -3,7 +3,6 @@ import {
     Alert,
     Button,
     Checkbox,
-    Chip,
     DialogActions,
     DialogContent,
     DialogTitle,
@@ -35,6 +34,7 @@ import ProgressDialog from '../../components/common/ProgressDialog';
 import ImportVoiceDialog from '../../components/voice/ImportVoiceDialog';
 import ReadinessAlert, { useFeatureReadiness, whenInstalled } from '../../components/voice/ReadinessAlert';
 import VoiceFeatureHeader from '../../components/voice/VoiceFeatureHeader';
+import UserModelIcon from '../../components/voice/UserModelIcon';
 import { hasSameVoiceName, sanitizeFileName, voiceLabel } from '../../components/voice/voiceFormat';
 import { voiceErrorMessage } from '../../components/voice/voiceErrors';
 import { useJobRunner } from '../../hooks/useJobRunner';
@@ -42,13 +42,7 @@ import { showNotice } from '../../stores/noticeStore';
 import { notifyVoiceLibraryChanged, openVoiceLibrary, useVoiceLibraryStore } from '../../stores/voiceLibraryStore';
 import { VOICE_LANGUAGES, type VoiceLanguage } from '@shared/voice/languages';
 import { TTS_READY_PREFIX } from '@shared/voice/requirements';
-import type { VoiceModelCategory, VoiceModelFeature, VoiceModelInfo } from '@shared/voice/types';
-
-const CATEGORY_COLORS: Record<VoiceModelCategory, 'primary' | 'secondary' | 'default'> = {
-    trained: 'primary',
-    imported: 'secondary',
-    ready: 'default',
-};
+import type { VoiceModelFeature, VoiceModelInfo } from '@shared/voice/types';
 
 type Props = {
     feature: VoiceModelFeature;
@@ -97,7 +91,7 @@ export default function VoiceModelsPage({ feature }: Props) {
 
     const exportVoice = async (voice: VoiceModelInfo) => {
         const dest = await window.kuraToolkit.dialog.saveFile({
-            defaultPath: `${sanitizeFileName(voiceLabel(t, voice))}.kuravoice`,
+            defaultPath: `${sanitizeFileName(voiceLabel(voice))}.kuravoice`,
             filters: [{ name: t('voice.fileFilters.voiceModel'), extensions: ['kuravoice'] }],
         });
         if (!dest) return;
@@ -186,8 +180,9 @@ export default function VoiceModelsPage({ feature }: Props) {
                     <Table size='small'>
                         <TableHead>
                             <TableRow>
+                                {/* ユーザーモデルにだけアイコンを付ける列 (見出しは付けない) */}
+                                <TableCell padding='checkbox' />
                                 <TableCell>{t('voice.models.name')}</TableCell>
-                                <TableCell>{t('voice.models.category')}</TableCell>
                                 <TableCell>{t('voice.models.details')}</TableCell>
                                 <TableCell align='right'>{t('voice.models.actions')}</TableCell>
                             </TableRow>
@@ -195,20 +190,16 @@ export default function VoiceModelsPage({ feature }: Props) {
                         <TableBody>
                             {voices.map(voice => (
                                 <TableRow key={voice.id} hover>
+                                    <TableCell padding='checkbox' align='center'>
+                                        <UserModelIcon voice={voice} />
+                                    </TableCell>
                                     <TableCell>
                                         <Typography variant='body2' sx={{ fontWeight: 600 }}>
-                                            {voiceLabel(t, voice)}
+                                            {voiceLabel(voice)}
                                         </Typography>
                                         <Typography variant='caption' color='text.secondary'>
                                             {new Date(voice.createdAt).toLocaleString()}
                                         </Typography>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Chip
-                                            size='small'
-                                            color={CATEGORY_COLORS[voice.category]}
-                                            label={t(`voice.models.categories.${voice.category}`)}
-                                        />
                                     </TableCell>
                                     <TableCell>
                                         <Typography variant='body2' color='text.secondary'>
@@ -220,7 +211,7 @@ export default function VoiceModelsPage({ feature }: Props) {
                                             <IconButton
                                                 size='small'
                                                 aria-label={t('voice.models.rename')}
-                                                onClick={() => setRename({ voice, name: voiceLabel(t, voice) })}
+                                                onClick={() => setRename({ voice, name: voiceLabel(voice) })}
                                             >
                                                 <DriveFileRenameOutlineIcon fontSize='small' />
                                             </IconButton>
@@ -273,7 +264,7 @@ export default function VoiceModelsPage({ feature }: Props) {
                 existing={voices}
                 onClose={() => setImportOpen(false)}
                 onImported={info => {
-                    showNotice('success', t('voice.models.imported', { name: voiceLabel(t, info) }));
+                    showNotice('success', t('voice.models.imported', { name: voiceLabel(info) }));
                     void load();
                 }}
             />
@@ -292,17 +283,12 @@ export default function VoiceModelsPage({ feature }: Props) {
                             setRename(previous => (previous ? { ...previous, name: event.target.value } : previous))
                         }
                         helperText={
-                            rename && hasSameVoiceName(t, voices, rename.name, rename.voice.id)
+                            rename && hasSameVoiceName(voices, rename.name, rename.voice.id)
                                 ? t('voice.models.duplicateName')
                                 : undefined
                         }
                         slotProps={{ formHelperText: { sx: { color: 'warning.main', whiteSpace: 'pre-line' } } }}
                     />
-                    {rename?.voice.category === 'ready' && (
-                        <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 1 }}>
-                            {t('voice.models.readyRenameNote')}
-                        </Typography>
-                    )}
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setRename(null)}>{t('common.cancel')}</Button>
@@ -373,9 +359,9 @@ export default function VoiceModelsPage({ feature }: Props) {
                 <DialogTitle>{t('voice.models.delete')}</DialogTitle>
                 <DialogContent>
                     <Typography variant='body2' sx={{ lineHeight: 1.6 }}>
-                        {t('voice.models.deleteConfirm', { name: remove.voice ? voiceLabel(t, remove.voice) : '' })}
+                        {t('voice.models.deleteConfirm', { name: remove.voice ? voiceLabel(remove.voice) : '' })}
                     </Typography>
-                    {remove.voice?.category === 'ready' ? (
+                    {remove.voice?.readyItemId ? (
                         <Typography variant='body2' color='text.secondary' sx={{ mt: 1.5, lineHeight: 1.6 }}>
                             {t('voice.models.deleteReady')}
                         </Typography>
@@ -398,7 +384,7 @@ export default function VoiceModelsPage({ feature }: Props) {
                                 await window.kuraToolkit.voice.models.remove(feature, target.id);
                                 // すぐに使えるモデルの削除はダウンロードの取得状況も変えるため、取得状況の変化として知らせる
                                 // (一覧は取得状況の変化を受けて読み直される)
-                                if (target.category === 'ready') notifyVoiceLibraryChanged();
+                                if (target.readyItemId) notifyVoiceLibraryChanged();
                                 else await load();
                             } catch (error) {
                                 showNotice('error', voiceErrorMessage(t, error));

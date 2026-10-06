@@ -23,6 +23,7 @@ import AddIcon from '@mui/icons-material/Add';
 import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolder';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import { useTranslation } from 'react-i18next';
+import { errorMessage, parseError } from '../../components/common/errorMessage';
 import AppDialog from '../../components/common/AppDialog';
 import FileDropZone from '../../components/common/FileDropZone';
 import PathField from '../../components/common/PathField';
@@ -38,10 +39,6 @@ import type { AudioNormalizeItem, AudioNormalizerSettings, BitrateMode, JobEvent
 // ドラッグ&ドロップで受け付ける拡張子。ffmpeg が扱える音声形式を広めに許可し、
 // 実際に正規化できるかどうかの判定は main 側のコーデック判定に委ねる
 const AUDIO_EXTENSIONS = ['wav', 'mp3', 'aac', 'flac', 'm4a', 'mp4', 'ogg', 'oga', 'opus', 'aif', 'aiff', 'wma'];
-const AUDIO_FILTERS = [
-    { name: 'Audio Files', extensions: AUDIO_EXTENSIONS },
-    { name: 'All Files', extensions: ['*'] },
-];
 // loudnorm の I パラメータが受け付ける範囲
 const TARGET_LUFS_MIN = -70;
 const TARGET_LUFS_MAX = -5;
@@ -79,6 +76,10 @@ function splitPath(filePath: string): { name: string; dir: string } {
 
 export default function AudioNormalizerPage() {
     const { t } = useTranslation();
+    const audioFilters = [
+        { name: t('common.fileTypes.audio'), extensions: AUDIO_EXTENSIONS },
+        { name: t('common.fileTypes.all'), extensions: ['*'] },
+    ];
     const { files, addFiles, clearFiles, applyAnalysis } = useAudioStore();
     const { settings, update } = useSettingsStore();
     const [job, setJob] = React.useState<RunningJob | null>(null);
@@ -160,7 +161,7 @@ export default function AudioNormalizerPage() {
     };
 
     const handleAddClick = async () => {
-        const paths = await window.kuraToolkit.dialog.openFiles({ filters: AUDIO_FILTERS, multi: true });
+        const paths = await window.kuraToolkit.dialog.openFiles({ filters: audioFilters, multi: true });
         await addPaths(paths);
     };
 
@@ -254,11 +255,8 @@ export default function AudioNormalizerPage() {
     };
 
     const formatError = (error: unknown): string => {
-        const message = error instanceof Error ? error.message : String(error);
-        if (message.includes('FFMPEG_NOT_FOUND')) return t('common.ffmpegNotFound');
-        if (message.includes('FFPROBE_NOT_FOUND')) return t('common.ffprobeNotFound');
-        if (message.includes('DUPLICATE_OUTPUTS')) return t('audioPage.duplicateOutputs');
-        return message;
+        if (parseError(error).code === 'DUPLICATE_OUTPUTS') return t('audioPage.duplicateOutputs');
+        return errorMessage(t, error);
     };
 
     return (
@@ -278,7 +276,7 @@ export default function AudioNormalizerPage() {
             {files.length === 0 ? (
                 <FileDropZone
                     onFiles={addPaths}
-                    filters={AUDIO_FILTERS}
+                    filters={audioFilters}
                     accept={AUDIO_EXTENSIONS}
                     allowDirectories
                     multiple
@@ -289,7 +287,7 @@ export default function AudioNormalizerPage() {
             ) : (
                 <FileDropZone
                     onFiles={addPaths}
-                    filters={AUDIO_FILTERS}
+                    filters={audioFilters}
                     accept={AUDIO_EXTENSIONS}
                     allowDirectories
                     multiple

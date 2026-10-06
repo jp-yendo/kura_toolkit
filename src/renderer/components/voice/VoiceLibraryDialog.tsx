@@ -23,7 +23,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import DownloadIcon from '@mui/icons-material/Download';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useGuardedNavigate } from '../../stores/navigationGuard';
 import AppDialog from '../common/AppDialog';
 import ProgressDialog from '../common/ProgressDialog';
 import SectionLabel from '../common/SectionLabel';
@@ -58,7 +58,7 @@ const VC_REDIST_URL = 'https://learn.microsoft.com/cpp/windows/latest-supported-
 // アプリに 1 つだけ置き、各機能の画面・不足の案内・アプリ設定などから openVoiceLibrary() で呼び出す
 export default function VoiceLibraryDialog() {
     const { t } = useTranslation();
-    const navigate = useNavigate();
+    const navigate = useGuardedNavigate();
     const { open, select, focus, version, close } = useVoiceLibraryStore();
     const [status, setStatus] = React.useState<LibraryStatus | null>(null);
     const [selected, setSelected] = React.useState<Set<string>>(new Set());
@@ -71,6 +71,8 @@ export default function VoiceLibraryDialog() {
     // 分離モデルの一覧を作れなかったときのエラー (自動では作り直さず、再試行を待つ)
     const [listError, setListError] = React.useState<string | null>(null);
     const [tab, setTab] = React.useState<VoiceFeatureId>(VOICE_FEATURES[0]);
+    // タブごとのスクロール枠 (タブを切り替えても、それぞれのタブのスクロール位置を保つ)
+    const panelRefs = React.useRef<Partial<Record<VoiceFeatureId, HTMLDivElement | null>>>({});
     const { job, run, cancel } = useJobRunner();
 
     const refresh = React.useCallback(async () => {
@@ -86,6 +88,8 @@ export default function VoiceLibraryDialog() {
         setOpenCount(previous => previous + 1);
         // 呼び出し元が指定した機能 (指定が無ければ、選んだ項目を最も多く含む機能) を表示する
         setTab(focus ?? featureForItems(select));
+        // 開き直したときは、すべてのタブを先頭から表示する
+        Object.values(panelRefs.current).forEach(panel => panel?.scrollTo({ top: 0 }));
         void refresh();
     }, [open, select, focus, refresh]);
 
@@ -220,13 +224,18 @@ export default function VoiceLibraryDialog() {
     };
 
     const isInstalled = (id: string) => byId.get(id)?.status === 'installed';
-    const missingRequired = requiredItems(tab).filter(id => !isInstalled(id));
-    const groupRows = React.useMemo(
+    // 全タブの中身を描くため、表の行はタブごとに求めておく
+    const groupRowsByFeature = React.useMemo(
         () =>
-            FEATURE_REQUIREMENTS[tab].map(group =>
-                group.itemPrefix === SEPARATOR_MODEL_PREFIX ? [] : requirementRows(group, items)
-            ),
-        [tab, items]
+            Object.fromEntries(
+                VOICE_FEATURES.map(feature => [
+                    feature,
+                    FEATURE_REQUIREMENTS[feature].map(group =>
+                        group.itemPrefix === SEPARATOR_MODEL_PREFIX ? [] : requirementRows(group, items)
+                    ),
+                ])
+            ) as Record<VoiceFeatureId, ReturnType<typeof requirementRows>[]>,
+        [items]
     );
     // 呼び出し元が分離モデルを選んで開いた場合は、その種類のモデルを表示する
     const initialSeparatorCategory = React.useMemo(() => {
@@ -346,6 +355,8 @@ export default function VoiceLibraryDialog() {
                                 <Tab
                                     key={feature}
                                     value={feature}
+                                    id={`voice-library-tab-${feature}`}
+                                    aria-controls={`voice-library-panel-${feature}`}
                                     label={t(`voice.features.${feature}`)}
                                     icon={
                                         requiredItems(feature).every(isInstalled) ? (
@@ -359,107 +370,144 @@ export default function VoiceLibraryDialog() {
                         </Tabs>
                     </Box>
                 )}
-                <DialogContent dividers>
-                    {status && platform && (
-                        <Stack spacing={2}>
-                            {!platform.supported && (
-                                <Alert severity='error'>
-                                    <AlertTitle>{t('voice.platform.unsupportedTitle')}</AlertTitle>
-                                    {t(`voice.platform.unsupported.${platform.unsupportedReason ?? 'os'}`)}
-                                </Alert>
-                            )}
-                            {platform.vcRuntimeMissing && (
-                                <Alert
-                                    severity='warning'
-                                    action={
-                                        <Button
-                                            color='inherit'
-                                            size='small'
-                                            onClick={() => void window.kuraToolkit.voice.openExternal(VC_REDIST_URL)}
-                                        >
-                                            {t('voice.library.vcRuntimeOpen')}
-                                        </Button>
-                                    }
+                {/* タブごとにスクロール枠を持たせ、全タブを同じ場所に重ねて描く。表示中でないタブは見えなくするだけにする
+                    (display: none にするとスクロール位置が失われるため)。見えないタブは操作も読み上げもさせない (inert) */}
+                <DialogContent
+                    dividers
+                    sx={{
+                        p: 0,
+                        minHeight: 0,
+                        overflow: 'hidden',
+                        display: 'grid',
+                        gridTemplate: 'minmax(0, 1fr) / minmax(0, 1fr)',
+                    }}
+                >
+                    {status &&
+                        platform &&
+                        VOICE_FEATURES.map(feature => {
+                            const active = feature === tab;
+                            const missingRequired = requiredItems(feature).filter(id => !isInstalled(id));
+                            return (
+                                <Box
+                                    key={feature}
+                                    ref={(element: HTMLDivElement | null) => {
+                                        panelRefs.current[feature] = element;
+                                    }}
+                                    role='tabpanel'
+                                    id={`voice-library-panel-${feature}`}
+                                    aria-labelledby={`voice-library-tab-${feature}`}
+                                    inert={!active}
+                                    sx={{
+                                        gridArea: '1 / 1',
+                                        overflowY: 'auto',
+                                        px: 3,
+                                        py: 2,
+                                        visibility: active ? 'visible' : 'hidden',
+                                    }}
                                 >
-                                    {t('voice.library.vcRuntimeMissing')}
-                                </Alert>
-                            )}
-                            {platform.gpu.driverUpdateRequired && (
-                                <Alert severity='warning'>{t('voice.library.driverUpdate')}</Alert>
-                            )}
-                            {platform.storageNonAscii && (
-                                <Alert severity='warning'>{t('voice.library.nonAsciiPath')}</Alert>
-                            )}
-
-                            {tab === 'ttsTraining' && !platform.ttsTrainingAvailable ? (
-                                <Alert severity='info'>{t('voice.library.ttsTrainingUnavailable')}</Alert>
-                            ) : (
-                                missingRequired.length > 0 && (
-                                    <Alert
-                                        severity='info'
-                                        action={
-                                            <Button
-                                                color='inherit'
-                                                size='small'
-                                                onClick={() => selectMany(missingRequired, true)}
+                                    <Stack spacing={2}>
+                                        {!platform.supported && (
+                                            <Alert severity='error'>
+                                                <AlertTitle>{t('voice.platform.unsupportedTitle')}</AlertTitle>
+                                                {t(`voice.platform.unsupported.${platform.unsupportedReason ?? 'os'}`)}
+                                            </Alert>
+                                        )}
+                                        {platform.vcRuntimeMissing && (
+                                            <Alert
+                                                severity='warning'
+                                                action={
+                                                    <Button
+                                                        color='inherit'
+                                                        size='small'
+                                                        onClick={() =>
+                                                            void window.kuraToolkit.voice.openExternal(VC_REDIST_URL)
+                                                        }
+                                                    >
+                                                        {t('voice.library.vcRuntimeOpen')}
+                                                    </Button>
+                                                }
                                             >
-                                                {t('voice.library.selectMissing')}
-                                            </Button>
-                                        }
-                                    >
-                                        {t('voice.library.missingRequired', {
-                                            feature: t(`voice.features.${tab}`),
-                                            count: missingRequired.length,
-                                        })}
-                                    </Alert>
-                                )
-                            )}
+                                                {t('voice.library.vcRuntimeMissing')}
+                                            </Alert>
+                                        )}
+                                        {platform.gpu.driverUpdateRequired && (
+                                            <Alert severity='warning'>{t('voice.library.driverUpdate')}</Alert>
+                                        )}
+                                        {platform.storageNonAscii && (
+                                            <Alert severity='warning'>{t('voice.library.nonAsciiPath')}</Alert>
+                                        )}
 
-                            {FEATURE_REQUIREMENTS[tab].map((group, index) => (
-                                <Box key={group.titleKey}>
-                                    <SectionLabel>
-                                        {t('voice.library.groupTitle', {
-                                            name: t(group.titleKey),
-                                            kind: t(`voice.library.requirementKinds.${group.kind}`),
-                                        })}
-                                    </SectionLabel>
-                                    {group.noteKey && (
-                                        <Typography
-                                            variant='body2'
-                                            color='text.secondary'
-                                            sx={{ mb: 1, lineHeight: 1.6 }}
-                                        >
-                                            {t(group.noteKey)}
-                                        </Typography>
-                                    )}
-                                    {group.itemPrefix === SEPARATOR_MODEL_PREFIX ? (
-                                        <SeparatorModelSection
-                                            key={openCount}
-                                            group={group}
-                                            status={status}
-                                            items={items}
-                                            initialCategory={initialSeparatorCategory}
-                                            selected={selected}
-                                            toggle={toggle}
-                                            selectMany={selectMany}
-                                            onRemove={askRemove}
-                                            progress={progress}
-                                            listError={listError}
-                                            onRetryList={() => setListError(null)}
-                                        />
-                                    ) : (
-                                        <LibraryItemTable
-                                            rows={groupRows[index]}
-                                            selected={selected}
-                                            toggle={toggle}
-                                            onRemove={askRemove}
-                                            progress={progress}
-                                        />
-                                    )}
+                                        {feature === 'ttsTraining' && !platform.ttsTrainingAvailable ? (
+                                            <Alert severity='info'>{t('voice.library.ttsTrainingUnavailable')}</Alert>
+                                        ) : (
+                                            missingRequired.length > 0 && (
+                                                <Alert
+                                                    severity='info'
+                                                    action={
+                                                        <Button
+                                                            color='inherit'
+                                                            size='small'
+                                                            onClick={() => selectMany(missingRequired, true)}
+                                                        >
+                                                            {t('voice.library.selectMissing')}
+                                                        </Button>
+                                                    }
+                                                >
+                                                    {t('voice.library.missingRequired', {
+                                                        feature: t(`voice.features.${feature}`),
+                                                        count: missingRequired.length,
+                                                    })}
+                                                </Alert>
+                                            )
+                                        )}
+
+                                        {FEATURE_REQUIREMENTS[feature].map((group, index) => (
+                                            <Box key={group.titleKey}>
+                                                <SectionLabel>
+                                                    {t('voice.library.groupTitle', {
+                                                        name: t(group.titleKey),
+                                                        kind: t(`voice.library.requirementKinds.${group.kind}`),
+                                                    })}
+                                                </SectionLabel>
+                                                {group.noteKey && (
+                                                    <Typography
+                                                        variant='body2'
+                                                        color='text.secondary'
+                                                        sx={{ mb: 1, lineHeight: 1.6 }}
+                                                    >
+                                                        {t(group.noteKey)}
+                                                    </Typography>
+                                                )}
+                                                {group.itemPrefix === SEPARATOR_MODEL_PREFIX ? (
+                                                    <SeparatorModelSection
+                                                        key={openCount}
+                                                        group={group}
+                                                        status={status}
+                                                        items={items}
+                                                        initialCategory={initialSeparatorCategory}
+                                                        selected={selected}
+                                                        toggle={toggle}
+                                                        selectMany={selectMany}
+                                                        onRemove={askRemove}
+                                                        progress={progress}
+                                                        listError={listError}
+                                                        onRetryList={() => setListError(null)}
+                                                    />
+                                                ) : (
+                                                    <LibraryItemTable
+                                                        rows={groupRowsByFeature[feature][index]}
+                                                        selected={selected}
+                                                        toggle={toggle}
+                                                        onRemove={askRemove}
+                                                        progress={progress}
+                                                    />
+                                                )}
+                                            </Box>
+                                        ))}
+                                    </Stack>
                                 </Box>
-                            ))}
-                        </Stack>
-                    )}
+                            );
+                        })}
                 </DialogContent>
                 {/* 削除はダウンロードの操作から離して左端に置く (押すと確認を出す) */}
                 <DialogActions sx={{ px: 3, py: 1.5, gap: 1.5, flexWrap: 'wrap' }}>

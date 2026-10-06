@@ -9,6 +9,7 @@ import { mediaRef } from './media';
 import { getWorker } from './python-worker';
 import { RVC_EMBEDDER_ITEMS } from './spec';
 import { withGpu } from './gpu-lock';
+import { ffmpegPhase, voicePhase, workerEvents } from './job-progress';
 import { rvcModelFiles } from './voice-models';
 import { discardLater, isInsideWork, newId, produceShared, sessionDir, withJobTemp } from '../work-dir';
 import type {
@@ -42,7 +43,9 @@ function accompanimentShift(workKey: string, accompaniment: string, pitch: numbe
 async function shiftedAccompaniment(workKey: string, accompaniment: string, pitch: number, jobId: string) {
     const output = accompanimentShift(workKey, accompaniment, pitch);
     if (!output) return accompaniment;
-    await produceShared(output, target => pitchShift(accompaniment, target, pitch, jobId));
+    await produceShared(output, target =>
+        pitchShift(accompaniment, target, pitch, jobId, ffmpegPhase(jobId, 'pitchShift'))
+    );
     await removeOtherShifts(output);
     return output;
 }
@@ -109,7 +112,12 @@ async function convertInto(
     await withJobTemp(async temp => {
         // 左右を平均したモノラルで変換する (左右を個別に変換すると推定のずれで音が揺れるため)
         const monoInput = path.join(temp, 'input.wav');
-        await decodeToWav(request.vocals, monoInput, { jobId, channels: 'mono' });
+        await decodeToWav(request.vocals, monoInput, {
+            jobId,
+            channels: 'mono',
+            onProgress: ffmpegPhase(jobId, 'decodeInput'),
+        });
+        voicePhase(jobId, 'prepare');
         const converted = path.join(temp, 'converted.wav');
         const worker = getWorker('converter');
         await withGpu(jobId, 'converter', () =>
@@ -127,41 +135,39 @@ async function convertInto(
                     protect: request.params.protect,
                     embedder: rvc.embedder,
                 },
-                {
-                    jobId,
-                    onEvent: event => {
-                        if (event.kind === 'progress' && typeof event.fraction === 'number') {
-                            emitJobEvent({ jobId, kind: 'progress', percent: event.fraction * 80 });
-                        }
-                    },
-                }
+                { jobId, onEvent: workerEvents(jobId, 0, 80) }
             )
         );
         // 変換後の声を、元の声と同じ大きさ (統合ラウドネス) にそろえる。どちらかが無音で測れない場合はそろえない
-        const originalLoudness = await measureLoudness(monoInput, jobId);
-        const convertedLoudness = await measureLoudness(converted, jobId);
+        // 段階の進み具合: 変換前の測定 0-0.4、変換後の測定 0.4-0.8、音量の調整 0.8-1
+        const loudness = (from: number, span: number) => (percent: number) =>
+            voicePhase(jobId, 'loudness', { fraction: from + (span * percent) / 100 });
+        voicePhase(jobId, 'loudness', { fraction: 0 });
+        const originalLoudness = await measureLoudness(monoInput, jobId, loudness(0, 0.4));
+        const convertedLoudness = await measureLoudness(converted, jobId, loudness(0.4, 0.4));
         const gainDb =
             originalLoudness !== null && convertedLoudness !== null ? originalLoudness - convertedLoudness : 0;
-        // 変換結果 (モデルのサンプリング周波数のモノラル) を、伴奏と同じ周波数の中央定位ステレオにする
-        await runFfmpeg(
-            [
-                '-hide_banner',
-                '-nostdin',
-                '-y',
-                '-i',
-                converted,
-                '-af',
-                `volume=${gainDb.toFixed(2)}dB`,
-                '-ac',
-                String(channels),
-                '-ar',
-                String(sampleRate),
-                '-c:a',
-                'pcm_f32le',
-                vocalsOut,
-            ],
-            { jobId }
-        );
+        // 変換結果はモデルのサンプリング周波数のモノラルのまま残す (伴奏の周波数やチャンネル数には、重ねる処理で合わせる。
+        // ここで合わせると、書き出しのときにもう一度周波数を変えることになるため)
+        if (gainDb === 0) {
+            fs.renameSync(converted, vocalsOut);
+        } else {
+            await runFfmpeg(
+                [
+                    '-hide_banner',
+                    '-nostdin',
+                    '-y',
+                    '-i',
+                    converted,
+                    '-af',
+                    `volume=${gainDb.toFixed(2)}dB`,
+                    '-c:a',
+                    'pcm_f32le',
+                    vocalsOut,
+                ],
+                { jobId, totalSec: (await probeAudio(converted, jobId)).durationSec, onProgress: loudness(0.8, 0.2) }
+            );
+        }
     });
 
     let withAccompaniment: MediaRef | null = null;
@@ -173,7 +179,13 @@ async function convertInto(
             jobId
         );
         const output = path.join(dir, 'with-accompaniment.wav');
-        await mixFiles([vocalsOut, accompaniment], output, channels, jobId);
+        await mixFiles(
+            [vocalsOut, accompaniment],
+            output,
+            { channels, sampleRate },
+            jobId,
+            ffmpegPhase(jobId, 'mixPreview')
+        );
         withAccompaniment = await mediaRef(output);
     }
     emitJobEvent({ jobId, kind: 'progress', percent: 100 });
@@ -183,6 +195,7 @@ async function convertInto(
         voiceName: info.name,
         params: request.params,
         vocals: await mediaRef(vocalsOut),
+        channels,
         withAccompaniment,
         createdAt: Date.now(),
     };
@@ -192,6 +205,7 @@ async function convertInto(
 export async function renderMix(jobId: string, request: MixRenderRequest): Promise<MediaRef> {
     startJob(jobId);
     try {
+        voicePhase(jobId, 'prepare');
         if (!isInsideWork(request.workKey, request.vocals)) throw new Error('INVALID_PATH');
         if (request.accompaniment && !isInsideWork(request.workKey, request.accompaniment)) {
             throw new Error('INVALID_PATH');
@@ -202,14 +216,22 @@ export async function renderMix(jobId: string, request: MixRenderRequest): Promi
             : null;
         const key = crypto
             .createHash('sha1')
-            .update(JSON.stringify({ vocals: request.vocals, accompaniment, params: request.params }))
+            .update(
+                JSON.stringify({
+                    vocals: request.vocals,
+                    accompaniment,
+                    channels: request.channels,
+                    params: request.params,
+                })
+            )
             .digest('hex')
             .slice(0, 16);
         const output = path.join(sessionDir(request.workKey, 'mix'), `${key}.wav`);
         await produceShared(output, async target => {
+            // 変換結果 (モデルの周波数のモノラル) を、元の音源のチャンネル数と伴奏の周波数に合わせて重ねる
             const vocalsInfo = await probeAudio(request.vocals, jobId);
             let sampleRate = vocalsInfo.sampleRate;
-            let channels = vocalsInfo.channels;
+            let channels = request.channels === 2 ? 2 : 1;
             if (request.accompaniment) {
                 const shifted = await shiftedAccompaniment(
                     request.workKey,
@@ -231,14 +253,7 @@ export async function renderMix(jobId: string, request: MixRenderRequest): Promi
                     channels,
                     params: request.params,
                 },
-                {
-                    jobId,
-                    onEvent: event => {
-                        if (event.kind === 'progress' && typeof event.fraction === 'number') {
-                            emitJobEvent({ jobId, kind: 'progress', percent: event.fraction * 100 });
-                        }
-                    },
-                }
+                { jobId, onEvent: workerEvents(jobId) }
             );
         });
         return await mediaRef(output);

@@ -142,9 +142,6 @@ export type DirectoryScanResult = {
     errors: string[];
 };
 
-// エラーを溜め込みすぎないよう保持する上限
-export const MAX_SCAN_ERRORS = 100;
-
 // ADS 判定をまとめて処理する単位。ファイルが数万ある単一ディレクトリでも
 // この単位に切って複数スレッドへ回せるようにする
 export const ADS_CHUNK_SIZE = 512;
@@ -213,9 +210,7 @@ export function scanCleanupDirectory(dir: string, config: CleanupScanConfig, out
                 }
             }
         } catch (error) {
-            if (out.errors.length < MAX_SCAN_ERRORS) {
-                out.errors.push(`${entryPath}: ${error instanceof Error ? error.message : String(error)}`);
-            }
+            out.errors.push(`${entryPath}: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
 }

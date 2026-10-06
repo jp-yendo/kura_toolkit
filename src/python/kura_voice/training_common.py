@@ -65,9 +65,9 @@ def run_step(
             print(line, file=sys.stderr, flush=True)
             if reported is None and line.startswith(ERROR_MARKER):
                 code, _, message = line[len(ERROR_MARKER) :].strip().partition(" ")
-                reported = KuraError(code, message[:500])
+                reported = KuraError(code, message)
             if ERROR_LINE.match(line):
-                last_error = line[:500]
+                last_error = line
             match = epoch_line.search(line) if epoch_line is not None else None
             if match:
                 context.event(kind="stage", stage=stage, epoch=int(match.group(1)), totalEpochs=total_epochs)
