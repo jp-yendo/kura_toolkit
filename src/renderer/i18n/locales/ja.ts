@@ -57,6 +57,7 @@ export default {
     },
     jobPhasesCounted: {
         encode: '書き出しています ({{current}} / {{total}})',
+        separate: '音声を分離しています ({{current}} / {{total}})',
         training: {
             train: '学習しています ({{current}} / {{total}} 回目)',
         },

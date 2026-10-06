@@ -4,75 +4,50 @@ import {
     Box,
     Button,
     Checkbox,
-    Chip,
     DialogActions,
     DialogContent,
     DialogTitle,
-    FormControl,
     FormControlLabel,
     IconButton,
-    InputLabel,
-    MenuItem,
-    Radio,
-    Select,
     Stack,
-    Tab,
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableRow,
-    Tabs,
-    ToggleButton,
-    ToggleButtonGroup,
+    TextField,
     Tooltip,
     Typography,
 } from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
-import RemoveIcon from '@mui/icons-material/Remove';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import CallSplitIcon from '@mui/icons-material/CallSplit';
-import DownloadIcon from '@mui/icons-material/Download';
-import type { TFunction } from 'i18next';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import TuneIcon from '@mui/icons-material/Tune';
 import { useTranslation } from 'react-i18next';
 import AppDialog from '../common/AppDialog';
 import Panel from '../common/Panel';
-import SectionLabel from '../common/SectionLabel';
 import ProgressDialog from '../common/ProgressDialog';
-import PresetBar from './PresetBar';
-import SeparationParamsForm from './SeparationParamsForm';
-import SeparationMethodPicker, {
-    EMPTY_METHOD_SELECTION,
-    resolveMethod,
-    type MethodSelection,
-} from './SeparationMethodPicker';
-import SyncPlayer, { type PlayerSource } from './SyncPlayer';
+import SeparationDialog from './SeparationDialog';
+import { EMPTY_METHOD_SELECTION, separatorDisplayName, type MethodSelection } from './SeparationMethodPicker';
+import SyncPlayer from './SyncPlayer';
 import {
-    assignRoles,
-    computeTracks,
-    roleLabelKey,
+    childrenOf,
+    descendantsOf,
+    nextNumber,
+    outputKey,
+    outputLabel,
     SOURCE_KEY,
-    stageRoles,
-    type SepStage,
-    type Track,
-} from './separationTracks';
+    treeOutputs,
+    type SepNode,
+} from './separationTree';
 import { isCancelledError, missingItemsFromError, voiceErrorMessage } from './voiceErrors';
 import { useJobRunner } from '../../hooks/useJobRunner';
 import { showNotice } from '../../stores/noticeStore';
 import { openVoiceLibrary, useVoiceLibraryStore } from '../../stores/voiceLibraryStore';
-import type { SeparationWorkStore } from '../../stores/separationWorkStore';
-import {
-    type MediaRef,
-    type SeparationArch,
-    type SeparationCandidate,
-    type SeparationCategory,
-    type SeparationModelList,
-    type SeparationParams,
-    type SeparationPresetParams,
+import { DEFAULT_SEPARATION_PARAMS, type SeparationWorkStore } from '../../stores/separationWorkStore';
+import type {
+    SeparationArch,
+    SeparationCandidate,
+    SeparationMethod,
+    SeparationModelList,
+    SeparationParams,
 } from '@shared/voice/types';
 
-const CATEGORIES: SeparationCategory[] = ['vocals', 'multi', 'karaoke', 'cleanup', 'other'];
 const ARCH_KEYS: Record<SeparationArch, keyof SeparationParams> = {
     MDX: 'mdx',
     VR: 'vr',
@@ -80,56 +55,54 @@ const ARCH_KEYS: Record<SeparationArch, keyof SeparationParams> = {
     MDXC: 'mdxc',
 };
 
-type PlaySelection = { kind: 'original' } | { kind: 'candidate'; candidateId: string; stems: string[] };
-
-// 複数の出力を重ねた再生用の音 (組み合わせごとに作り、作り直したら前のものは消す)
-type Overlay = { key: string; media: MediaRef };
+// 1 段の字下げ (MUI の spacing の単位)
+const INDENT = 3;
+// 保存対象の列の幅
+const SAVE_COLUMN_WIDTH = 56;
 
 type Props = {
     store: SeparationWorkStore;
     disabled?: boolean;
+    // 「保存対象」の列を出す (音声分離の画面。書き出す音を選ぶ)
+    saveColumn?: boolean;
 };
 
-function stemLabel(t: TFunction, category: SeparationCategory, stemName: string, role: string): string {
-    const key = roleLabelKey(category, role);
-    return key ? `${t(key)} (${stemName})` : stemName;
-}
+// 分離のダイアログの対象 (新しく分離する音、または作り直す結果)
+type DialogTarget =
+    | { kind: 'new'; parentKey: string; selection: MethodSelection; params: SeparationParams }
+    | { kind: 'redo'; node: SepNode };
 
-export function trackLabel(t: (key: string) => string, track: Track): string {
-    return track.labelKey ? t(track.labelKey) : (track.label ?? track.key);
-}
+// 消える結果の確認 (削除・作り直し)。閉じる間も表示が変わらないよう、開いた時点の内容を持つ
+type RemoveConfirm = { kind: 'remove' | 'redo'; node: SepNode; outputs: string[]; open: boolean };
 
-// 分離の操作部。音声分離の画面と、音声変換の画面 (入力と分離) で共用する
-export default function SeparationWorkbench({ store, disabled }: Props) {
+// 分離の操作部。音声分離の画面と、音声変換の画面 (入力と分離) で共用する。
+// 元の音源を根にした木の形で、分離した結果をその音の下に字下げして並べる。どの音からも「ここから分離」で
+// 何度でも分離でき (同じ音から分離した結果どうしを聞き比べられる)、結果は「パラメーターを変えて作成」で作り直せる
+export default function SeparationWorkbench({ store, disabled, saveColumn }: Props) {
     const { t } = useTranslation();
     const libraryVersion = useVoiceLibraryStore(state => state.version);
     const {
         workKey,
         source,
-        stages,
-        activeStage,
+        nodes,
+        saveTargets,
         params,
-        setActiveStage,
-        addStage,
-        truncateAfter,
-        updateStage,
-        addCandidate,
-        removeCandidate,
+        addNode,
+        replaceNode,
+        removeNode,
+        removeDescendants,
+        setLabel,
+        setSaveTarget,
         setParams,
     } = store();
     const [models, setModels] = React.useState<SeparationModelList | null>(null);
     const [modelError, setModelError] = React.useState<string | null>(null);
-    const [selection, setSelection] = React.useState<MethodSelection>(EMPTY_METHOD_SELECTION);
-    const [play, setPlay] = React.useState<PlaySelection>({ kind: 'original' });
-    const [overlay, setOverlay] = React.useState<Overlay | null>(null);
-    const overlayRef = React.useRef<Overlay | null>(null);
-    // 重ねた音を作っている途中の組み合わせ (最後に頼んだもの)
-    const pendingMixRef = React.useRef<string | null>(null);
-    const [pendingAdoption, setPendingAdoption] = React.useState<{ index: number; patch: Partial<SepStage> } | null>(
-        null
-    );
-    // 最後の段階の削除の確認。閉じる間も表示が変わらないよう、段階の名前を開いた時点で持つ
-    const [removeStageConfirm, setRemoveStageConfirm] = React.useState({ open: false, name: '' });
+    const [dialog, setDialog] = React.useState<DialogTarget | null>(null);
+    // 前回、新しく分離したときの方式 (次に開くときの初期値)
+    const [lastSelection, setLastSelection] = React.useState<MethodSelection>(EMPTY_METHOD_SELECTION);
+    const [removeConfirm, setRemoveConfirm] = React.useState<RemoveConfirm | null>(null);
+    // 出力の名前の変更 (結果・出力の名前と、入力中の名前)
+    const [renaming, setRenaming] = React.useState<{ nodeId: string; stemName: string; label: string } | null>(null);
     const { job, run, cancel } = useJobRunner();
 
     // 一覧の読み込みの順番 (後から頼んだ読み込みの結果だけを使う)
@@ -154,199 +127,28 @@ export default function SeparationWorkbench({ store, disabled }: Props) {
         void loadModels();
     }, [loadModels, libraryVersion]);
 
-    const stage = stages[activeStage];
-    const before = React.useMemo(
-        () => computeTracks(source?.media.path ?? null, stages.slice(0, activeStage)),
-        [source, stages, activeStage]
-    );
-    const after = React.useMemo(() => computeTracks(source?.media.path ?? null, stages), [source, stages]);
-    const inputTrack = before.tracks.find(track => track.key === stage?.inputKey);
+    const outputs = React.useMemo(() => treeOutputs(nodes), [nodes]);
 
-    // 段階を切り替えたら、再生対象をその段階の入力に戻す
-    React.useEffect(() => {
-        setPlay({ kind: 'original' });
-    }, [activeStage]);
-
-    // 重ねた音を置き換える。重ねた音は同じ組み合わせなら同じファイルで、この作業のほかの所 (変換の画面のボーカルなど)
-    // でも使うことがあるため、ここでは消さない (機能の作業を破棄するときに消える)
-    const replaceOverlay = (next: Overlay | null) => {
-        overlayRef.current = next;
-        setOverlay(next);
-    };
-
-    // --- 再生対象 (複数の出力を選んだ場合は重ねた音を作る) ---
-    const playCandidate =
-        play.kind === 'candidate' ? stage?.candidates.find(item => item.id === play.candidateId) : undefined;
-    const playStems =
-        playCandidate && play.kind === 'candidate'
-            ? playCandidate.stems.filter(stem => play.stems.includes(stem.name))
-            : [];
-    const mixKey = playStems.map(stem => stem.media.path).join('|');
-    const sourceChannels = source?.channels ?? 2;
-    React.useEffect(() => {
-        if (playStems.length < 2 || overlayRef.current?.key === mixKey) {
-            pendingMixRef.current = null;
-            return;
-        }
-        let cancelled = false;
-        const jobId = crypto.randomUUID();
-        pendingMixRef.current = mixKey;
-        void window.kuraToolkit.voice.media
-            .mix(
-                jobId,
-                workKey,
-                playStems.map(stem => stem.media.path),
-                sourceChannels
-            )
-            .then(media => {
-                if (cancelled) return;
-                pendingMixRef.current = null;
-                replaceOverlay({ key: mixKey, media });
-            })
-            .catch(error => {
-                // 画面を離れた後 (作業を破棄した後) の失敗は知らせない
-                if (!cancelled) showNotice('error', voiceErrorMessage(t, error));
-            });
-        return () => {
-            cancelled = true;
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- 組み合わせ (mixKey) が変わったときだけ作る
-    }, [mixKey]);
-
-    if (!source || !stage) return null;
-    const category = stage.category;
-    const stereo = source.channels >= 2;
-    const { method, archs: methodArchs } = resolveMethod(selection, category, models, stereo);
+    if (!source) return null;
     const busy = disabled || job !== null;
-    const canEditStage = stage.candidates.length === 0;
-    const lastIndex = stages.length - 1;
+    const sourceLabel = t('voice.tracks.source');
 
-    const candidateLabel = (candidate: SeparationCandidate) =>
-        candidate.method.kind === 'centerCancel' ? t('voice.separation.centerCancel') : candidate.methodLabel;
-    const stageName = (item: SepStage, index: number) =>
-        t('voice.separation.stageLabel', {
-            index: index + 1,
-            category: t(`voice.separation.categories.${item.category}`),
-        });
+    // 音の名前 (元の音源、または出力の番号-名前)
+    const labelOf = (key: string) => outputs.find(output => output.key === key)?.label ?? sourceLabel;
 
-    // 候補を破棄する (出力のファイルを消す)。重ねた音は同じ組み合わせで使い回すため、機能の作業を破棄するまで残す。
-    // 変換の画面へ渡した出力は、渡した時点で変換の画面の作業へ移してあるため消えない
-    const discardCandidates = (candidates: SeparationCandidate[]) => {
-        const paths = candidates.flatMap(candidate => candidate.stems.map(stem => stem.media.path));
-        if (paths.length === 0) return;
-        void window.kuraToolkit.voice.media.discard(workKey, paths);
-        if (overlayRef.current && paths.some(path => overlayRef.current?.key.split('|').includes(path)))
-            replaceOverlay(null);
+    // 結果の名前 (一覧と同じ表示名。組み合わせはモデル名と結果の決め方)
+    const modelName = (filename: string) => {
+        const model = models?.models.find(item => item.filename === filename);
+        return model ? separatorDisplayName(model.name) : filename;
     };
-
-    const runSeparation = async () => {
-        if (!method || !inputTrack) return;
-        const input = inputTrack.paths.length === 1 ? inputTrack.paths[0] : null;
-        try {
-            const candidate = await run(t('voice.separation.running'), async jobId => {
-                // 複数の音を重ねたトラック (伴奏に戻したコーラスなど) は、先に 1 つにしてから分離する
-                // (重ねた音は同じ組み合わせなら同じファイルで、再生などにも使うため、機能の作業を破棄するときに消える)
-                const inputPath =
-                    input ??
-                    (await window.kuraToolkit.voice.media.mix(jobId, workKey, inputTrack.paths, source.channels)).path;
-                return window.kuraToolkit.voice.separation.run(jobId, {
-                    workKey,
-                    input: inputPath,
-                    channels: source.channels,
-                    method,
-                    params,
-                    category,
-                });
-            });
-            addCandidate(activeStage, candidate);
-            setPlay({ kind: 'candidate', candidateId: candidate.id, stems: [candidate.stems[0]?.name ?? ''] });
-        } catch (error) {
-            if (isCancelledError(error)) {
-                showNotice('warning', t('voice.common.cancelled'));
-                return;
-            }
-            const missing = missingItemsFromError(error);
-            showNotice('error', voiceErrorMessage(t, error), 10000);
-            if (missing.length > 0) openVoiceLibrary({ select: missing, focus: 'separation' });
+    const resultLabel = (result: SeparationCandidate) => {
+        const method = result.method;
+        if (method.kind === 'model') return modelName(method.filename);
+        if (method.kind === 'ensemble') {
+            return `${method.filenames.map(modelName).join(' + ')} (${t(`voice.separation.algorithms.${method.algorithm}`)})`;
         }
+        return result.methodLabel;
     };
-
-    // 採用を変えると後ろの段階の結果は無効になる。後ろに段階がある場合は確認してから変える
-    const changeAdoption = (patch: Partial<SepStage>) => {
-        if (activeStage < lastIndex && stages.slice(activeStage + 1).some(item => item.candidates.length > 0)) {
-            setPendingAdoption({ index: activeStage, patch });
-            return;
-        }
-        updateStage(activeStage, patch);
-    };
-
-    const applyPendingAdoption = () => {
-        if (!pendingAdoption) return;
-        const removed = truncateAfter(pendingAdoption.index);
-        updateStage(pendingAdoption.index, pendingAdoption.patch);
-        discardCandidates(removed);
-        setPendingAdoption(null);
-    };
-
-    // 最後の段階を取り除く。候補がある場合は確認してから破棄する
-    const closeRemoveStage = () => setRemoveStageConfirm(previous => ({ ...previous, open: false }));
-    const removeLastStage = () => {
-        closeRemoveStage();
-        discardCandidates(truncateAfter(lastIndex - 1));
-    };
-    const askRemoveLastStage = () => {
-        if (stages[lastIndex].candidates.length > 0)
-            setRemoveStageConfirm({ open: true, name: stageName(stages[lastIndex], lastIndex) });
-        else removeLastStage();
-    };
-
-    const deleteCandidate = (candidate: SeparationCandidate) => {
-        const adoptedSomewhere =
-            stage.sameCandidate === candidate.id || Object.values(stage.perRole).includes(candidate.id);
-        if (adoptedSomewhere && activeStage < lastIndex) {
-            // 後ろの段階が使っている候補は消せない (採用を変えてから消す)
-            showNotice('warning', t('voice.separation.candidateInUse'));
-            return;
-        }
-        removeCandidate(activeStage, candidate.id);
-        discardCandidates([candidate]);
-        if (play.kind === 'candidate' && play.candidateId === candidate.id) setPlay({ kind: 'original' });
-    };
-
-    let playerSource: PlayerSource | null = null;
-    if (play.kind === 'original') {
-        const path = inputTrack?.paths.length === 1 ? inputTrack.paths[0] : null;
-        const media = path === source.media.path ? source.media : null;
-        if (media) playerSource = { key: `original-${stage.id}`, url: media.url };
-        else if (inputTrack && path) {
-            const candidateStem = stages
-                .flatMap(item => item.candidates)
-                .flatMap(candidate => candidate.stems)
-                .find(stem => stem.media.path === path);
-            if (candidateStem) playerSource = { key: `input-${stage.id}`, url: candidateStem.media.url };
-        }
-    } else if (playCandidate) {
-        if (playStems.length === 1) {
-            playerSource = { key: `${playCandidate.id}-${playStems[0].name}`, url: playStems[0].media.url };
-        } else if (playStems.length > 1 && overlay?.key === mixKey) {
-            playerSource = { key: `${playCandidate.id}-mix-${mixKey}`, url: overlay.media.url };
-        }
-    }
-
-    const toggleStem = (candidate: SeparationCandidate, stemName: string) => {
-        setPlay(previous => {
-            if (previous.kind !== 'candidate' || previous.candidateId !== candidate.id) {
-                return { kind: 'candidate', candidateId: candidate.id, stems: [stemName] };
-            }
-            const stems = previous.stems.includes(stemName)
-                ? previous.stems.filter(name => name !== stemName)
-                : [...previous.stems, stemName];
-            return stems.length === 0 ? { kind: 'original' } : { ...previous, stems };
-        });
-    };
-
-    const roles = stageRoles(stage);
-    const lastComplete = after.completedStages === stages.length;
 
     // パラメーターの値の表示 (未指定はモデルの既定、オン・オフは言葉で示す)
     const paramValue = (value: unknown) => {
@@ -356,60 +158,276 @@ export default function SeparationWorkbench({ store, disabled }: Props) {
     };
     const archName = (key: string) =>
         (Object.keys(ARCH_KEYS) as SeparationArch[]).find(arch => ARCH_KEYS[arch] === key) ?? key;
-    const paramsSummary = (candidate: SeparationCandidate) =>
-        Object.entries(candidate.params)
-            .map(
-                ([key, values]) =>
-                    `${archName(key)}: ${Object.entries(values as Record<string, unknown>)
-                        .map(([name, value]) => `${t(`voice.separation.params.${name}`)}=${paramValue(value)}`)
-                        .join(', ')}`
-            )
-            .join(' / ');
+    // 結果に添えるパラメーター。既定から変えた値だけを示す (結果どうしの違いを読み取りやすくするため)
+    const paramsSummary = (result: SeparationCandidate) => {
+        const parts = Object.entries(result.params).flatMap(([key, values]) => {
+            const defaults = DEFAULT_SEPARATION_PARAMS[key as keyof SeparationParams] as unknown as Record<
+                string,
+                unknown
+            >;
+            const changed = Object.entries(values as Record<string, unknown>).filter(
+                ([name, value]) => defaults?.[name] !== value
+            );
+            if (changed.length === 0) return [];
+            return [
+                `${archName(key)}: ${changed
+                    .map(([name, value]) => `${t(`voice.separation.params.${name}`)}=${paramValue(value)}`)
+                    .join(', ')}`,
+            ];
+        });
+        return parts.length > 0 ? parts.join(' / ') : t('voice.separation.defaultParams');
+    };
+
+    // 結果の出力のファイルを消す
+    const discard = (removed: SepNode[]) => {
+        const paths = removed.flatMap(node => node.result.stems.map(stem => stem.media.path));
+        if (paths.length > 0) void window.kuraToolkit.voice.media.discard(workKey, paths);
+    };
+
+    // 結果と、その下にある結果の出力 (消えるものの一覧に示す。書き出しのファイル名と同じ名前)
+    const outputsOf = (removed: SepNode[]) =>
+        outputs.filter(output => removed.includes(output.node)).map(output => output.path);
+
+    // 分離する。作り直しでは、実行した時点で下にある結果を消す (失敗・中止のときは、その結果自体は前のまま残る)
+    const runSeparation = async (
+        target: DialogTarget,
+        selection: MethodSelection,
+        method: SeparationMethod,
+        nextParams: SeparationParams
+    ): Promise<boolean> => {
+        setParams(nextParams);
+        const parentKey = target.kind === 'new' ? target.parentKey : target.node.parentKey;
+        const input =
+            parentKey === SOURCE_KEY ? source.media.path : outputs.find(output => output.key === parentKey)?.mediaPath;
+        if (!input) return false;
+        if (target.kind === 'redo') discard(removeDescendants(target.node.id));
+        try {
+            const result = await run(t('voice.separation.running'), jobId =>
+                window.kuraToolkit.voice.separation.run(jobId, {
+                    workKey,
+                    input,
+                    channels: source.channels,
+                    method,
+                    params: nextParams,
+                })
+            );
+            if (target.kind === 'redo') {
+                replaceNode({ ...target.node, result, selection, params: nextParams });
+                discard([target.node]);
+            } else {
+                setLastSelection(selection);
+                addNode({
+                    id: crypto.randomUUID(),
+                    parentKey,
+                    number: nextNumber(nodes, parentKey),
+                    result,
+                    selection,
+                    params: nextParams,
+                    labels: {},
+                });
+            }
+            return true;
+        } catch (error) {
+            if (isCancelledError(error)) {
+                showNotice('warning', t('voice.common.cancelled'));
+                return false;
+            }
+            const missing = missingItemsFromError(error);
+            showNotice('error', voiceErrorMessage(t, error), 10000);
+            if (missing.length > 0) openVoiceLibrary({ select: missing, focus: 'separation' });
+            return false;
+        }
+    };
+
+    const openNew = (parentKey: string) => setDialog({ kind: 'new', parentKey, selection: lastSelection, params });
+
+    // 作り直し: 下に結果があれば、消えるものを示して了承をもらってからダイアログを開く
+    const askRedo = (node: SepNode) => {
+        const below = descendantsOf(nodes, node.id);
+        if (below.length === 0) setDialog({ kind: 'redo', node });
+        else setRemoveConfirm({ kind: 'redo', node, outputs: outputsOf(below), open: true });
+    };
+
+    // 削除: 結果と、その下にある結果を消す。下に結果があるときは、消えるものを示して確認する
+    const askRemove = (node: SepNode) => {
+        const below = descendantsOf(nodes, node.id);
+        if (below.length === 0) discard(removeNode(node.id));
+        else setRemoveConfirm({ kind: 'remove', node, outputs: outputsOf([node, ...below]), open: true });
+    };
+
+    const closeRemoveConfirm = () => setRemoveConfirm(previous => (previous ? { ...previous, open: false } : null));
+    const acceptRemoveConfirm = () => {
+        if (!removeConfirm) return;
+        closeRemoveConfirm();
+        if (removeConfirm.kind === 'remove') discard(removeNode(removeConfirm.node.id));
+        else setDialog({ kind: 'redo', node: removeConfirm.node });
+    };
+
+    const applyRename = () => {
+        if (!renaming) return;
+        setLabel(renaming.nodeId, renaming.stemName, renaming.label.trim() || null);
+        setRenaming(null);
+    };
+
+    // 1 行の並び: 字下げした名前・プレーヤー・ここから分離 | 保存対象
+    const rowSx = {
+        display: 'grid',
+        gridTemplateColumns: saveColumn ? `minmax(0, 1fr) ${SAVE_COLUMN_WIDTH}px` : 'minmax(0, 1fr)',
+        alignItems: 'center',
+        columnGap: 1,
+    } as const;
+    const cellSx = (depth: number) =>
+        ({
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', sm: '160px minmax(0, 1fr) auto' },
+            alignItems: 'center',
+            gap: 1.5,
+            pl: depth * INDENT,
+            minWidth: 0,
+        }) as const;
+
+    const separateButton = (key: string, label: string) => (
+        <Button
+            size='small'
+            startIcon={<CallSplitIcon />}
+            disabled={busy}
+            onClick={() => openNew(key)}
+            aria-label={t('voice.separation.separateFromFor', { name: label })}
+            sx={{ whiteSpace: 'nowrap' }}
+        >
+            {t('voice.separation.separateFrom')}
+        </Button>
+    );
+
+    // ある音から分離した結果 (見出しと出力)。出力から分離した結果は、さらに字下げしてその出力の下に置く
+    const renderChildren = (parentKey: string, depth: number): React.ReactNode =>
+        childrenOf(nodes, parentKey).map(node => {
+            const summary = paramsSummary(node.result);
+            return (
+                <Stack key={node.id} spacing={1}>
+                    <Box sx={{ ...rowSx }}>
+                        <Stack
+                            direction='row'
+                            spacing={1}
+                            sx={{ alignItems: 'center', pl: depth * INDENT, minWidth: 0 }}
+                        >
+                            <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                                <Typography variant='body2' sx={{ fontWeight: 600, overflowWrap: 'anywhere' }}>
+                                    {resultLabel(node.result)}
+                                </Typography>
+                                {summary && (
+                                    <Typography
+                                        variant='caption'
+                                        color='text.secondary'
+                                        sx={{ display: 'block', lineHeight: 1.5 }}
+                                    >
+                                        {summary}
+                                    </Typography>
+                                )}
+                            </Box>
+                            <Button
+                                size='small'
+                                startIcon={<TuneIcon />}
+                                disabled={busy}
+                                onClick={() => askRedo(node)}
+                                sx={{ whiteSpace: 'nowrap' }}
+                            >
+                                {t('voice.separation.recreate')}
+                            </Button>
+                            <Tooltip title={t('voice.separation.deleteResult')}>
+                                <span>
+                                    <IconButton
+                                        size='small'
+                                        aria-label={t('voice.separation.deleteResult')}
+                                        disabled={busy}
+                                        onClick={() => askRemove(node)}
+                                    >
+                                        <DeleteOutlineIcon fontSize='small' />
+                                    </IconButton>
+                                </span>
+                            </Tooltip>
+                        </Stack>
+                    </Box>
+                    {node.result.stems.map(stem => {
+                        const key = outputKey(node.id, stem.name);
+                        const label = outputLabel(node, stem.name);
+                        return (
+                            <Stack key={key} spacing={1}>
+                                <Box sx={rowSx}>
+                                    <Box sx={cellSx(depth)}>
+                                        <Stack
+                                            direction='row'
+                                            spacing={0.25}
+                                            sx={{ alignItems: 'center', minWidth: 0 }}
+                                        >
+                                            <Typography
+                                                variant='body2'
+                                                sx={{ fontWeight: 600, overflowWrap: 'anywhere' }}
+                                            >
+                                                {label}
+                                            </Typography>
+                                            <Tooltip title={t('voice.separation.rename')}>
+                                                <span>
+                                                    <IconButton
+                                                        size='small'
+                                                        aria-label={t('voice.separation.renameFor', { name: label })}
+                                                        disabled={busy}
+                                                        onClick={() =>
+                                                            setRenaming({
+                                                                nodeId: node.id,
+                                                                stemName: stem.name,
+                                                                label: node.labels[stem.name] ?? stem.name,
+                                                            })
+                                                        }
+                                                    >
+                                                        <EditOutlinedIcon sx={{ fontSize: 16 }} />
+                                                    </IconButton>
+                                                </span>
+                                            </Tooltip>
+                                        </Stack>
+                                        <SyncPlayer source={{ key, url: stem.media.url }} />
+                                        {separateButton(key, label)}
+                                    </Box>
+                                    {saveColumn && (
+                                        // チェックの下に「対象」を置く 2 行の形 (行ごとに同じ位置に並べ、列として見せる)
+                                        <FormControlLabel
+                                            labelPlacement='bottom'
+                                            sx={{ m: 0, justifySelf: 'center' }}
+                                            control={
+                                                <Checkbox
+                                                    size='small'
+                                                    checked={saveTargets.includes(key)}
+                                                    onChange={(_event, checked) => setSaveTarget(key, checked)}
+                                                    sx={{ p: 0.5 }}
+                                                    slotProps={{
+                                                        input: {
+                                                            'aria-label': t('voice.separation.saveTargetFor', {
+                                                                name: label,
+                                                            }),
+                                                        },
+                                                    }}
+                                                />
+                                            }
+                                            label={
+                                                <Typography variant='caption' color='text.secondary'>
+                                                    {t('voice.separation.saveColumn')}
+                                                </Typography>
+                                            }
+                                        />
+                                    )}
+                                </Box>
+                                {renderChildren(key, depth + 1)}
+                            </Stack>
+                        );
+                    })}
+                </Stack>
+            );
+        });
+
+    const dialogParentKey = dialog ? (dialog.kind === 'new' ? dialog.parentKey : dialog.node.parentKey) : SOURCE_KEY;
 
     return (
         <Stack spacing={2}>
-            <Stack direction='row' spacing={1} sx={{ alignItems: 'center' }}>
-                <Tabs
-                    value={activeStage}
-                    onChange={(_e, value: number) => setActiveStage(value)}
-                    variant='scrollable'
-                    sx={{ flexGrow: 1, minHeight: 40, '& .MuiTab-root': { minHeight: 40, textTransform: 'none' } }}
-                >
-                    {stages.map((item, index) => (
-                        <Tab key={item.id} value={index} label={stageName(item, index)} />
-                    ))}
-                </Tabs>
-                {stages.length > 1 && (
-                    <Button
-                        size='small'
-                        color='inherit'
-                        startIcon={<RemoveIcon />}
-                        disabled={busy}
-                        onClick={askRemoveLastStage}
-                    >
-                        {t('voice.separation.removeStage')}
-                    </Button>
-                )}
-                <Tooltip title={lastComplete ? '' : t('voice.separation.addStageHint')}>
-                    <span>
-                        <Button
-                            size='small'
-                            startIcon={<AddIcon />}
-                            disabled={busy || !lastComplete}
-                            onClick={() => {
-                                const vocals = after.tracks.find(track => track.key === 'vocals');
-                                addStage(
-                                    vocals ? vocals.key : (after.tracks[0]?.key ?? SOURCE_KEY),
-                                    vocals ? 'karaoke' : 'vocals'
-                                );
-                            }}
-                        >
-                            {t('voice.separation.addStage')}
-                        </Button>
-                    </span>
-                </Tooltip>
-            </Stack>
-
             {modelError && (
                 <Alert
                     severity='warning'
@@ -423,323 +441,41 @@ export default function SeparationWorkbench({ store, disabled }: Props) {
                 </Alert>
             )}
 
-            <Box
-                sx={{
-                    display: 'grid',
-                    gridTemplateColumns: { xs: '1fr', md: '340px minmax(0, 1fr)' },
-                    gap: 2,
-                    alignItems: 'start',
-                }}
-            >
-                {/* 左: 分離の設定 */}
-                <Panel>
-                    <Stack spacing={2}>
-                        {activeStage > 0 && (
-                            <FormControl size='small' disabled={busy || !canEditStage}>
-                                <InputLabel id='stage-input'>{t('voice.separation.stageInput')}</InputLabel>
-                                <Select
-                                    labelId='stage-input'
-                                    label={t('voice.separation.stageInput')}
-                                    value={
-                                        before.tracks.some(track => track.key === stage.inputKey) ? stage.inputKey : ''
-                                    }
-                                    onChange={event =>
-                                        updateStage(activeStage, { inputKey: String(event.target.value) })
-                                    }
-                                >
-                                    {before.tracks.map(track => (
-                                        <MenuItem key={track.key} value={track.key}>
-                                            {trackLabel(t, track)}
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-                        )}
-                        <FormControl size='small' disabled={busy || !canEditStage}>
-                            <InputLabel id='stage-category'>{t('voice.separation.category')}</InputLabel>
-                            <Select
-                                labelId='stage-category'
-                                label={t('voice.separation.category')}
-                                value={category}
-                                onChange={event => {
-                                    updateStage(activeStage, { category: event.target.value as SeparationCategory });
-                                    setSelection(EMPTY_METHOD_SELECTION);
-                                }}
-                            >
-                                {CATEGORIES.map(item => (
-                                    <MenuItem key={item} value={item}>
-                                        {t(`voice.separation.categories.${item}`)}
-                                    </MenuItem>
-                                ))}
-                            </Select>
-                        </FormControl>
-                        {!canEditStage && (
-                            <Typography variant='caption' color='text.secondary' sx={{ lineHeight: 1.5 }}>
-                                {t('voice.separation.stageLocked')}
+            <Panel>
+                <Stack spacing={1.5}>
+                    <Box sx={rowSx}>
+                        <Box sx={cellSx(0)}>
+                            <Typography variant='body2' sx={{ fontWeight: 600 }}>
+                                {sourceLabel}
                             </Typography>
-                        )}
-                        <SeparationMethodPicker
-                            category={category}
-                            models={models}
-                            stereo={stereo}
-                            value={selection}
-                            onChange={setSelection}
-                            disabled={busy}
-                        />
-                        <Button
-                            size='small'
-                            startIcon={<DownloadIcon />}
-                            onClick={() => openVoiceLibrary({ focus: 'separation' })}
-                            sx={{ alignSelf: 'flex-start' }}
-                        >
-                            {t('voice.separation.getModels')}
-                        </Button>
-                        {methodArchs.map(arch => (
-                            <Stack key={arch} spacing={1}>
-                                <SectionLabel>{t('voice.separation.paramsFor', { arch })}</SectionLabel>
-                                <PresetBar<SeparationPresetParams>
-                                    kind='separation'
-                                    disabled={busy}
-                                    filter={preset => (preset.params as SeparationPresetParams).arch === arch}
-                                    current={() => ({
-                                        arch,
-                                        values: params[ARCH_KEYS[arch]] as unknown as Record<
-                                            string,
-                                            number | boolean | null
-                                        >,
-                                    })}
-                                    onApply={preset =>
-                                        setParams({
-                                            ...params,
-                                            [ARCH_KEYS[arch]]: { ...params[ARCH_KEYS[arch]], ...preset.values },
-                                        })
-                                    }
-                                />
-                                <SeparationParamsForm
-                                    arch={arch}
-                                    params={params}
-                                    onChange={setParams}
-                                    disabled={busy}
-                                />
-                            </Stack>
-                        ))}
-                        <Button
-                            variant='contained'
-                            startIcon={<CallSplitIcon />}
-                            disabled={busy || !method || !inputTrack}
-                            onClick={() => void runSeparation()}
-                        >
-                            {t('voice.separation.run')}
-                        </Button>
-                    </Stack>
-                </Panel>
-
-                {/* 右: 候補の比較と採用 */}
-                <Stack spacing={1.5} sx={{ minWidth: 0 }}>
-                    <Stack direction='row' spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
-                        <SectionLabel sx={{ flexGrow: 1 }}>{t('voice.separation.candidates')}</SectionLabel>
-                        <ToggleButtonGroup
-                            size='small'
-                            exclusive
-                            value={stage.adoptionMode}
-                            disabled={busy || roles.length < 2}
-                            onChange={(_e, value: 'same' | 'separate' | null) => {
-                                if (!value) return;
-                                if (value === 'separate') {
-                                    // 別々に指定するときは、その時点の選択を初期値として引き継ぐ
-                                    const perRole: Record<string, string | null> = {};
-                                    for (const role of roles) perRole[role] = stage.sameCandidate;
-                                    changeAdoption({ adoptionMode: value, perRole });
-                                } else {
-                                    changeAdoption({ adoptionMode: value });
-                                }
-                            }}
-                        >
-                            <ToggleButton value='same' sx={{ textTransform: 'none', px: 1.5 }}>
-                                {t('voice.separation.adoptSame')}
-                            </ToggleButton>
-                            <ToggleButton value='separate' sx={{ textTransform: 'none', px: 1.5 }}>
-                                {t('voice.separation.adoptSeparate')}
-                            </ToggleButton>
-                        </ToggleButtonGroup>
-                        <Button
-                            size='small'
-                            variant={play.kind === 'original' ? 'contained' : 'outlined'}
-                            startIcon={<PlayArrowIcon />}
-                            onClick={() => setPlay({ kind: 'original' })}
-                        >
-                            {activeStage === 0
-                                ? t('voice.separation.playOriginal')
-                                : t('voice.separation.playStageInput')}
-                        </Button>
-                    </Stack>
-
-                    <Panel disablePadding sx={{ overflow: 'auto' }}>
-                        {stage.candidates.length === 0 ? (
-                            <Typography variant='body2' color='text.secondary' sx={{ p: 2, lineHeight: 1.6 }}>
-                                {t('voice.separation.noCandidates')}
-                            </Typography>
-                        ) : (
-                            <Table size='small'>
-                                <TableHead>
-                                    <TableRow>
-                                        {stage.adoptionMode === 'same' && (
-                                            <TableCell padding='checkbox'>{t('voice.separation.adopt')}</TableCell>
-                                        )}
-                                        <TableCell>{t('voice.separation.method')}</TableCell>
-                                        <TableCell>{t('voice.separation.outputs')}</TableCell>
-                                        <TableCell padding='checkbox' />
-                                    </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                    {stage.candidates.map(candidate => {
-                                        const assigned = assignRoles(
-                                            category,
-                                            candidate.stems.map(stem => stem.name)
-                                        );
-                                        return (
-                                            <TableRow
-                                                key={candidate.id}
-                                                hover
-                                                selected={
-                                                    play.kind === 'candidate' && play.candidateId === candidate.id
-                                                }
-                                            >
-                                                {stage.adoptionMode === 'same' && (
-                                                    <TableCell padding='checkbox'>
-                                                        <Radio
-                                                            size='small'
-                                                            checked={stage.sameCandidate === candidate.id}
-                                                            disabled={busy}
-                                                            onChange={() =>
-                                                                changeAdoption({ sameCandidate: candidate.id })
-                                                            }
-                                                            slotProps={{
-                                                                input: { 'aria-label': candidateLabel(candidate) },
-                                                            }}
-                                                        />
-                                                    </TableCell>
-                                                )}
-                                                <TableCell sx={{ minWidth: 180 }}>
-                                                    <Typography variant='body2' sx={{ fontWeight: 600 }}>
-                                                        {candidateLabel(candidate)}
-                                                    </Typography>
-                                                    <Typography
-                                                        variant='caption'
-                                                        color='text.secondary'
-                                                        sx={{ display: 'block', lineHeight: 1.5 }}
-                                                    >
-                                                        {paramsSummary(candidate)}
-                                                    </Typography>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Stack
-                                                        direction='row'
-                                                        spacing={0.5}
-                                                        sx={{ flexWrap: 'wrap', rowGap: 0.5 }}
-                                                    >
-                                                        {candidate.stems.map(stem => {
-                                                            const active =
-                                                                play.kind === 'candidate' &&
-                                                                play.candidateId === candidate.id &&
-                                                                play.stems.includes(stem.name);
-                                                            return (
-                                                                <Chip
-                                                                    key={stem.name}
-                                                                    size='small'
-                                                                    color={active ? 'primary' : 'default'}
-                                                                    variant={active ? 'filled' : 'outlined'}
-                                                                    label={stemLabel(
-                                                                        t,
-                                                                        category,
-                                                                        stem.name,
-                                                                        assigned[stem.name]
-                                                                    )}
-                                                                    onClick={() => toggleStem(candidate, stem.name)}
-                                                                />
-                                                            );
-                                                        })}
-                                                    </Stack>
-                                                </TableCell>
-                                                <TableCell padding='checkbox'>
-                                                    <Tooltip title={t('voice.common.deleteCandidate')}>
-                                                        <span>
-                                                            <IconButton
-                                                                size='small'
-                                                                aria-label={t('voice.common.deleteCandidate')}
-                                                                disabled={busy}
-                                                                onClick={() => deleteCandidate(candidate)}
-                                                            >
-                                                                <DeleteOutlineIcon fontSize='small' />
-                                                            </IconButton>
-                                                        </span>
-                                                    </Tooltip>
-                                                </TableCell>
-                                            </TableRow>
-                                        );
-                                    })}
-                                </TableBody>
-                            </Table>
-                        )}
-                    </Panel>
-                    {stage.candidates.length > 0 && (
-                        <Typography variant='caption' color='text.secondary' sx={{ lineHeight: 1.5 }}>
-                            {t('voice.separation.playHint')}
+                            <SyncPlayer source={{ key: `source-${workKey}`, url: source.media.url }} />
+                            {separateButton(SOURCE_KEY, sourceLabel)}
+                        </Box>
+                        {saveColumn && <Box />}
+                    </Box>
+                    {nodes.length === 0 && (
+                        <Typography variant='body2' color='text.secondary' sx={{ lineHeight: 1.6 }}>
+                            {t('voice.separation.noResults')}
                         </Typography>
                     )}
-
-                    {stage.adoptionMode === 'separate' && stage.candidates.length > 0 && (
-                        <Panel>
-                            <Stack spacing={1.5}>
-                                {roles.map(role => (
-                                    <FormControl key={role} size='small' disabled={busy}>
-                                        <InputLabel id={`adopt-${role}`}>
-                                            {roleLabelKey(category, role)
-                                                ? t(roleLabelKey(category, role) as string)
-                                                : role}
-                                        </InputLabel>
-                                        <Select
-                                            labelId={`adopt-${role}`}
-                                            label={
-                                                roleLabelKey(category, role)
-                                                    ? t(roleLabelKey(category, role) as string)
-                                                    : role
-                                            }
-                                            value={stage.perRole[role] ?? ''}
-                                            onChange={event =>
-                                                changeAdoption({
-                                                    perRole: { ...stage.perRole, [role]: String(event.target.value) },
-                                                })
-                                            }
-                                        >
-                                            {stage.candidates.map(candidate => (
-                                                <MenuItem key={candidate.id} value={candidate.id}>
-                                                    {candidateLabel(candidate)}
-                                                </MenuItem>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
-                                ))}
-                            </Stack>
-                        </Panel>
-                    )}
-
-                    {category === 'karaoke' && stage.inputKey !== SOURCE_KEY && (
-                        <FormControlLabel
-                            control={
-                                <Checkbox
-                                    checked={stage.removedToAccompaniment}
-                                    disabled={busy}
-                                    onChange={(_e, value) => changeAdoption({ removedToAccompaniment: value })}
-                                />
-                            }
-                            label={t('voice.separation.removedToAccompaniment')}
-                        />
-                    )}
-
-                    <SyncPlayer source={playerSource} />
+                    {renderChildren(SOURCE_KEY, 1)}
                 </Stack>
-            </Box>
+            </Panel>
+
+            <SeparationDialog
+                open={dialog !== null && job === null}
+                inputLabel={labelOf(dialogParentKey)}
+                models={models}
+                initialSelection={
+                    dialog ? (dialog.kind === 'new' ? dialog.selection : dialog.node.selection) : EMPTY_METHOD_SELECTION
+                }
+                initialParams={dialog ? (dialog.kind === 'new' ? dialog.params : dialog.node.params) : params}
+                onRun={(selection, method, nextParams) =>
+                    dialog ? runSeparation(dialog, selection, method, nextParams) : Promise.resolve(false)
+                }
+                onClose={() => setDialog(null)}
+                disabled={disabled}
+            />
 
             <ProgressDialog
                 open={job !== null}
@@ -750,32 +486,57 @@ export default function SeparationWorkbench({ store, disabled }: Props) {
                 onCancel={cancel}
             />
 
-            <AppDialog open={pendingAdoption !== null} onClose={() => setPendingAdoption(null)} maxWidth='xs' fullWidth>
-                <DialogTitle>{t('voice.separation.invalidateTitle')}</DialogTitle>
+            <AppDialog open={!!removeConfirm?.open} onClose={closeRemoveConfirm} maxWidth='sm' fullWidth>
+                <DialogTitle>
+                    {removeConfirm?.kind === 'redo'
+                        ? t('voice.separation.recreate')
+                        : t('voice.separation.deleteResult')}
+                </DialogTitle>
                 <DialogContent>
                     <Typography variant='body2' sx={{ lineHeight: 1.6 }}>
-                        {t('voice.separation.invalidateMessage')}
+                        {removeConfirm?.kind === 'redo'
+                            ? t('voice.separation.recreateMessage')
+                            : t('voice.separation.removeMessage')}
                     </Typography>
+                    <Box component='ul' sx={{ my: 1, pl: 3 }}>
+                        {removeConfirm?.outputs.map(name => (
+                            <Typography key={name} component='li' variant='body2' sx={{ overflowWrap: 'anywhere' }}>
+                                {name}
+                            </Typography>
+                        ))}
+                    </Box>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setPendingAdoption(null)}>{t('common.cancel')}</Button>
-                    <Button variant='contained' color='warning' onClick={applyPendingAdoption}>
-                        {t('voice.separation.invalidateRun')}
+                    <Button onClick={closeRemoveConfirm}>{t('common.cancel')}</Button>
+                    <Button variant='contained' color='warning' onClick={acceptRemoveConfirm}>
+                        {removeConfirm?.kind === 'redo' ? t('voice.common.ok') : t('voice.common.discard')}
                     </Button>
                 </DialogActions>
             </AppDialog>
 
-            <AppDialog open={removeStageConfirm.open} onClose={closeRemoveStage} maxWidth='xs' fullWidth>
-                <DialogTitle>{t('voice.separation.removeStageTitle')}</DialogTitle>
+            <AppDialog open={renaming !== null} onClose={() => setRenaming(null)} maxWidth='xs' fullWidth>
+                <DialogTitle>{t('voice.separation.rename')}</DialogTitle>
                 <DialogContent>
-                    <Typography variant='body2' sx={{ lineHeight: 1.6 }}>
-                        {t('voice.separation.removeStageMessage', { name: removeStageConfirm.name })}
-                    </Typography>
+                    <TextField
+                        autoFocus
+                        fullWidth
+                        size='small'
+                        sx={{ mt: 1 }}
+                        label={t('voice.separation.trackName')}
+                        value={renaming?.label ?? ''}
+                        onChange={event =>
+                            setRenaming(previous => (previous ? { ...previous, label: event.target.value } : previous))
+                        }
+                        onKeyDown={event => {
+                            if (event.key === 'Enter') applyRename();
+                        }}
+                        helperText={renaming ? t('voice.separation.trackNameHint', { name: renaming.stemName }) : ' '}
+                    />
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={closeRemoveStage}>{t('common.cancel')}</Button>
-                    <Button variant='contained' color='warning' onClick={removeLastStage}>
-                        {t('voice.common.discard')}
+                    <Button onClick={() => setRenaming(null)}>{t('common.cancel')}</Button>
+                    <Button variant='contained' onClick={applyRename}>
+                        {t('voice.common.ok')}
                     </Button>
                 </DialogActions>
             </AppDialog>

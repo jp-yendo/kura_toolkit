@@ -3,6 +3,7 @@ import {
     Alert,
     Box,
     Button,
+    Checkbox,
     DialogActions,
     DialogContent,
     DialogTitle,
@@ -46,7 +47,12 @@ import SliderField from '../../components/voice/SliderField';
 import MixForm from '../../components/voice/MixForm';
 import PresetBar from '../../components/voice/PresetBar';
 import ExportDialog, { type ExportEntry } from '../../components/voice/ExportDialog';
-import { computeTracks, vocalsAndAccompaniment } from '../../components/voice/separationTracks';
+import {
+    defaultAccompaniment,
+    defaultVocals,
+    treeOutputs,
+    type TreeOutput,
+} from '../../components/voice/separationTree';
 import { AUDIO_INPUT_EXTENSIONS, audioInputFilters } from '../../components/voice/audioInput';
 import { formatDuration, voiceLabel } from '../../components/voice/voiceFormat';
 import { isCancelledError, missingItemsFromError, voiceErrorMessage } from '../../components/voice/voiceErrors';
@@ -134,6 +140,10 @@ export default function ConversionPage() {
     let sourceMedia: MediaRef | null = null;
     let sourcePath = '';
     let channels = 2;
+    // 分離した音 (木の順) と、そのうち変換する音・伴奏として重ねる音
+    let outputs: TreeOutput[] = [];
+    let vocalsTrack: TreeOutput | null = null;
+    let accompanimentKeys: string[] = [];
     if (sep.source) {
         sourceMedia = sep.source.media;
         sourcePath = sep.source.sourcePath;
@@ -141,9 +151,17 @@ export default function ConversionPage() {
         if (conv.inputMode === 'direct') {
             vocals = [sep.source.media.path];
         } else {
-            const selected = vocalsAndAccompaniment(computeTracks(sep.source.media.path, sep.stages).tracks);
-            vocals = selected.vocals?.paths ?? [];
-            accompaniment = selected.accompaniment;
+            outputs = treeOutputs(sep.nodes);
+            vocalsTrack = outputs.find(output => output.key === conv.vocalsTrack) ?? defaultVocals(sep.nodes, outputs);
+            vocals = vocalsTrack ? [vocalsTrack.mediaPath] : [];
+            const chosen =
+                conv.accompanimentTracks ?? defaultAccompaniment(sep.nodes, outputs, vocalsTrack?.key ?? null);
+            accompanimentKeys = chosen.filter(
+                key => key !== vocalsTrack?.key && outputs.some(output => output.key === key)
+            );
+            accompaniment = outputs
+                .filter(output => accompanimentKeys.includes(output.key))
+                .map(output => output.mediaPath);
         }
     }
     const hasVocals = vocals.length > 0;
@@ -414,6 +432,75 @@ export default function ConversionPage() {
                                 store={useConversionSeparationStore}
                                 disabled={!(separationReadiness.readiness?.ready ?? false)}
                             />
+                            {/* 分離した音から、変換する音と、伴奏として重ねる音を選ぶ (分離の木と同じ字下げで並べる) */}
+                            {outputs.length > 0 && (
+                                <Panel>
+                                    <Stack spacing={1.5}>
+                                        <FormControl size='small' sx={{ maxWidth: 360 }} disabled={busy}>
+                                            <InputLabel id='conversion-vocals-track'>
+                                                {t('voice.conversion.vocalsTrack')}
+                                            </InputLabel>
+                                            <Select
+                                                labelId='conversion-vocals-track'
+                                                label={t('voice.conversion.vocalsTrack')}
+                                                value={vocalsTrack?.key ?? ''}
+                                                onChange={event => conv.setVocalsTrack(String(event.target.value))}
+                                                renderValue={key =>
+                                                    outputs.find(output => output.key === key)?.path ?? ''
+                                                }
+                                            >
+                                                {outputs.map(output => (
+                                                    <MenuItem
+                                                        key={output.key}
+                                                        value={output.key}
+                                                        sx={{ pl: 2 + output.depth * 3 }}
+                                                    >
+                                                        {output.label}
+                                                    </MenuItem>
+                                                ))}
+                                            </Select>
+                                        </FormControl>
+                                        {outputs.length > 1 && (
+                                            <Box>
+                                                <Typography variant='body2' color='text.secondary'>
+                                                    {t('voice.conversion.accompanimentTracks')}
+                                                </Typography>
+                                                <Stack>
+                                                    {outputs
+                                                        .filter(output => output !== vocalsTrack)
+                                                        .map(output => (
+                                                            <FormControlLabel
+                                                                key={output.key}
+                                                                disabled={busy}
+                                                                sx={{ pl: output.depth * 3, mr: 0 }}
+                                                                control={
+                                                                    <Checkbox
+                                                                        size='small'
+                                                                        checked={accompanimentKeys.includes(output.key)}
+                                                                        onChange={(_event, checked) =>
+                                                                            conv.setAccompanimentTracks(
+                                                                                checked
+                                                                                    ? [...accompanimentKeys, output.key]
+                                                                                    : accompanimentKeys.filter(
+                                                                                          key => key !== output.key
+                                                                                      )
+                                                                            )
+                                                                        }
+                                                                    />
+                                                                }
+                                                                label={
+                                                                    <Typography variant='body2'>
+                                                                        {output.label}
+                                                                    </Typography>
+                                                                }
+                                                            />
+                                                        ))}
+                                                </Stack>
+                                            </Box>
+                                        )}
+                                    </Stack>
+                                </Panel>
+                            )}
                         </>
                     )}
                     {conv.inputMode === 'direct' && sep.source && (

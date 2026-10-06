@@ -238,13 +238,13 @@ export const SEPARATOR_ARCH_LABELS: Record<SeparationArch, string> = {
     MDXC: 'MDXC (Roformer)',
 };
 
-function modelFilename(item: LibraryItem): string {
+export function separatorFilename(item: LibraryItem): string {
     return item.id.slice(SEPARATOR_MODEL_PREFIX.length);
 }
 
 // 分離モデルの概要の翻訳キー (概要が無ければ undefined)
 export function separatorNoteKey(item: LibraryItem): string | undefined {
-    return separatorFileNoteKey(modelFilename(item));
+    return separatorFileNoteKey(separatorFilename(item));
 }
 
 // モデルのファイル名から、分離モデルの概要の翻訳キーを得る (概要が無ければ undefined)
@@ -255,6 +255,9 @@ export function separatorFileNoteKey(filename: string): string | undefined {
 
 // 分離モデルの出力 (一覧に名前が無いモデルは、設定ファイルにある名前)
 export function separatorOutputs(item: LibraryItem): string[] {
-    const stems = item.separator?.stems ?? [];
-    return stems.length > 0 ? stems : (SEPARATOR_MODEL_OUTPUTS[modelFilename(item)] ?? []);
+    return separatorFileOutputs(separatorFilename(item), item.separator?.stems ?? []);
+}
+
+export function separatorFileOutputs(filename: string, stems: string[]): string[] {
+    return stems.length > 0 ? stems : (SEPARATOR_MODEL_OUTPUTS[filename] ?? []);
 }

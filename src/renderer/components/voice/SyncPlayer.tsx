@@ -38,8 +38,14 @@ function formatTime(seconds: number): string {
 // 再生・停止ボタンの内側の余白 (テーマの間隔の単位)
 const PLAYER_BUTTON_PADDING = 0.5;
 
+// 画面の中で同時に鳴らすのは 1 つだけにする (プレーヤーを並べたときに、ほかを止めずに再生すると音が重なるため)。
+// 再生を始めたプレーヤーが自分の ID を知らせ、ほかのプレーヤーは止まる
+const playbackBus = new EventTarget();
+const PLAYBACK_STARTED = 'kura-playback-started';
+
 export default function SyncPlayer({ source, actions, keepPosition = true }: Props) {
     const { t } = useTranslation();
+    const playerId = React.useId();
     const audioRefs = [React.useRef<HTMLAudioElement>(null), React.useRef<HTMLAudioElement>(null)];
     const [active, setActive] = React.useState(0);
     const activeRef = React.useRef(0);
@@ -129,8 +135,10 @@ export default function SyncPlayer({ source, actions, keepPosition = true }: Pro
         const resumeAt = positionRef.current;
         const resume = playingRef.current;
         let cancelled = false;
+        let loaded = false;
         const onLoaded = () => {
             if (cancelled) return;
+            loaded = true;
             const target = Number.isFinite(next.duration) ? Math.min(resumeAt, next.duration) : resumeAt;
             setDuration(Number.isFinite(next.duration) ? next.duration : 0);
             const swap = () => {
@@ -167,6 +175,9 @@ export default function SyncPlayer({ source, actions, keepPosition = true }: Pro
         return () => {
             cancelled = true;
             next.removeEventListener('loadedmetadata', onLoaded);
+            // 読み込みを待つ途中で止めた場合は、同じ対象でも次に読み込み直す (読み込み済みとして扱うと、
+            // 読み込み終わりの通知を受けられず再生できないままになる。開発時の StrictMode は効果を 2 回実行する)
+            if (!loaded) loadedUrl.current = null;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps -- audio 要素の ref は変わらない
     }, [source?.url]);
@@ -196,7 +207,20 @@ export default function SyncPlayer({ source, actions, keepPosition = true }: Pro
         if (index !== activeRef.current) return;
         playingRef.current = true;
         setPlaying(true);
+        playbackBus.dispatchEvent(new CustomEvent(PLAYBACK_STARTED, { detail: playerId }));
     };
+
+    // ほかのプレーヤーが再生を始めたら止まる
+    React.useEffect(() => {
+        const onStarted = (event: Event) => {
+            if ((event as CustomEvent<string>).detail === playerId) return;
+            const audio = audioRefs[activeRef.current].current;
+            if (audio && !audio.paused) audio.pause();
+        };
+        playbackBus.addEventListener(PLAYBACK_STARTED, onStarted);
+        return () => playbackBus.removeEventListener(PLAYBACK_STARTED, onStarted);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- audio 要素の ref は変わらない
+    }, [playerId]);
 
     // 止まった位置をそのまま示す (描画のたびの更新は止まるため)
     const handlePause = (index: number) => {

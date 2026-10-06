@@ -9,9 +9,9 @@ import FileDropZone from '../../components/common/FileDropZone';
 import ProgressDialog from '../../components/common/ProgressDialog';
 import ReadinessAlert, { useFeatureReadiness } from '../../components/voice/ReadinessAlert';
 import VoiceFeatureHeader from '../../components/voice/VoiceFeatureHeader';
-import SeparationWorkbench, { trackLabel } from '../../components/voice/SeparationWorkbench';
+import SeparationWorkbench from '../../components/voice/SeparationWorkbench';
 import ExportDialog, { type ExportEntry } from '../../components/voice/ExportDialog';
-import { computeTracks, SOURCE_KEY } from '../../components/voice/separationTracks';
+import { treeOutputs } from '../../components/voice/separationTree';
 import { formatDuration } from '../../components/voice/voiceFormat';
 import { isCancelledError, voiceErrorMessage } from '../../components/voice/voiceErrors';
 import { AUDIO_INPUT_EXTENSIONS, audioInputFilters } from '../../components/voice/audioInput';
@@ -24,14 +24,14 @@ import { openVoiceLibrary } from '../../stores/voiceLibraryStore';
 export default function SeparationPage() {
     const { t } = useTranslation();
     const readiness = useFeatureReadiness('separation');
-    const { workKey, source, sourceName, stages, setSource, reset } = useSeparationWorkStore();
+    const { workKey, source, sourceName, nodes, saveTargets, setSource, reset } = useSeparationWorkStore();
     const [exportOpen, setExportOpen] = React.useState(false);
     const [confirmReset, setConfirmReset] = React.useState(false);
     const { job, run, cancel } = useJobRunner();
     const ready = readiness.readiness?.ready ?? false;
 
-    const { tracks } = computeTracks(source?.media.path ?? null, stages);
-    const outputs = tracks.filter(track => track.key !== SOURCE_KEY);
+    // 書き出す音 (保存対象にチェックした出力。木の順)
+    const targets = treeOutputs(nodes).filter(output => saveTargets.includes(output.key));
 
     const loadFile = async (paths: string[]) => {
         const sourcePath = paths[0];
@@ -53,15 +53,20 @@ export default function SeparationPage() {
         setConfirmReset(false);
     };
 
-    const exportEntries: ExportEntry[] = outputs.map(track => ({
-        key: track.key,
-        label: trackLabel(t, track),
-        suffix: trackLabel(t, track),
-        resolve: async jobId =>
-            track.paths.length === 1
-                ? track.paths[0]
-                : (await window.kuraToolkit.voice.media.mix(jobId, workKey, track.paths, source?.channels ?? 2)).path,
+    // ファイル名は、上の階層からの名前 (書き出す時点の名前) を「_」でつないだもの
+    const exportEntries: ExportEntry[] = targets.map(output => ({
+        key: output.key,
+        label: output.path,
+        suffix: '',
+        fileName: output.path,
+        resolve: async () => output.mediaPath,
     }));
+
+    // 書き出しは押せる状態のままにし、保存対象が無いときは押したときに知らせる
+    const openExport = () => {
+        if (targets.length === 0) showNotice('info', t('voice.separation.exportNoTargets'));
+        else setExportOpen(true);
+    };
 
     return (
         <PageContainer>
@@ -106,11 +111,17 @@ export default function SeparationPage() {
                         >
                             {t('voice.library.open')}
                         </Button>
-                        <Button variant='contained' disabled={outputs.length === 0} onClick={() => setExportOpen(true)}>
+                    </Panel>
+                    <SeparationWorkbench store={useSeparationWorkStore} disabled={!ready} saveColumn />
+                    {/* 書き出しは作業の最後なので、画面の一番下に置く */}
+                    <Panel sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                        <Typography variant='body2' sx={{ flexGrow: 1, minWidth: 200, lineHeight: 1.6 }}>
+                            {t('voice.separation.exportSummary', { count: targets.length })}
+                        </Typography>
+                        <Button variant='contained' onClick={openExport}>
                             {t('voice.export.open')}
                         </Button>
                     </Panel>
-                    <SeparationWorkbench store={useSeparationWorkStore} disabled={!ready} />
                 </>
             )}
 
@@ -121,6 +132,7 @@ export default function SeparationPage() {
                     onClose={() => setExportOpen(false)}
                     entries={exportEntries}
                     sourcePath={source.sourcePath}
+                    fixedSelection
                 />
             )}
 

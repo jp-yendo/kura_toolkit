@@ -62,12 +62,13 @@ function phaseStatus(t: TFunction, phase: PhaseState, now: number): string {
     return `${text}  ${t('jobEta.left', { time: formatEta(t, remaining) })}`;
 }
 
-// 新しい段階の通知を反映する。段階が変わったとき、または同じ段階で進み具合が戻ったとき (アンサンブルの次のモデル
-// など) は、そこから見積もり直す
+// 新しい段階の通知を反映する。段階が変わったとき、同じ段階の何回目かが変わったとき (アンサンブルの次のモデルなど)、
+// または同じ段階で進み具合が戻ったときは、そこから見積もり直す
 function nextPhase(previous: PhaseState | undefined, phase: JobPhase): PhaseState {
     const restart =
         !previous ||
         previous.id !== phase.id ||
+        (phase.current !== undefined && phase.current !== previous.current) ||
         (phase.fraction !== undefined && previous.fraction !== undefined && phase.fraction < previous.fraction);
     if (restart) return { ...phase, startedAt: Date.now(), startFraction: phase.fraction ?? 0 };
     return { ...previous, ...phase };

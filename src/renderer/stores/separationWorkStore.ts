@@ -1,12 +1,13 @@
 import { create } from 'zustand';
 import { newWorkKey } from '../components/voice/voiceFormat';
-import { SOURCE_KEY, stageRoles, type SepStage } from '../components/voice/separationTracks';
-import type { PreparedInput, SeparationCandidate, SeparationCategory, SeparationParams } from '@shared/voice/types';
+import { descendantsOf, outputKey, type SepNode } from '../components/voice/separationTree';
+import type { PreparedInput, SeparationParams } from '@shared/voice/types';
 
-// 分離の作業 (元音源・段階・候補・採用)。音声分離の画面と、音声変換の画面の「入力と分離」で別々に持つ。
+// 分離の作業 (元の音源と、分離の結果の木)。音声分離の画面と、音声変換の画面の「入力と分離」で別々に持つ。
 // 作業の結果は作業ディレクトリにあり、アプリを終了すると消える (作業をまたいで使うときは書き出したファイルを読む)。
 
-const DEFAULT_SEPARATION_PARAMS: SeparationParams = {
+// パラメーターの既定値 (結果の一覧では、既定から変えた値だけを示す)
+export const DEFAULT_SEPARATION_PARAMS: SeparationParams = {
     mdx: { segmentSize: 256, overlap: 0.25, batchSize: 1, hopLength: 1024, enableDenoise: false },
     vr: {
         windowSize: 512,
@@ -25,33 +26,29 @@ type SeparationWorkState = {
     workKey: string;
     source: PreparedInput | null;
     sourceName: string;
-    stages: SepStage[];
-    activeStage: number;
-    // 画面で編集中のパラメーター (段階をまたいで引き継ぐ)
+    nodes: SepNode[];
+    // 書き出す出力 (出力のキー)。最初はどれも選ばない
+    saveTargets: string[];
+    // 最後に分離したときの詳細な設定 (次に分離するときの初期値)
     params: SeparationParams;
     setSource(source: PreparedInput | null, name: string): void;
     reset(): void;
-    setActiveStage(index: number): void;
-    addStage(inputKey: string, category: SeparationCategory): void;
-    // 指定の段階より後ろを取り除く (前の段階の採用をやり直したとき)。取り除いた候補を返す
-    truncateAfter(index: number): SeparationCandidate[];
-    updateStage(index: number, patch: Partial<SepStage>): void;
-    addCandidate(index: number, candidate: SeparationCandidate): void;
-    removeCandidate(index: number, candidateId: string): void;
+    addNode(node: SepNode): void;
+    // 結果を作り直したものに置き換える (番号と、残っている出力の名前は引き継ぐ)
+    replaceNode(node: SepNode): void;
+    // 結果と、その下にある結果を取り除く。取り除いた結果を返す
+    removeNode(nodeId: string): SepNode[];
+    // 結果の下にある結果だけを取り除く。取り除いた結果を返す
+    removeDescendants(nodeId: string): SepNode[];
+    setLabel(nodeId: string, stemName: string, label: string | null): void;
+    setSaveTarget(key: string, checked: boolean): void;
     setParams(params: SeparationParams): void;
 };
 
-function newStage(inputKey: string, category: SeparationCategory): SepStage {
-    return {
-        id: crypto.randomUUID(),
-        inputKey,
-        category,
-        candidates: [],
-        adoptionMode: 'same',
-        sameCandidate: null,
-        perRole: {},
-        removedToAccompaniment: false,
-    };
+// 取り除く結果の出力を、書き出す出力から外す
+function withoutOutputsOf(targets: string[], removed: SepNode[]): string[] {
+    const keys = new Set(removed.flatMap(node => node.result.stems.map(stem => outputKey(node.id, stem.name))));
+    return targets.filter(key => !keys.has(key));
 }
 
 function createSeparationWorkStore() {
@@ -59,68 +56,64 @@ function createSeparationWorkStore() {
         workKey: newWorkKey(),
         source: null,
         sourceName: '',
-        stages: [],
-        activeStage: 0,
+        nodes: [],
+        saveTargets: [],
         params: DEFAULT_SEPARATION_PARAMS,
         setSource(source, name) {
-            set({ source, sourceName: name, stages: source ? [newStage(SOURCE_KEY, 'vocals')] : [], activeStage: 0 });
+            set({ source, sourceName: name, nodes: [], saveTargets: [] });
         },
         reset() {
+            set({ workKey: newWorkKey(), source: null, sourceName: '', nodes: [], saveTargets: [] });
+        },
+        addNode(node) {
+            set({ nodes: [...get().nodes, node] });
+        },
+        replaceNode(node) {
+            const nodes = get().nodes;
+            const previous = nodes.find(item => item.id === node.id);
+            if (!previous) return;
+            const names = new Set(node.result.stems.map(stem => stem.name));
+            const labels = Object.fromEntries(Object.entries(previous.labels).filter(([name]) => names.has(name)));
+            const removedStems = previous.result.stems.filter(stem => !names.has(stem.name));
             set({
-                workKey: newWorkKey(),
-                source: null,
-                sourceName: '',
-                stages: [],
-                activeStage: 0,
+                nodes: nodes.map(item => (item.id === node.id ? { ...node, number: previous.number, labels } : item)),
+                saveTargets: get().saveTargets.filter(
+                    key => !removedStems.some(stem => key === outputKey(node.id, stem.name))
+                ),
             });
         },
-        setActiveStage(index) {
-            set({ activeStage: index });
-        },
-        addStage(inputKey, category) {
-            const stages = [...get().stages, newStage(inputKey, category)];
-            set({ stages, activeStage: stages.length - 1 });
-        },
-        truncateAfter(index) {
-            const stages = get().stages;
-            const removed = stages.slice(index + 1).flatMap(stage => stage.candidates);
-            set({ stages: stages.slice(0, index + 1), activeStage: Math.min(get().activeStage, index) });
+        removeNode(nodeId) {
+            const nodes = get().nodes;
+            const removed = [...nodes.filter(node => node.id === nodeId), ...descendantsOf(nodes, nodeId)];
+            set({
+                nodes: nodes.filter(node => !removed.includes(node)),
+                saveTargets: withoutOutputsOf(get().saveTargets, removed),
+            });
             return removed;
         },
-        updateStage(index, patch) {
-            set({ stages: get().stages.map((stage, i) => (i === index ? { ...stage, ...patch } : stage)) });
-        },
-        addCandidate(index, candidate) {
+        removeDescendants(nodeId) {
+            const nodes = get().nodes;
+            const removed = descendantsOf(nodes, nodeId);
             set({
-                stages: get().stages.map((stage, i) => {
-                    if (i !== index) return stage;
-                    const next = { ...stage, candidates: [...stage.candidates, candidate] };
-                    // 最初の候補は採用済みにしておく (比較のために候補を足しても採用は変えない)
-                    if (!next.sameCandidate) next.sameCandidate = candidate.id;
-                    for (const role of stageRoles(next)) {
-                        if (!next.perRole[role]) next.perRole = { ...next.perRole, [role]: candidate.id };
-                    }
-                    return next;
+                nodes: nodes.filter(node => !removed.includes(node)),
+                saveTargets: withoutOutputsOf(get().saveTargets, removed),
+            });
+            return removed;
+        },
+        setLabel(nodeId, stemName, label) {
+            set({
+                nodes: get().nodes.map(node => {
+                    if (node.id !== nodeId) return node;
+                    const labels = { ...node.labels };
+                    if (label) labels[stemName] = label;
+                    else delete labels[stemName];
+                    return { ...node, labels };
                 }),
             });
         },
-        removeCandidate(index, candidateId) {
-            set({
-                stages: get().stages.map((stage, i) => {
-                    if (i !== index) return stage;
-                    const candidates = stage.candidates.filter(item => item.id !== candidateId);
-                    const fallback = candidates[0]?.id ?? null;
-                    const perRole: Record<string, string | null> = {};
-                    for (const [role, id] of Object.entries(stage.perRole))
-                        perRole[role] = id === candidateId ? fallback : id;
-                    return {
-                        ...stage,
-                        candidates,
-                        sameCandidate: stage.sameCandidate === candidateId ? fallback : stage.sameCandidate,
-                        perRole,
-                    };
-                }),
-            });
+        setSaveTarget(key, checked) {
+            const targets = get().saveTargets.filter(item => item !== key);
+            set({ saveTargets: checked ? [...targets, key] : targets });
         },
         setParams(params) {
             set({ params });

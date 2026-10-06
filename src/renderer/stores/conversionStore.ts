@@ -24,6 +24,10 @@ const DEFAULT_MIX_PARAMS: MixParams = {
 type ConversionState = {
     step: number;
     inputMode: ConversionInputMode;
+    // 分離した音のうち、変換する音 (出力のキー。null は最初に選んでおく音)
+    vocalsTrack: string | null;
+    // 伴奏として重ねる音 (出力のキー。null は最初に選んでおく音)
+    accompanimentTracks: string[] | null;
     voiceId: string;
     params: ConversionParams;
     candidates: ConversionCandidate[];
@@ -36,6 +40,8 @@ type ConversionState = {
     mixSignature: string | null;
     setStep(step: number): void;
     setInputMode(mode: ConversionInputMode): void;
+    setVocalsTrack(key: string): void;
+    setAccompanimentTracks(keys: string[]): void;
     setVoiceId(id: string): void;
     setParams(params: ConversionParams): void;
     addCandidate(candidate: ConversionCandidate, inputKey: string): void;
@@ -51,6 +57,8 @@ type ConversionState = {
 export const useConversionStore = create<ConversionState>((set, get) => ({
     step: 0,
     inputMode: 'separate',
+    vocalsTrack: null,
+    accompanimentTracks: null,
     voiceId: '',
     params: DEFAULT_CONVERSION_PARAMS,
     candidates: [],
@@ -64,6 +72,12 @@ export const useConversionStore = create<ConversionState>((set, get) => ({
     },
     setInputMode(inputMode) {
         set({ inputMode });
+    },
+    setVocalsTrack(vocalsTrack) {
+        set({ vocalsTrack });
+    },
+    setAccompanimentTracks(accompanimentTracks) {
+        set({ accompanimentTracks });
     },
     setVoiceId(voiceId) {
         set({ voiceId });
@@ -100,6 +114,8 @@ export const useConversionStore = create<ConversionState>((set, get) => ({
         set({
             step: 0,
             inputMode: 'separate',
+            vocalsTrack: null,
+            accompanimentTracks: null,
             candidates: [],
             candidatesInput: null,
             adoptedId: null,

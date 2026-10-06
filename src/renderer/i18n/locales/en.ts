@@ -57,6 +57,7 @@ export default {
     },
     jobPhasesCounted: {
         encode: 'Exporting ({{current}} / {{total}})',
+        separate: 'Separating the audio ({{current}} / {{total}})',
         training: {
             train: 'Training (epoch {{current}} / {{total}})',
         },

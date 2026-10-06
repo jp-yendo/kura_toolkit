@@ -361,42 +361,6 @@ export async function mixFiles(
     await runFfmpeg(args, { jobId, totalSec: longest, onProgress });
 }
 
-// ステレオの左右差を使って中央に定位した音を打ち消す従来手法 (機械学習を使わない比較用の分離)。
-// 伴奏側は左右の差、ボーカル側は左右の平均 (中央に定位した成分) を出力する
-export async function centerCancel(
-    input: string,
-    vocalsOutput: string,
-    instrumentalOutput: string,
-    jobId?: string,
-    onProgress?: ProgressHandler
-): Promise<void> {
-    const info = await probeAudio(input, jobId);
-    if (info.channels < 2) throw new Error('CENTER_CANCEL_MONO');
-    await runFfmpeg(
-        [
-            '-hide_banner',
-            '-nostdin',
-            '-nostats',
-            '-y',
-            '-i',
-            input,
-            '-filter_complex',
-            '[0:a]asplit=2[v][i];[v]pan=stereo|c0=0.5*c0+0.5*c1|c1=0.5*c0+0.5*c1[vo];[i]pan=stereo|c0=c0-c1|c1=c1-c0[io]',
-            '-map',
-            '[vo]',
-            '-c:a',
-            'pcm_f32le',
-            vocalsOutput,
-            '-map',
-            '[io]',
-            '-c:a',
-            'pcm_f32le',
-            instrumentalOutput,
-        ],
-        { jobId, totalSec: info.durationSec, onProgress }
-    );
-}
-
 // MP3 の可変ビットレートの品質 (LAME の -V)。目安のビットレートに平均が近くなる値を選ぶ
 function mp3VbrQuality(bitrate: number): string {
     if (bitrate >= 245) return '0';

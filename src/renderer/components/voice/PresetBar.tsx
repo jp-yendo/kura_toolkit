@@ -118,11 +118,7 @@ export default function PresetBar<T extends VoicePresetParams>({ kind, filter, c
                     labelId={`preset-${kind}`}
                     label={t('voice.presets.label')}
                     value={selected ? selected.id : ''}
-                    onChange={event => {
-                        const preset = visible.find(item => item.id === event.target.value);
-                        setSelectedId(String(event.target.value));
-                        if (preset) onApply(preset.params as T);
-                    }}
+                    onChange={event => setSelectedId(String(event.target.value))}
                 >
                     {visible.length === 0 && (
                         <MenuItem value='' disabled>
@@ -131,8 +127,10 @@ export default function PresetBar<T extends VoicePresetParams>({ kind, filter, c
                             </Typography>
                         </MenuItem>
                     )}
+                    {/* 呼び出しは項目を押したときに行う (選択中のものを選び直しても呼び出せるように。値の変更の通知は、
+                        同じものを選んだときには来ないため) */}
                     {visible.map(preset => (
-                        <MenuItem key={preset.id} value={preset.id}>
+                        <MenuItem key={preset.id} value={preset.id} onClick={() => onApply(preset.params as T)}>
                             {label(preset)}
                         </MenuItem>
                     ))}

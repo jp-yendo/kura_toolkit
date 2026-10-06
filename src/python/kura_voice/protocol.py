@@ -73,11 +73,20 @@ class Context:
         fraction = max(0.0, min(1.0, float(fraction)))
         self.event(kind="progress", fraction=fraction, message=message)
 
-    def phase(self, name: str, fraction: Optional[float] = None) -> None:
-        """The current step (shown as "doing ..." with the time left estimated from ``fraction`` within the step)."""
+    def phase(
+        self, name: str, fraction: Optional[float] = None, current: Optional[int] = None, total: Optional[int] = None
+    ) -> None:
+        """The current step (shown as "doing ..." with the time left estimated from ``fraction`` within the step).
+
+        ``current`` / ``total`` count the repeats of the step (shown as "(current / total)"); the time left is then
+        estimated again for each repeat.
+        """
         payload: dict = {"kind": "phase", "phase": name}
         if fraction is not None:
             payload["fraction"] = max(0.0, min(1.0, float(fraction)))
+        if current is not None and total is not None:
+            payload["current"] = int(current)
+            payload["total"] = int(total)
         self.event(**payload)
 
 

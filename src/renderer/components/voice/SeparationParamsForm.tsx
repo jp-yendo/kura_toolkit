@@ -11,6 +11,8 @@ type Props = {
 };
 
 const GRID_SX = { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 1.5 } as const;
+// スイッチは説明が長いため 1 行を使う (2 列の 1 列に押し込むと説明が折り返されるため)
+const FULL_ROW_SX = { gridColumn: '1 / -1' } as const;
 
 // 選んだモデルのアーキテクチャに応じて、調整できるパラメーターの入力欄を切り替える
 export default function SeparationParamsForm({ arch, params, onChange, disabled }: Props) {
@@ -71,6 +73,7 @@ export default function SeparationParamsForm({ arch, params, onChange, disabled 
                     </Select>
                 </FormControl>
                 <FormControlLabel
+                    sx={FULL_ROW_SX}
                     disabled={disabled}
                     control={
                         <Switch
@@ -123,16 +126,8 @@ export default function SeparationParamsForm({ arch, params, onChange, disabled 
                     onChange={v => patch({ batchSize: v })}
                     disabled={disabled}
                 />
-                <NumberField
-                    label={label('postProcessThreshold')}
-                    value={value.postProcessThreshold}
-                    min={0.1}
-                    max={0.3}
-                    step={0.05}
-                    onChange={v => patch({ postProcessThreshold: v })}
-                    disabled={disabled || !value.enablePostProcess}
-                />
                 <FormControlLabel
+                    sx={FULL_ROW_SX}
                     disabled={disabled}
                     control={
                         <Switch size='small' checked={value.enableTta} onChange={(_e, v) => patch({ enableTta: v })} />
@@ -140,6 +135,20 @@ export default function SeparationParamsForm({ arch, params, onChange, disabled 
                     label={label('enableTta')}
                 />
                 <FormControlLabel
+                    sx={FULL_ROW_SX}
+                    disabled={disabled}
+                    control={
+                        <Switch
+                            size='small'
+                            checked={value.highEndProcess}
+                            onChange={(_e, v) => patch({ highEndProcess: v })}
+                        />
+                    }
+                    label={label('highEndProcess')}
+                />
+                {/* しきい値は、それを使う後処理のスイッチの直後に置く */}
+                <FormControlLabel
+                    sx={FULL_ROW_SX}
                     disabled={disabled}
                     control={
                         <Switch
@@ -150,16 +159,14 @@ export default function SeparationParamsForm({ arch, params, onChange, disabled 
                     }
                     label={label('enablePostProcess')}
                 />
-                <FormControlLabel
-                    disabled={disabled}
-                    control={
-                        <Switch
-                            size='small'
-                            checked={value.highEndProcess}
-                            onChange={(_e, v) => patch({ highEndProcess: v })}
-                        />
-                    }
-                    label={label('highEndProcess')}
+                <NumberField
+                    label={label('postProcessThreshold')}
+                    value={value.postProcessThreshold}
+                    min={0.1}
+                    max={0.3}
+                    step={0.05}
+                    onChange={v => patch({ postProcessThreshold: v })}
+                    disabled={disabled || !value.enablePostProcess}
                 />
             </Box>
         );
@@ -200,6 +207,7 @@ export default function SeparationParamsForm({ arch, params, onChange, disabled 
                     disabled={disabled}
                 />
                 <FormControlLabel
+                    sx={FULL_ROW_SX}
                     disabled={disabled}
                     control={
                         <Switch
@@ -218,6 +226,19 @@ export default function SeparationParamsForm({ arch, params, onChange, disabled 
     const patch = (next: Partial<typeof value>) => onChange({ ...params, mdxc: { ...value, ...next } });
     return (
         <Box sx={GRID_SX}>
+            {/* 上書きのスイッチは、それで入力できるようになるセグメントサイズの直前に置く */}
+            <FormControlLabel
+                sx={FULL_ROW_SX}
+                disabled={disabled}
+                control={
+                    <Switch
+                        size='small'
+                        checked={value.overrideModelSegmentSize}
+                        onChange={(_e, v) => patch({ overrideModelSegmentSize: v })}
+                    />
+                }
+                label={label('overrideModelSegmentSize')}
+            />
             <NumberField
                 label={label('segmentSize')}
                 value={value.segmentSize}
@@ -257,17 +278,6 @@ export default function SeparationParamsForm({ arch, params, onChange, disabled 
                 integer
                 onChange={v => patch({ pitchShift: v })}
                 disabled={disabled}
-            />
-            <FormControlLabel
-                disabled={disabled}
-                control={
-                    <Switch
-                        size='small'
-                        checked={value.overrideModelSegmentSize}
-                        onChange={(_e, v) => patch({ overrideModelSegmentSize: v })}
-                    />
-                }
-                label={label('overrideModelSegmentSize')}
             />
         </Box>
     );

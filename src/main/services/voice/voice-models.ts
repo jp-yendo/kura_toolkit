@@ -253,8 +253,17 @@ export function listVoices(feature: VoiceModelFeature): VoiceModelInfo[] {
             if (isItemInstalled(readyItemId(name))) result.push(readyModelInfo(name, overrides));
         }
     }
-    // 区分では分けず、新しい順に並べる
-    return result.sort((a, b) => b.createdAt - a.createdAt);
+    // 学習・取り込みしたモデルは新しい順に並べ、その後にダウンロードしたモデル (すぐに使えるモデル) をダウンロードの
+    // 画面と同じ順に並べる (ダウンロードした日は並び順に使わない。配布されたモデルにとって意味のない順のため)
+    const readyOrder = (voice: VoiceModelInfo) => {
+        const index = JVNV_MODEL_NAMES.findIndex(name => voice.readyItemId === readyItemId(name));
+        return index < 0 ? -1 : index;
+    };
+    return result.sort((a, b) => {
+        const ready = readyOrder(a) - readyOrder(b);
+        if (ready !== 0) return ready;
+        return b.createdAt - a.createdAt;
+    });
 }
 
 type ResolvedVoice = {

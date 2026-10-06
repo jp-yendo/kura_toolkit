@@ -300,9 +300,7 @@ export type SeparationParams = {
 export type SeparationMethod =
     | { kind: 'model'; filename: string }
     | { kind: 'verifiedEnsemble'; ensembleId: string }
-    | { kind: 'ensemble'; filenames: string[]; algorithm: EnsembleAlgorithm }
-    // ステレオの左右差で中央の音を打ち消す従来手法 (ffmpeg)
-    | { kind: 'centerCancel' };
+    | { kind: 'ensemble'; filenames: string[]; algorithm: EnsembleAlgorithm };
 
 export type SeparationStem = {
     // モデルが出力した名前 (Vocals / Instrumental / drums など)
@@ -317,7 +315,7 @@ export type SeparationCandidate = {
     methodLabel: string;
     // 実行時のパラメーター (使ったアーキテクチャの分だけ)
     params: Partial<SeparationParams>;
-    category: SeparationCategory;
+    // 出力。名前と順はモデルが返したまま
     stems: SeparationStem[];
     createdAt: number;
 };
@@ -330,7 +328,6 @@ export type SeparationRunRequest = {
     channels: number;
     method: SeparationMethod;
     params: SeparationParams;
-    category: SeparationCategory;
 };
 
 // ---------------------------------------------------------------------------
@@ -424,10 +421,23 @@ export type PresetRecord<T> = {
     params: T;
 };
 
-// 分離のプリセット。モデルのアーキテクチャによって調整できる項目が異なるため、アーキテクチャごとに持つ
+// 分離の方式の選び方 (画面の選択の状態)。おすすめから 1 つを選ぶか、モデル (複数可) を選ぶ
+export type SeparationMethodChoice = {
+    // 選び方 (おすすめ / モデル。null は、選べる選び方のうち先頭)
+    mode: 'recommended' | 'model' | null;
+    // おすすめから選んだもの (`verified:<組み合わせの ID>` または `model:<ファイル名>`)
+    recommended: string;
+    // モデルの一覧から選んだもの (`model:<ファイル名>`)
+    keys: string[];
+    // 2 つ以上のモデルを選んだときの結果の決め方
+    algorithm: EnsembleAlgorithm;
+};
+
+// 分離のプリセット。方式の選び方 (おすすめ・組み合わせるモデル・組み合わせ方) と詳細な設定 (全アーキテクチャの
+// パラメーター) を、1 つの条件としてまとめて保存する
 export type SeparationPresetParams = {
-    arch: SeparationArch;
-    values: Record<string, number | boolean | null>;
+    method: SeparationMethodChoice;
+    params: SeparationParams;
 };
 
 // ---------------------------------------------------------------------------

@@ -21,11 +21,13 @@ export function ffmpegPhase(jobId: string, id: VoicePhaseId): (percent: number) 
 // Python の補助プロセスからの段階の通知を画面へ送る。段階の通知だった場合は true
 export function forwardPhase(jobId: string, event: Record<string, unknown>): boolean {
     if (event.kind !== 'phase' || typeof event.phase !== 'string') return false;
-    voicePhase(
-        jobId,
-        event.phase as VoicePhaseId,
-        typeof event.fraction === 'number' ? { fraction: event.fraction } : {}
-    );
+    voicePhase(jobId, event.phase as VoicePhaseId, {
+        ...(typeof event.fraction === 'number' ? { fraction: event.fraction } : {}),
+        // 繰り返す段階の何回目か (アンサンブルの何番目のモデルかなど)
+        ...(typeof event.current === 'number' && typeof event.total === 'number'
+            ? { current: event.current, total: event.total }
+            : {}),
+    });
     return true;
 }
 

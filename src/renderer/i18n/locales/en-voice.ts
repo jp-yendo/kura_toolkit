@@ -121,7 +121,7 @@ export default {
         separatorOutputs: 'Outputs: {{outputs}}',
         separatorRecommendations: 'Recommendations by purpose',
         separatorRecommendationsNote:
-            'Verified model combinations (ensembles) bundled with audio-separator, based on a community guide for separation models (deton24), arranged by purpose. Selecting a combination selects all the models listed under it. On the separation screen, choose them under "Recommended" as the method.',
+            'Verified model combinations (ensembles) bundled with audio-separator, based on a community guide for separation models (deton24), arranged by purpose. Selecting a combination selects all the models listed under it. On the separation screen, choose them on the "Recommended" tab.',
         separatorSingleModels: 'Individual models',
         separatorSingleModelsNote:
             'Choose models one by one. The methods are MDX-Net, VR Arch, Demucs and the newer MDXC (Roformer); MDXC generally gives higher quality but is heavier to run. Each separation type lists the models with the highest separation quality first.',
@@ -144,27 +144,17 @@ export default {
             karaoke: 'Splits vocals into lead vocals and backing vocals, with higher quality than a single model.',
         },
         separatorPurposes: {
-            vocals: {
-                title: 'Vocal extraction',
-                note: 'If unsure, choose "Standard". The other combinations differ in whether they put keeping the accompaniment out or keeping the voice intact first.',
-            },
-            accompaniment: {
-                title: 'Accompaniment extraction',
-                note: 'If unsure, choose "Standard". The other combinations differ in whether they put keeping vocals out or keeping the instruments intact first.',
-            },
-            both: {
-                title: 'Vocals and accompaniment',
-                note: 'A model that extracts both vocals and accompaniment without favoring either.',
-            },
+            vocals: { title: 'Vocal extraction' },
+            accompaniment: { title: 'Accompaniment extraction' },
+            both: { title: 'Vocals and accompaniment' },
             layers: {
                 title: 'Lead, backing and accompaniment',
-                note: 'One combination cannot do this, so it takes two stages: split into vocals and accompaniment first, then add a stage on the separation screen and split the vocals into lead and backing vocals. Both combinations are needed.',
+                note: 'One combination cannot do this, so it takes two separations: split into vocals and accompaniment first, then press "Separate the Adopted Sound Further" on the separation screen and split the vocals into lead and backing vocals. Both combinations are needed.',
             },
         },
         separatorPurposeLabels: {
-            standard: 'Standard',
-            step1: 'Stage 1: split into vocals and accompaniment',
-            step2: 'Stage 2: split the vocals into lead and backing vocals',
+            step1: 'First: split into vocals and accompaniment',
+            step2: 'Second: split the vocals into lead and backing vocals',
         },
         separatorModelNotes: {
             vrHp: 'A high-quality (HP) VR Arch model aimed mainly at extracting the accompaniment.',
@@ -182,7 +172,7 @@ export default {
             vrBve: 'Splits vocals into lead vocals and backing vocals (BVE: backing vocal extraction). Extract the vocals first, then use it on them.',
             vrMgmHigh: 'An older-generation (v4) VR Arch model that focuses on the high frequency range.',
             vrMgmLow: 'An older-generation (v4) VR Arch model that focuses on the low frequency range.',
-            vrMgmMain: 'The standard older-generation (v4) VR Arch model.',
+            vrMgmMain: 'An older-generation (v4) VR Arch model.',
             vrDeReverb: 'A VR Arch model that removes reverb.',
             mdxInstHq:
                 'A high-quality (HQ) MDX-Net model aimed mainly at extracting the accompaniment. Higher numbers are newer versions.',
@@ -203,9 +193,9 @@ export default {
                 'Made for the Music Demixing Challenge; separates bass from the rest. a and b were trained separately.',
             kuielabDrums:
                 'Made for the Music Demixing Challenge; separates drums from the rest. a and b were trained separately.',
-            demucs: 'The standard Demucs v4 model, splitting into vocals, drums, bass and other.',
+            demucs: 'The default Demucs v4 model (htdemucs), splitting into vocals, drums, bass and other.',
             demucsFt:
-                'A tuned Demucs v4 model splitting into vocals, drums, bass and other. Higher quality than the standard model but about 4 times slower.',
+                'A fine-tuned version of the default Demucs v4 model (htdemucs). It takes about 4 times longer and might be a little better.',
             demucsMmi: 'A previous-generation (Hybrid Demucs) model splitting into vocals, drums, bass and other.',
             demucs6s:
                 'A Demucs v4 model splitting into vocals, drums, bass, guitar, piano and other. The piano separation is of lower quality.',
@@ -418,17 +408,6 @@ export default {
     },
     separation: {
         dropHint: 'Drag & drop an audio (or video) file here\nor click to choose one',
-        stageLabel: '{{index}}. {{category}}',
-        addStage: 'Add Stage',
-        addStageHint:
-            'Once this stage has adopted results (such as vocals and accompaniment), they can be separated further.',
-        removeStage: 'Remove Last Stage',
-        removeStageTitle: 'Remove stage',
-        removeStageMessage: 'Discard the last stage "{{name}}" and its candidates?',
-        stageInput: 'Audio to separate in this stage',
-        stageLocked:
-            'The separation type and input cannot be changed while there are candidates (remove the candidates to change them).',
-        category: 'Separation type',
         categories: {
             vocals: 'Vocals and accompaniment (2 stems)',
             multi: 'Instruments (multiple stems)',
@@ -436,27 +415,52 @@ export default {
             cleanup: 'Cleanup (reverb / echo / noise removal)',
             other: 'Other',
         },
+        separateFrom: 'Branch',
+        separateFromFor: 'Branch from {{name}}',
+        dialogTitle: 'Separate: {{input}}',
+        noResults: 'Use "Branch" on a sound to choose a method and separate it.',
+        recreate: 'Recreate with Other Settings',
+        recreateMessage:
+            'Recreating removes the following sounds separated from this result (they are removed when the recreation runs). Continue?',
+        removeMessage: 'The following sounds will be removed. Continue?',
+        renameFor: 'Rename {{name}}',
+        saveColumn: 'Save',
+        saveTargetFor: 'Save {{name}}',
+        exportSummary: 'Sounds to export: {{count}}',
+        exportNoTargets: 'Check "Save" on the sounds to export.',
         method: 'Method',
+        methodSearch: 'Choose, or filter by name, description or outputs',
+        noMatch: 'No matching models',
+        methodHint: 'Choosing two or more models decides one result from the results of each model.',
         pickModes: {
             recommended: 'Recommended',
-            model: 'Model',
-            ensemble: 'Combination',
-            signal: 'Signal processing',
+            model: 'Models',
         },
-        recommended: 'Recommended',
-        model: 'Model',
-        modelSearch: 'Search by name, method or description',
-        noMatch: 'No matching models',
-        noModels:
-            'No models for this separation type have been downloaded. Get them from "Download Separation Models".',
-        centerCancel: 'Center channel cancellation',
-        centerCancelDescription:
-            'Center channel cancellation: cancels the sound shared by the left and right channels (such as centered vocals). A simple method that uses no model; it cannot be used for mono audio.',
+        verifiedEnsemble: 'Combination verified by the distributor ({{count}} models)',
+        categoryEmpty: 'No models in this group have been downloaded. You can get them from "Downloads".',
         quality: 'Separation quality (higher is better): {{values}}',
-        qualityHint: 'A score for how cleanly each output is separated (SDR). Higher values mean a cleaner result.',
-        ensembleModels: 'Models to combine',
-        ensembleHint: 'Choose two or more models. Their results are merged using the selected method.',
-        algorithm: 'Combination method',
+        algorithm: 'How to decide the result',
+        algorithmNotes: {
+            avg_wave:
+                "Averages the waveforms of the results. Sounds found in only one result get fainter (the distributor's default).",
+            median_wave:
+                'Uses the middle value of the waveforms at each moment. With three or more models, one result that is off has less effect.',
+            min_wave:
+                'Uses the value with the smallest magnitude at each moment. Less bleed from other sounds, but parts of the sound can be lost.',
+            max_wave:
+                'Uses the value with the largest magnitude at each moment. Less is lost, but bleed from other sounds also stays more easily.',
+            avg_fft: 'Averages the results per frequency. Sounds found in only one result get fainter.',
+            median_fft:
+                'Uses the middle value per frequency. With three or more models, one result that is off has less effect.',
+            min_fft:
+                "Uses the smallest magnitude per frequency. Less bleed, but parts of the sound can be lost (used by the distributor's Vocal Clean).",
+            max_fft:
+                "Uses the largest magnitude per frequency. Less is lost, but bleed also stays more easily (used by the distributor's Vocal Full).",
+            uvr_max_spec:
+                'Uses the larger value per frequency, the way UVR (the separation software this library is based on) does. Less is lost, but bleed also stays more easily.',
+            uvr_min_spec:
+                'Uses the smaller value per frequency, the way UVR (the separation software this library is based on) does. Less bleed, but parts of the sound can be lost.',
+        },
         algorithms: {
             avg_wave: 'Average (waveform)',
             median_wave: 'Median (waveform)',
@@ -469,11 +473,13 @@ export default {
             uvr_max_spec: 'Maximum (spectrum, UVR method)',
             uvr_min_spec: 'Minimum (spectrum, UVR method)',
         },
+        advanced: 'Advanced Settings',
         paramsFor: 'Parameters ({{arch}})',
+        defaultParams: 'Default settings',
         params: {
             segmentSize: 'Segment size',
             overlap: 'Overlap',
-            overlapCount: 'Overlap (window count)',
+            overlapCount: 'Overlap count',
             batchSize: 'Batch size',
             hopLength: 'Hop length',
             enableDenoise: 'Denoise',
@@ -485,77 +491,24 @@ export default {
             highEndProcess: 'High-end processing',
             shifts: 'Shifts',
             segmentsEnabled: 'Process in segments',
-            overrideModelSegmentSize: 'Override the model segment size',
+            overrideModelSegmentSize: 'Set the segment size',
             pitchShift: 'Pitch shift (semitones)',
             modelDefault: 'Model default',
         },
         run: 'Separate',
         running: 'Separating',
-        getModels: 'Download Separation Models',
-        candidates: 'Candidates',
-        noCandidates:
-            'Choose a method and parameters and run the separation; each result is listed as a candidate. Listen to the candidates and adopt the one you want.',
         adopt: 'Adopt',
-        adoptSame: 'Use the Same Candidate',
-        adoptSeparate: 'Choose Separately',
-        outputs: 'Outputs (click to choose what to play)',
-        playHint:
-            'Click an output to play it. Select several to play them layered. Switching keeps the playback position.',
-        playOriginal: 'Original',
-        playStageInput: 'Stage Input',
-        candidateInUse: 'A candidate used by a later stage cannot be removed. Change the adoption first.',
-        removedToAccompaniment: 'Return the removed backing vocals to the accompaniment (discarded when off)',
+        presetUnavailable:
+            'This preset includes models that have not been downloaded (or a method that cannot be used for this audio). Those were not selected.',
+        deleteResult: 'Remove Result',
+        rename: 'Rename',
+        trackName: 'Name of the sound',
+        trackNameHint: 'Leave empty to go back to "{{name}}".',
         invalidateTitle: 'Later results will be invalidated',
-        invalidateMessage:
-            'Changing the adoption makes the results of the later stages unusable, so they will be discarded. Continue?',
         invalidateRun: 'Discard and Change',
-    },
-    roles: {
-        vocals: { primary: 'Vocals', secondary: 'Accompaniment' },
-        karaoke: { primary: 'Lead vocals', secondary: 'Backing vocals' },
-        cleanup: { primary: 'Cleaned', secondary: 'Removed sound' },
-    },
-    stems: {
-        vocals: 'Vocals',
-        drums: 'Drums',
-        bass: 'Bass',
-        other: 'Other',
-        guitar: 'Guitar',
-        piano: 'Piano',
-        instrumental: 'Accompaniment',
-        woodwinds: 'Woodwinds',
-        'no woodwinds': 'Without woodwinds',
-        echo: 'Echo',
-        'no echo': 'Without echo',
-        reverb: 'Reverb',
-        'no reverb': 'Without reverb',
-        noreverb: 'Without reverb',
-        noise: 'Noise',
-        'no noise': 'Without noise',
-        dry: 'Cleaned sound',
-        'no dry': 'Removed sound',
-        'no other': 'Without other',
-        'no bass': 'Without bass',
-        'no drums': 'Without drums',
-        crowd: 'Crowd',
-        'no crowd': 'Without crowd',
-        kick: 'Kick',
-        snare: 'Snare',
-        toms: 'Toms',
-        hh: 'Hi-hat',
-        ride: 'Ride',
-        crash: 'Crash',
-        'drum-bass': 'Drums and bass',
-        'no drum-bass': 'Without drums and bass',
-        male: 'Male',
-        female: 'Female',
-        aspiration: 'Breath',
-        bleed: 'Leakage',
     },
     tracks: {
         source: 'Original',
-        vocals: 'Vocals',
-        accompaniment: 'Accompaniment',
     },
     export: {
         open: 'Export...',
@@ -588,10 +541,12 @@ export default {
         modeHint:
             'Songs are split into vocals and accompaniment; only the vocals are converted and then mixed with the accompaniment again. Audio without accompaniment is converted as is.',
         dropHint: 'Drag & drop an audio (or video) file here\nor click to choose one',
-        inputSummary: 'The vocals to convert are set ({{accompaniment}}).',
+        vocalsTrack: 'Sound to convert',
+        accompanimentTracks: 'Sounds to mix in as the accompaniment',
+        inputSummary: 'The sound to convert is set ({{accompaniment}}).',
         withAccompaniment: 'with accompaniment',
         withoutAccompaniment: 'without accompaniment',
-        inputMissing: 'Adopt the vocals from the separation results, or load audio without accompaniment.',
+        inputMissing: 'Separate the audio and adopt sounds, or load audio without accompaniment.',
         voice: 'Voice model',
         noVoices: 'There are no voice models. Import one in "Voice Models" or create one in "Model Training".',
         pitch: 'Key change (semitones)',
@@ -648,7 +603,7 @@ export default {
         hint: 'The preview is made with the same processing as the export, so the exported file sounds exactly as you heard it.',
         stale: 'The settings or the adopted candidate have changed. Create the preview again (exporting recreates it automatically).',
         builtin: {
-            standard: 'Standard',
+            standard: 'Light Reverb',
             dry: 'No reverb',
             hall: 'Hall',
             vocalForward: 'Vocals forward',
@@ -863,7 +818,7 @@ export default {
         prosody: {
             description:
                 'Changes the speed, pitch and volume of the wrapped text. When nested, speeds are multiplied and pitch and volume are added.',
-            rate: 'Speed: "120%" (relative to normal), "+20%", "-20%", or x-slow / slow / medium / fast / x-fast',
+            rate: 'Speed: "120%" (relative to the default rate), "+20%", "-20%", or x-slow / slow / medium / fast / x-fast',
             pitch: 'Pitch: "+2st", "-3st" (semitones), "+10%", "-10%", or x-low / low / medium / high / x-high',
             volume: 'Volume: "+6dB", "-3dB", or silent / x-soft / soft / medium / loud / x-loud',
         },
@@ -1062,7 +1017,6 @@ export default {
         MODEL_REQUIRED: 'A required model has not been downloaded. Get it from Downloads.',
         MODEL_FILE_MISSING: 'A model file was not found ({{detail}}). Download it again from Downloads.',
         SEPARATION_NO_OUTPUT: 'The separation produced no output.',
-        CENTER_CANCEL_MONO: 'Center channel cancellation only works with stereo audio.',
         NO_AUDIO_STREAM: 'This file contains no audio.',
         RUBBERBAND_UNAVAILABLE:
             'The configured ffmpeg does not include the rubberband filter (used to transpose the accompaniment and fine-tune the speech speed). Use an ffmpeg build that includes rubberband (for example Gyan.FFmpeg from winget on Windows, ffmpeg from Homebrew on macOS, or the ffmpeg package of your Linux distribution) and review the ffmpeg setting in App Settings.',

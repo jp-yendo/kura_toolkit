@@ -44,8 +44,14 @@ def _patch_library() -> None:
     _patched = True
 
 
-def _install_progress(context: Context, start: float, span: float) -> None:
-    """Report the library's progress bars as progress between ``start`` and ``start + span``."""
+def _install_progress(context: Context, start: float, span: float, separator: Any) -> None:
+    """Report the library's progress bars as progress between ``start`` and ``start + span``.
+
+    An ensemble runs its models one after another, and each model reports its own bars from 0. How long each
+    model takes is not known in advance, so no overall share is made up: the progress runs from 0 to the end for
+    each model, and the step is reported with the model's number ("(1 / 3)") so that the progress and the time left
+    are read as those of the model being run.
+    """
     from audio_separator.separator import separator as separator_module
     from audio_separator.separator.architectures import (
         demucs_separator,
@@ -55,9 +61,27 @@ def _install_progress(context: Context, start: float, span: float) -> None:
     )
     from audio_separator.separator.uvr_lib_v5.demucs import apply as demucs_apply
 
+    count = max(1, len(separator.model_filenames or []))
+    # The model being run (the library separates the input once per model)
+    state = {"index": 0}
+
     def report(fraction: float) -> None:
+        index = min(state["index"], count - 1)
         context.progress(start + span * fraction)
-        context.phase("separate", fraction)
+        if count > 1:
+            context.phase("separate", fraction, current=index + 1, total=count)
+        else:
+            context.phase("separate", fraction)
+
+    separate_file = separator._separate_file
+    runs = {"count": 0}
+
+    def counted_separate_file(*args: Any, **kwargs: Any) -> Any:
+        state["index"] = runs["count"]
+        runs["count"] += 1
+        return separate_file(*args, **kwargs)
+
+    separator._separate_file = counted_separate_file
 
     bridge = runtime.TqdmBridge(report)
     bridge.install([separator_module, mdx_separator, vr_separator, mdxc_separator, demucs_separator])
@@ -261,7 +285,7 @@ def _run(params: dict, context: Context, device: str) -> List[dict]:
             separator.load_model(model_filename=list(method["filenames"]))
         else:
             separator.load_model()
-        _install_progress(context, 0.05, 0.9)
+        _install_progress(context, 0.05, 0.9, separator)
         outputs = separator.separate(params["input"])
     finally:
         del separator

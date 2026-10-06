@@ -40,6 +40,8 @@ export type ExportEntry = {
     label: string;
     // ファイル名の接尾辞 (ボーカル・伴奏など。翻訳済み)。空なら元のファイル名だけ
     suffix: string;
+    // ファイル名 (拡張子なし)。指定したときは、元のファイル名と接尾辞の代わりにこれを使う
+    fileName?: string;
     // 書き出す音声 (作業ディレクトリ内)。複数の音を重ねる必要があるものは書き出し時に作る
     resolve(jobId: string): Promise<string>;
     defaultChecked?: boolean;
@@ -55,6 +57,8 @@ type Props = {
     baseFileName?: string;
     // 書き出す結果がある作業
     workKey: string;
+    // 書き出すものを呼び出し側で選んである (項目ごとのチェックを出さずに、渡したものをすべて書き出す)
+    fixedSelection?: boolean;
 };
 
 type EntryState = { checked: boolean; name: string; customPath: string | null };
@@ -66,7 +70,15 @@ function extension(format: AudioExportFormat): string {
 // 音声の書き出し。書き出しの設定は音声機能で共通で、変えた時点で保存する。
 // 書き出すものが複数ある場合は、書き出し先ディレクトリと項目ごとのファイル名を指定する。
 // 1 つだけの場合は、形式の設定だけを示し、書き出すときに保存先とファイル名をファイルの保存ダイアログで選ぶ
-export default function ExportDialog({ open, onClose, entries, sourcePath, baseFileName, workKey }: Props) {
+export default function ExportDialog({
+    open,
+    onClose,
+    entries,
+    sourcePath,
+    baseFileName,
+    workKey,
+    fixedSelection,
+}: Props) {
     const { t } = useTranslation();
     const { settings, update } = useSettingsStore();
     // 設定は起動時に読み込み済み (読み込む前は画面を描画しない)
@@ -91,7 +103,8 @@ export default function ExportDialog({ open, onClose, entries, sourcePath, baseF
     }, [open]);
 
     const single = entries.length === 1 ? entries[0] : null;
-    const autoName = (entry: ExportEntry) => sanitizeFileName(entry.suffix ? `${base}_${entry.suffix}` : base);
+    const autoName = (entry: ExportEntry) =>
+        sanitizeFileName(entry.fileName ?? (entry.suffix ? `${base}_${entry.suffix}` : base));
     const fileNameOf = (entry: ExportEntry) => {
         const state = states[entry.key];
         const name = state?.name.trim() ? state.name.trim() : autoName(entry);
@@ -244,15 +257,17 @@ export default function ExportDialog({ open, onClose, entries, sourcePath, baseF
                                                 spacing={1}
                                                 sx={{ alignItems: 'center', py: 0.5 }}
                                             >
-                                                <Checkbox
-                                                    checked={state.checked}
-                                                    onChange={(_e, checked) =>
-                                                        setStates(previous => ({
-                                                            ...previous,
-                                                            [entry.key]: { ...state, checked },
-                                                        }))
-                                                    }
-                                                />
+                                                {!fixedSelection && (
+                                                    <Checkbox
+                                                        checked={state.checked}
+                                                        onChange={(_e, checked) =>
+                                                            setStates(previous => ({
+                                                                ...previous,
+                                                                [entry.key]: { ...state, checked },
+                                                            }))
+                                                        }
+                                                    />
+                                                )}
                                                 <Typography variant='body2' sx={{ width: 160, flexShrink: 0 }}>
                                                     {entry.label}
                                                 </Typography>

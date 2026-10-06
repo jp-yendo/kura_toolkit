@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { emitJobEvent, finishJob, startJob } from '../job-manager';
 import { resolveFfmpegPath } from '../ffmpeg/ffmpeg';
-import { centerCancel, convertChannels, decodeToWav, mixFiles, padEnd, probeAudio } from './audio-tools';
+import { convertChannels, decodeToWav, mixFiles, padEnd, probeAudio } from './audio-tools';
 import { isComponentCurrent, isItemInstalled } from './library';
 import { forgetMedia, forgetMediaUnder } from '../media-protocol';
 import { mediaRef } from './media';
@@ -108,19 +108,14 @@ function methodLabel(request: SeparationRunRequest): string {
         return list?.models.find(model => model.filename === method.filename)?.name ?? method.filename;
     if (method.kind === 'verifiedEnsemble')
         return list?.ensembles.find(ensemble => ensemble.id === method.ensembleId)?.name ?? method.ensembleId;
-    if (method.kind === 'ensemble') {
-        const names = method.filenames.map(
-            filename => list?.models.find(model => model.filename === filename)?.name ?? filename
-        );
-        return `${names.join(' + ')} (${method.algorithm})`;
-    }
-    return 'center-cancel';
+    const names = method.filenames.map(
+        filename => list?.models.find(model => model.filename === filename)?.name ?? filename
+    );
+    return `${names.join(' + ')} (${method.algorithm})`;
 }
 
 // 使ったアーキテクチャのパラメーターだけを候補に残す (一覧の表示用)
 function usedParams(request: SeparationRunRequest): Partial<SeparationParams> {
-    const method = request.method;
-    if (method.kind === 'centerCancel') return {};
     const list = readSeparatorModelList();
     const archs = new Set(
         requiredModels(request).map(filename => list?.models.find(model => model.filename === filename)?.arch)
@@ -160,58 +155,47 @@ async function separateInto(
     id: string,
     dir: string
 ): Promise<SeparationCandidate> {
-    let stems: { name: string; path: string }[];
-    if (request.method.kind === 'centerCancel') {
-        const vocals = path.join(dir, 'Vocals.wav');
-        const instrumental = path.join(dir, 'Instrumental.wav');
-        await centerCancel(request.input, vocals, instrumental, jobId, ffmpegPhase(jobId, 'separate'));
-        stems = [
-            { name: 'Vocals', path: vocals },
-            { name: 'Instrumental', path: instrumental },
-        ];
-    } else {
-        if (!resolveFfmpegPath()) throw new Error('FFMPEG_NOT_FOUND');
-        // 足りないモデルはダウンロード項目の ID で知らせる (画面はその項目を選んだ状態でダウンロードを開く)
-        const missing = requiredModels(request)
-            .map(filename => separatorItemId(filename))
-            .filter(itemId => !isItemInstalled(itemId));
-        if (missing.length > 0) throw new Error(`MODEL_NOT_INSTALLED: ${missing.join(', ')}`);
-        const raw = path.join(dir, 'raw');
-        // 末尾に無音を足した入力で分離し、結果を元の長さに切りそろえる (末尾を短く返すモデルがあるため)
-        voicePhase(jobId, 'prepare');
-        const { durationSec } = await probeAudio(request.input, jobId);
-        const padded = path.join(raw, 'input.wav');
-        fs.mkdirSync(raw, { recursive: true });
-        await padEnd(request.input, padded, SEPARATION_PAD_SECONDS, jobId);
-        const worker = getWorker('separator');
-        const result = await withGpu(jobId, 'separator', () =>
-            worker.request<{ stems: { name: string; path: string }[] }>(
-                'separate',
-                {
-                    modelDir: modelPaths().group('separator'),
-                    outputDir: path.join(raw, 'stems'),
-                    input: padded,
-                    method: request.method,
-                    params: request.params,
-                },
-                {
-                    jobId,
-                    onEvent: workerEvents(jobId, 0, 95),
-                }
-            )
+    const stems: { name: string; path: string }[] = [];
+    if (!resolveFfmpegPath()) throw new Error('FFMPEG_NOT_FOUND');
+    // 足りないモデルはダウンロード項目の ID で知らせる (画面はその項目を選んだ状態でダウンロードを開く)
+    const missing = requiredModels(request)
+        .map(filename => separatorItemId(filename))
+        .filter(itemId => !isItemInstalled(itemId));
+    if (missing.length > 0) throw new Error(`MODEL_NOT_INSTALLED: ${missing.join(', ')}`);
+    const raw = path.join(dir, 'raw');
+    // 末尾に無音を足した入力で分離し、結果を元の長さに切りそろえる (末尾を短く返すモデルがあるため)
+    voicePhase(jobId, 'prepare');
+    const { durationSec } = await probeAudio(request.input, jobId);
+    const padded = path.join(raw, 'input.wav');
+    fs.mkdirSync(raw, { recursive: true });
+    await padEnd(request.input, padded, SEPARATION_PAD_SECONDS, jobId);
+    const worker = getWorker('separator');
+    const result = await withGpu(jobId, 'separator', () =>
+        worker.request<{ stems: { name: string; path: string }[] }>(
+            'separate',
+            {
+                modelDir: modelPaths().group('separator'),
+                outputDir: path.join(raw, 'stems'),
+                input: padded,
+                method: request.method,
+                params: request.params,
+            },
+            {
+                jobId,
+                onEvent: workerEvents(jobId, 0, 95),
+            }
+        )
+    );
+    voicePhase(jobId, 'finishStems', { fraction: 0 });
+    for (const [index, stem] of result.stems.entries()) {
+        const target = path.join(dir, `${sanitizeStem(stem.name)}.wav`);
+        // 分離結果は常にステレオで出力されるため、元の音源がモノラルならモノラルに戻す。長さは入力にそろえる
+        await convertChannels(stem.path, target, request.channels, jobId, durationSec, percent =>
+            voicePhase(jobId, 'finishStems', { fraction: (index + percent / 100) / result.stems.length })
         );
-        stems = [];
-        voicePhase(jobId, 'finishStems', { fraction: 0 });
-        for (const [index, stem] of result.stems.entries()) {
-            const target = path.join(dir, `${sanitizeStem(stem.name)}.wav`);
-            // 分離結果は常にステレオで出力されるため、元の音源がモノラルならモノラルに戻す。長さは入力にそろえる
-            await convertChannels(stem.path, target, request.channels, jobId, durationSec, percent =>
-                voicePhase(jobId, 'finishStems', { fraction: (index + percent / 100) / result.stems.length })
-            );
-            stems.push({ name: stem.name, path: target });
-        }
-        discardLater(raw);
+        stems.push({ name: stem.name, path: target });
     }
+    discardLater(raw);
     const refs: SeparationStem[] = [];
     for (const stem of stems) refs.push({ name: stem.name, media: await mediaRef(stem.path) });
     emitJobEvent({ jobId, kind: 'progress', percent: 100 });
@@ -220,7 +204,6 @@ async function separateInto(
         method: request.method,
         methodLabel: methodLabel(request),
         params: usedParams(request),
-        category: request.category,
         stems: refs,
         createdAt: Date.now(),
     };

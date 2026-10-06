@@ -19,8 +19,9 @@ import SubdirectoryArrowRightIcon from '@mui/icons-material/SubdirectoryArrowRig
 import { useTranslation } from 'react-i18next';
 import Panel from '../common/Panel';
 import { itemLabel, type RequirementRow } from './libraryItems';
-import { SEPARATOR_ARCH_LABELS, separatorNoteKey, separatorOutputs } from './separatorModelNotes';
-import { formatBytes, stemName } from './voiceFormat';
+import { separatorFilename } from './separatorModelNotes';
+import SeparatorModelSummary from './SeparatorModelSummary';
+import { formatBytes } from './voiceFormat';
 import type { LibraryItem, LibraryProgress } from '@shared/voice/types';
 
 export const STATUS_COLORS: Record<LibraryItem['status'], 'default' | 'success' | 'warning' | 'error'> = {
@@ -31,44 +32,6 @@ export const STATUS_COLORS: Record<LibraryItem['status'], 'default' | 'success' 
 };
 
 const captionSx = { display: 'block', lineHeight: 1.5 } as const;
-
-// 分離モデルの概要 (何をするモデルか・方式・出力・分離の品質)
-function SeparatorDetails({
-    item,
-    separator,
-}: {
-    item: LibraryItem;
-    separator: NonNullable<LibraryItem['separator']>;
-}) {
-    const { t } = useTranslation();
-    const separatorText = t('voice.common.listSeparator');
-    const note = separatorNoteKey(item);
-    const outputs = separatorOutputs(item)
-        .map(stem => stemName(t, stem))
-        .join(separatorText);
-    const quality = Object.entries(separator.sdr)
-        .filter(([, value]) => value !== null)
-        .map(([stem, value]) => `${stemName(t, stem)} ${Number(value).toFixed(1)}`)
-        .join(' / ');
-    return (
-        <>
-            {note && (
-                <Typography variant='caption' color='text.secondary' sx={captionSx}>
-                    {t(note)}
-                </Typography>
-            )}
-            <Typography variant='caption' color='text.secondary' sx={captionSx}>
-                {t('voice.library.separatorArch', { arch: SEPARATOR_ARCH_LABELS[separator.arch] })}
-                {outputs && ` / ${t('voice.library.separatorOutputs', { outputs })}`}
-            </Typography>
-            {quality && (
-                <Typography variant='caption' color='text.secondary' sx={captionSx}>
-                    {t('voice.separation.quality', { values: quality })}
-                </Typography>
-            )}
-        </>
-    );
-}
 
 type RowProps = {
     row: RequirementRow;
@@ -111,7 +74,14 @@ export const ItemRow = React.memo(function ItemRow({ row, checked, toggle, onRem
                         {t(item.descriptionKey)}
                     </Typography>
                 )}
-                {item.separator && <SeparatorDetails item={item} separator={item.separator} />}
+                {item.separator && (
+                    <SeparatorModelSummary
+                        filename={separatorFilename(item)}
+                        arch={item.separator.arch}
+                        stems={item.separator.stems}
+                        sdr={item.separator.sdr}
+                    />
+                )}
                 {prerequisites.length > 0 && (
                     <Typography variant='caption' color='text.secondary' sx={captionSx}>
                         {t('voice.library.prerequisites', {

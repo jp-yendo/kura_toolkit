@@ -1,15 +1,7 @@
-import type { TFunction } from 'i18next';
-import i18n from '../../i18n/config';
 import type { VoiceModelInfo } from '@shared/voice/types';
 import { voiceDisplayName } from '@shared/voice/voice-name';
 
 // 音声機能の画面で共通に使う表示用の整形
-
-// 分離の出力 (ステム) の名前。訳がある名前は訳を、それ以外はそのまま表示する
-export function stemName(t: TFunction, name: string): string {
-    const key = `voice.stems.${name.toLowerCase()}`;
-    return i18n.exists(key) ? t(key) : name;
-}
 
 export function formatBytes(bytes: number | null | undefined): string {
     if (bytes === null || bytes === undefined || !Number.isFinite(bytes)) return '-';

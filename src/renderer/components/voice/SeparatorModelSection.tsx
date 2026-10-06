@@ -27,8 +27,9 @@ import Panel from '../common/Panel';
 import LibraryItemTable, { ItemRow, LibraryTableShell } from './LibraryItemTable';
 import { itemLabel, requirementRows, type RequirementRow } from './libraryItems';
 import { SEPARATOR_ARCH_LABELS, separatorNoteKey, separatorOutputs } from './separatorModelNotes';
-import { formatBytes, stemName } from './voiceFormat';
+import { formatBytes } from './voiceFormat';
 import { SEPARATOR_PURPOSES } from './separatorPurposes';
+import { compareSeparatorModels, SEPARATION_CATEGORIES } from './separatorCategories';
 import { SEPARATOR_MODEL_PREFIX, type RequirementGroup } from '@shared/voice/requirements';
 import type {
     LibraryItem,
@@ -39,7 +40,6 @@ import type {
     SeparatorEnsembleInfo,
 } from '@shared/voice/types';
 
-const SEPARATION_CATEGORIES: SeparationCategory[] = ['vocals', 'multi', 'karaoke', 'cleanup', 'other'];
 const SEPARATION_ARCHS: SeparationArch[] = ['MDXC', 'MDX', 'VR', 'Demucs'];
 
 const captionSx = { display: 'block', lineHeight: 1.5 } as const;
@@ -55,16 +55,12 @@ type PurposeRow =
           rows: RequirementRow[];
       };
 
-// 並べる順: 分離の品質 (出力のうち最も高い値) が高いモデル、名前の順
+// 並べる順: 分離の品質 (出力のうち最も高い値) が高いモデル、名前の順 (分離の画面と同じ)
 function compareModels(a: LibraryItem, b: LibraryItem): number {
-    const best = (item: LibraryItem) =>
-        Math.max(
-            -Infinity,
-            ...Object.values(item.separator?.sdr ?? {}).filter((value): value is number => value !== null)
-        );
-    const qualityOrder = best(b) - best(a);
-    if (qualityOrder !== 0 && !Number.isNaN(qualityOrder)) return qualityOrder;
-    return (a.name ?? '').localeCompare(b.name ?? '');
+    return compareSeparatorModels(
+        { name: a.name ?? '', sdr: a.separator?.sdr },
+        { name: b.name ?? '', sdr: b.separator?.sdr }
+    );
 }
 
 type EnsembleRowProps = {
@@ -200,11 +196,8 @@ export default function SeparatorModelSection({
         [inCategory]
     );
     const outputOptions = React.useMemo(
-        () =>
-            [...new Set(inCategory.flatMap(separatorOutputs))].sort((a, b) =>
-                stemName(t, a).localeCompare(stemName(t, b))
-            ),
-        [inCategory, t]
+        () => [...new Set(inCategory.flatMap(separatorOutputs))].sort((a, b) => a.localeCompare(b)),
+        [inCategory]
     );
     const arch = archFilter !== 'all' && archOptions.includes(archFilter) ? archFilter : 'all';
     const output = outputFilter !== 'all' && outputOptions.includes(outputFilter) ? outputFilter : 'all';
@@ -214,13 +207,7 @@ export default function SeparatorModelSection({
         const matches = (item: LibraryItem) => {
             if (!keyword) return true;
             const note = separatorNoteKey(item);
-            const text = [
-                itemLabel(t, item),
-                note ? t(note) : '',
-                ...separatorOutputs(item).map(stem => stemName(t, stem)),
-            ]
-                .join('\n')
-                .toLowerCase();
+            const text = [itemLabel(t, item), note ? t(note) : '', ...separatorOutputs(item)].join('\n').toLowerCase();
             return text.includes(keyword);
         };
         const models = inCategory
@@ -335,9 +322,12 @@ export default function SeparatorModelSection({
                         ))}
                     </Tabs>
                     <Stack spacing={0.5}>
-                        <Typography variant='body2' color='text.secondary' sx={{ lineHeight: 1.6 }}>
-                            {t(`voice.library.separatorPurposes.${activePurpose.id}.note`)}
-                        </Typography>
+                        {/* 補足は、2 回に分けて分離する目的のように、手順の説明が要るものだけが持つ */}
+                        {t(`voice.library.separatorPurposes.${activePurpose.id}.note`, { defaultValue: '' }) && (
+                            <Typography variant='body2' color='text.secondary' sx={{ lineHeight: 1.6 }}>
+                                {t(`voice.library.separatorPurposes.${activePurpose.id}.note`)}
+                            </Typography>
+                        )}
                         <LibraryTableShell>
                             {activePurpose.entries.map(entry =>
                                 'ensemble' in entry ? (
@@ -452,7 +442,7 @@ export default function SeparatorModelSection({
                                     <MenuItem value='all'>{t('voice.library.separatorFilterAll')}</MenuItem>
                                     {outputOptions.map(value => (
                                         <MenuItem key={value} value={value}>
-                                            {stemName(t, value)}
+                                            {value}
                                         </MenuItem>
                                     ))}
                                 </Select>
