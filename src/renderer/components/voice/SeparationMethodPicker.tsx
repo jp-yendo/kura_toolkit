@@ -208,9 +208,13 @@ export function resolveMethod(selection: MethodSelection, list: SeparationModelL
     };
 }
 
-// 「その他」の加工 (選んでいなければ初期値。無音部分の雑音を消す・ノイズ除去とも、チェックなし)
+// 「その他」の加工 (選んでいなければ初期値。無音部分の雑音を消す・ノイズ除去とも、チェックなし)。保存したプリセットに
+// 無い項目 (後から増えた項目) も初期値で補う
 function otherChoice(selection: MethodSelection): SeparationOtherChoice {
-    return selection.other ?? { muteSilence: silenceOption(false), noiseRemoval: noiseRemovalOption(false) };
+    return {
+        muteSilence: { ...silenceOption(false), ...selection.other?.muteSilence },
+        noiseRemoval: { ...noiseRemovalOption(false), ...selection.other?.noiseRemoval },
+    };
 }
 
 // 取得済みのノイズ除去のおすすめのモデル (おすすめの順)
