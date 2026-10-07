@@ -331,7 +331,7 @@ export function registerVoiceIpcHandlers() {
     );
     ipcMain.handle(
         IPC_CHANNELS.VOICE_TRAINING_TTS_START,
-        (_e, jobId: string, options: { setId: string; modelType: TtsModelType; name: string }) =>
+        (_e, jobId: string, options: { setId: string; modelType: TtsModelType; name: string; epochs: number }) =>
             startTtsTraining(jobId, options)
     );
 

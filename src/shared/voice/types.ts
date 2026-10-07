@@ -354,6 +354,36 @@ export function isValidRvcEpochs(value: unknown): value is number {
     );
 }
 
+// 読み上げ (Style-Bert-VITS2) の学習回数 (エポック数)。初期値は上流の学習画面の初期値と同じ
+export const TTS_TRAINING_EPOCHS = { default: 100, min: 10, max: 1000 };
+// 学習回数をステップ数から計算するときの、ステップ数の初期値と範囲。初期値は上流の FAQ の目安 (5k〜15k ステップで
+// 感情を含めてよくなる) と作者の記事 (4k〜8k ステップ) から
+export const TTS_TRAINING_STEPS = { default: 8000, min: 1, max: 1000000 };
+
+export function isValidTtsEpochs(value: unknown): value is number {
+    return (
+        typeof value === 'number' &&
+        Number.isInteger(value) &&
+        value >= TTS_TRAINING_EPOCHS.min &&
+        value <= TTS_TRAINING_EPOCHS.max
+    );
+}
+
+// 読み上げの学習のバッチサイズ (GPU のメモリ (MB) で決める。12GB 以上の 4 は作者の記事の値)。学習と、画面での学習回数の
+// 計算で同じ値を使う
+export function ttsTrainingBatchSize(memoryMb: number | undefined): number {
+    const memory = memoryMb ?? 0;
+    return memory >= 12000 ? 4 : memory >= 10000 ? 3 : memory >= 8000 ? 2 : 1;
+}
+
+// ステップ数から学習回数を計算する (1 回のステップ数 = 学習に使う音声の数 ÷ バッチサイズ (切り上げ))。学習回数の範囲に
+// 収める。音声が無ければ null
+export function ttsEpochsForSteps(steps: number, clips: number, batchSize: number): number | null {
+    if (clips <= 0 || batchSize <= 0) return null;
+    const stepsPerEpoch = Math.ceil(clips / batchSize);
+    return Math.min(TTS_TRAINING_EPOCHS.max, Math.max(TTS_TRAINING_EPOCHS.min, Math.round(steps / stepsPerEpoch)));
+}
+
 export type ConversionParams = {
     // キーの変更量 (半音)
     pitch: number;

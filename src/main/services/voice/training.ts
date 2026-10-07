@@ -28,6 +28,8 @@ import {
 } from '../../../shared/voice/languages';
 import {
     isValidRvcEpochs,
+    isValidTtsEpochs,
+    ttsTrainingBatchSize,
     type TrainingSentence,
     type TrainingSetMode,
     type TrainingStage,
@@ -203,11 +205,13 @@ async function trainRvc(
     }
 }
 
-type TtsTrainingOptions = { setId: string; modelType: TtsModelType; name: string };
+type TtsTrainingOptions = { setId: string; modelType: TtsModelType; name: string; epochs: number };
 
 export async function startTtsTraining(jobId: string, options: TtsTrainingOptions): Promise<VoiceModelInfo> {
     startJob(jobId);
     try {
+        // 学習回数は画面で指定する (範囲外は受け付けない)
+        if (!isValidTtsEpochs(options.epochs)) throw new Error('INVALID_EPOCHS');
         return await withTrainingSet('tts', options.setId, set => {
             if (!set.language) throw new Error('TRAINING_SET_LANGUAGE_MISMATCH');
             const clips = ttsClips(set.language, set.mode, set.sentences, set.audios);
@@ -274,11 +278,8 @@ async function trainTts(
     const missing = required.filter(item => !isItemInstalled(item));
     if (missing.length > 0) throw new Error(`MODEL_REQUIRED: ${missing.join(', ')}`);
 
-    const memory = platform.gpu.memoryMb ?? 0;
-    const batchSize = memory >= 12000 ? 4 : memory >= 10000 ? 3 : memory >= 8000 ? 2 : 1;
-    // 全体の学習ステップ数がおよそ 8000 になるように回数を決める
-    const stepsPerEpoch = Math.ceil(clips.length / batchSize);
-    const epochs = Math.max(20, Math.min(200, Math.round(8000 / stepsPerEpoch)));
+    const batchSize = ttsTrainingBatchSize(platform.gpu.memoryMb);
+    const epochs = options.epochs;
     const modelName = internalModelName();
     const repo = libraryPaths().source('tts');
     // 駆動スクリプトへの指示と学習の途中のデータの置き場 (学習が終わったら消す)

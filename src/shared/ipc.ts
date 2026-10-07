@@ -225,7 +225,7 @@ export type VoiceApi = {
         rvcStart(jobId: string, setId: string, name: string, epochs: number): Promise<VoiceModelInfo>;
         ttsStart(
             jobId: string,
-            options: { setId: string; modelType: TtsModelType; name: string }
+            options: { setId: string; modelType: TtsModelType; name: string; epochs: number }
         ): Promise<VoiceModelInfo>;
     };
     export: {

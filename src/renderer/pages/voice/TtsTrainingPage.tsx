@@ -31,6 +31,7 @@ import AudioFileOutlinedIcon from '@mui/icons-material/AudioFileOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import GraphicEqIcon from '@mui/icons-material/GraphicEq';
 import SchoolIcon from '@mui/icons-material/School';
+import CalculateOutlinedIcon from '@mui/icons-material/CalculateOutlined';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageContainer from '../../components/common/PageContainer';
@@ -57,7 +58,16 @@ import { useRemainingTime } from '../../hooks/useRemainingTime';
 import { showNotice } from '../../stores/noticeStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { LANGUAGE_DEFINITIONS, ttsTrainingItems, type TtsModelType } from '@shared/voice/languages';
-import type { TrainingAudio, TrainingSentence, TrainingSetDetail, VoiceModelInfo } from '@shared/voice/types';
+import {
+    isValidTtsEpochs,
+    TTS_TRAINING_EPOCHS,
+    ttsTrainingBatchSize,
+    type TrainingAudio,
+    type TrainingSentence,
+    type TrainingSetDetail,
+    type VoiceModelInfo,
+} from '@shared/voice/types';
+import EpochsFromStepsDialog from '../../components/voice/EpochsFromStepsDialog';
 
 // 録音中の保存先。録音を止めた時点の表示に関わらず、録音を始めた時点の学習セットと文 (グループ) に保存する
 type RecordingTarget = { setId: string; sentenceId: string };
@@ -141,6 +151,11 @@ export default function TtsTrainingPage() {
         LANGUAGE_DEFINITIONS[language].trainingModelTypes[0]
     );
     const [name, setName] = React.useState('');
+    // 学習回数 (入力中の文字のまま持ち、整数で範囲内のときだけ学習を始められる)。ステップ数から計算するダイアログでも入れる
+    const [epochsText, setEpochsText] = React.useState(String(TTS_TRAINING_EPOCHS.default));
+    const epochs = /^\d+$/.test(epochsText) ? Number(epochsText) : NaN;
+    const epochsValid = isValidTtsEpochs(epochs);
+    const [stepsDialogOpen, setStepsDialogOpen] = React.useState(false);
     // 音声の削除の確認の対象。閉じる間も表示が変わらないよう、開閉とは別に持つ
     const [removeConfirm, setRemoveConfirm] = React.useState<{ open: boolean; audio: TrainingAudio | null }>({
         open: false,
@@ -356,7 +371,7 @@ export default function TtsTrainingPage() {
         if (!setId) return;
         try {
             const info = await run(t('voice.training.running'), jobId =>
-                window.kuraToolkit.voice.training.ttsStart(jobId, { setId, modelType, name })
+                window.kuraToolkit.voice.training.ttsStart(jobId, { setId, modelType, name, epochs })
             );
             setCreated(info);
             setName('');
@@ -663,6 +678,29 @@ export default function TtsTrainingPage() {
                                 ))}
                             </Select>
                         </FormControl>
+                        {/* 学習回数と、その右にステップ数から計算するボタン */}
+                        <Stack direction='row' spacing={0.5} sx={{ alignItems: 'center' }}>
+                            <TextField
+                                size='small'
+                                label={t('voice.training.epochs')}
+                                value={epochsText}
+                                error={!epochsValid}
+                                onChange={event => setEpochsText(event.target.value.trim())}
+                                slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+                                sx={{ width: 120 }}
+                            />
+                            <Tooltip title={t('voice.training.epochsFromSteps')}>
+                                <span>
+                                    <IconButton
+                                        aria-label={t('voice.training.epochsFromSteps')}
+                                        disabled={job !== null}
+                                        onClick={() => setStepsDialogOpen(true)}
+                                    >
+                                        <CalculateOutlinedIcon />
+                                    </IconButton>
+                                </span>
+                            </Tooltip>
+                        </Stack>
                         <TextField
                             size='small'
                             label={t('voice.training.modelName')}
@@ -678,6 +716,7 @@ export default function TtsTrainingPage() {
                                 job !== null ||
                                 recordingActive ||
                                 !name.trim() ||
+                                !epochsValid ||
                                 (custom ? readyGroups === 0 : withAudio < minimum)
                             }
                             onClick={() => void checkBeforeTraining()}
@@ -772,6 +811,18 @@ export default function TtsTrainingPage() {
                     </Button>
                 </DialogActions>
             </AppDialog>
+
+            {/* 学習回数をステップ数から計算する (学習に使う音声の数と、学習と同じバッチサイズで計算する) */}
+            <EpochsFromStepsDialog
+                open={stepsDialogOpen}
+                clips={custom ? readyGroups : withAudio}
+                batchSize={ttsTrainingBatchSize(platform?.gpu.memoryMb)}
+                onClose={() => setStepsDialogOpen(false)}
+                onConfirm={value => {
+                    setEpochsText(String(value));
+                    setStepsDialogOpen(false);
+                }}
+            />
 
             <AppDialog
                 open={removeGroupConfirm.open}
