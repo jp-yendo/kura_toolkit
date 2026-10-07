@@ -546,7 +546,9 @@ export default function TtsTrainingPage() {
                                     <Stack
                                         direction='row'
                                         spacing={1.5}
-                                        sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
+                                        // 録音中はフィルター・削除のボタン (高さ 40px) を出さないため、行の高さを保ち、下の波形を
+                                        // 動かさない
+                                        sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1, minHeight: 40 }}
                                     >
                                         <RecorderControl
                                             disabled={editDisabled}

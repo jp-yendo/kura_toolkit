@@ -16,8 +16,8 @@ type Props = {
     label?: string;
 };
 
-// 録音・停止のボタンの高さ (px)。録音のボタン (MUI の通常の大きさのボタン) に合わせ、録音中も行の高さを変えない
-const CONTROL_HEIGHT = 36;
+// 録音・停止のボタンの高さ (px)。録音のボタン (MUI の通常の大きさの枠線付きのボタン) に合わせ、録音中も行の高さを変えない
+const CONTROL_HEIGHT = 36.5;
 
 // マイク録音のボタンと入力レベル。録音を止めると、main が書き終えた録音 (16bit の WAV) を渡す
 export default function RecorderControl({ onRecorded, onActiveChange, disabled, label }: Props) {

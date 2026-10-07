@@ -111,7 +111,7 @@ export default function TrainingGroupRow({
                     </Stack>
                     {/* 下の段: 録音・音声ファイル選択・テキストファイル選択を左から並べる (録音中にメーターが広がっても、
                         ほかのボタンを押し出さないため)。録音中のグループでは、録音中に使えない音声ファイル選択を出さない */}
-                    <Stack direction='row' spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
+                    <Stack direction='row' spacing={1.5} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
                         <RecorderControl
                             disabled={disabled || (recordingActive && !recordingThis)}
                             label={audio ? t('voice.training.rerecord') : undefined}
