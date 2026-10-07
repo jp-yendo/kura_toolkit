@@ -333,8 +333,9 @@ export default function SeparatorModelSection({
     return (
         <Stack spacing={2}>
             {activePurpose && (
-                <Stack spacing={1}>
-                    <Typography variant='subtitle1' sx={{ fontWeight: 700 }}>
+                // タブは文字の上下に余白を持つため、見出しとの間は空けない (見た目の間隔をほかの見出しとそろえる)
+                <Stack>
+                    <Typography variant='subtitle2' component='h4' sx={{ fontWeight: 700 }}>
                         {t('voice.library.separatorRecommendations')}
                     </Typography>
                     <Stack spacing={1.5}>
@@ -403,7 +404,7 @@ export default function SeparatorModelSection({
             )}
 
             <Stack spacing={1}>
-                <Typography variant='subtitle1' sx={{ fontWeight: 700 }}>
+                <Typography variant='subtitle2' component='h4' sx={{ fontWeight: 700 }}>
                     {t('voice.library.separatorSingleModels')}
                 </Typography>
                 <Stack spacing={1.5}>

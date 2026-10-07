@@ -26,7 +26,6 @@ import { useTranslation } from 'react-i18next';
 import { useGuardedNavigate } from '../../stores/navigationGuard';
 import AppDialog from '../common/AppDialog';
 import ProgressDialog from '../common/ProgressDialog';
-import SectionLabel from '../common/SectionLabel';
 import LibraryItemTable from './LibraryItemTable';
 import SeparatorModelSection from './SeparatorModelSection';
 import {
@@ -486,12 +485,13 @@ export default function VoiceLibraryDialog() {
 
                                         {FEATURE_REQUIREMENTS[feature].map((group, index) => (
                                             <Stack key={group.titleKey} spacing={1}>
-                                                <SectionLabel>
+                                                {/* グループの見出し (中の小見出しより大きくする) */}
+                                                <Typography variant='subtitle1' component='h3' sx={{ fontWeight: 700 }}>
                                                     {t('voice.library.groupTitle', {
                                                         name: t(group.titleKey),
                                                         kind: t(`voice.library.requirementKinds.${group.kind}`),
                                                     })}
-                                                </SectionLabel>
+                                                </Typography>
                                                 {group.noteKey && (
                                                     <Typography
                                                         variant='body2'

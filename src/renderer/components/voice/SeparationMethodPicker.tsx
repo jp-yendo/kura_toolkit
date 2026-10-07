@@ -208,9 +208,9 @@ export function resolveMethod(selection: MethodSelection, list: SeparationModelL
     };
 }
 
-// 「その他」の加工 (選んでいなければ初期値。無音部分の雑音を消すはチェックあり、ノイズ除去はチェックなし)
+// 「その他」の加工 (選んでいなければ初期値。無音部分の雑音を消す・ノイズ除去とも、チェックなし)
 function otherChoice(selection: MethodSelection): SeparationOtherChoice {
-    return selection.other ?? { muteSilence: silenceOption(true), noiseRemoval: noiseRemovalOption(false) };
+    return selection.other ?? { muteSilence: silenceOption(false), noiseRemoval: noiseRemovalOption(false) };
 }
 
 // 取得済みのノイズ除去のおすすめのモデル (おすすめの順)
