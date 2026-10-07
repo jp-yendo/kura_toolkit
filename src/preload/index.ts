@@ -40,6 +40,7 @@ const IPC_CHANNELS = {
     AUDIO_ANALYZE: 'audio:analyze',
     AUDIO_NORMALIZE: 'audio:normalize',
     AUDIO_CHECK_OUTPUTS: 'audio:checkOutputs',
+    AUDIO_FORMATS: 'audio:formats',
     AUDIO_PROBE: 'audio:probe',
     CHAPTER_PROBE: 'chapter:probe',
     CHAPTER_CUT: 'chapter:cut',
@@ -218,8 +219,11 @@ const api: IpcApi = {
         async normalize(jobId, inputs, options) {
             return ipcRenderer.invoke(IPC_CHANNELS.AUDIO_NORMALIZE, jobId, inputs, options);
         },
-        async checkOutputs(files, outputDir) {
-            return ipcRenderer.invoke(IPC_CHANNELS.AUDIO_CHECK_OUTPUTS, files, outputDir);
+        async checkOutputs(files, outputDir, format) {
+            return ipcRenderer.invoke(IPC_CHANNELS.AUDIO_CHECK_OUTPUTS, files, outputDir, format);
+        },
+        async formats() {
+            return ipcRenderer.invoke(IPC_CHANNELS.AUDIO_FORMATS);
         },
     },
     chapter: {

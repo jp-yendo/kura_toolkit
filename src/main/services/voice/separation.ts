@@ -12,9 +12,11 @@ import { getWorker } from './python-worker';
 import { ensureSeparatorModelList, readSeparatorModelList, separatorModelInstalled } from './separator-models';
 import { separatorItemId } from './spec';
 import { withGpu } from './gpu-lock';
-import { editSilence, removeNoise, removeReverb } from './audio-filters';
+import { editSilence, normalizeLoudness, removeNoise, removeReverb } from './audio-filters';
 import {
+    SEPARATION_LOUDNESS_DEFAULT_LUFS,
     sanitizeDereverbOption,
+    sanitizeLoudnessOption,
     sanitizeNoiseRemovalOption,
     sanitizeSilenceOption,
 } from '../../../shared/voice/audio-filters';
@@ -154,6 +156,7 @@ export async function runSeparation(jobId: string, request: SeparationRunRequest
                           dereverb: sanitizeDereverbOption(request.method.dereverb),
                           noiseRemoval: sanitizeNoiseRemovalOption(request.method.noiseRemoval),
                           muteSilence: sanitizeSilenceOption(request.method.muteSilence),
+                          loudness: sanitizeLoudnessOption(request.method.loudness, SEPARATION_LOUDNESS_DEFAULT_LUFS),
                       },
                       id,
                       dir
@@ -232,7 +235,8 @@ async function separateInto(
     };
 }
 
-// 分岐の「その他」: 分離はせず、残響・エコーを除去する・ノイズを除去する・無音部分の雑音を消すで加工した 1 つの出力を作る
+// 分岐の「その他」: 分離はせず、残響・エコーを除去する・ノイズを除去する・無音部分の雑音を消す・音量をそろえるで加工した
+// 1 つの出力を作る
 // (長さとチャンネル数は変わらない)
 async function processInto(
     jobId: string,
@@ -241,13 +245,18 @@ async function processInto(
     id: string,
     dir: string
 ): Promise<SeparationCandidate> {
-    if (!method.dereverb.enabled && !method.noiseRemoval.enabled && !method.muteSilence.enabled) {
+    if (
+        !method.dereverb.enabled &&
+        !method.noiseRemoval.enabled &&
+        !method.muteSilence.enabled &&
+        !method.loudness.enabled
+    ) {
         throw new Error('NOTHING_TO_PROCESS');
     }
     const work = path.join(dir, 'work');
     fs.mkdirSync(work, { recursive: true });
-    // 残響・エコーの除去 → ノイズ除去 → 無音部分の雑音を消すの順に行う (残響の尾や雑音を除いてから無音を判断すると、
-    // 無音として消せる部分が増えるため)
+    // 残響・エコーの除去 → ノイズ除去 → 無音部分の雑音を消す → 音量をそろえるの順に行う (残響の尾や雑音を除いてから
+    // 無音を判断すると、無音として消せる部分が増えるため。除去で音量が下がるため、音量は最後にそろえる)
     let current = request.input;
     if (method.dereverb.enabled) {
         const next = path.join(work, 'dereverbed.wav');
@@ -262,6 +271,11 @@ async function processInto(
     if (method.muteSilence.enabled) {
         const next = path.join(work, 'muted.wav');
         await editSilence(jobId, 'separator', current, next, method.muteSilence, 'mute');
+        current = next;
+    }
+    if (method.loudness.enabled) {
+        const next = path.join(work, 'loudness.wav');
+        await normalizeLoudness(jobId, current, next, method.loudness);
         current = next;
     }
     // 出力の名前は、モデルの出力名と同じく言語によらない英語の固定名 (フィルターをかけた音)

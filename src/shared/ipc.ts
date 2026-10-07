@@ -9,6 +9,7 @@ import type {
     AudioNormalizeResult,
     AudioNormalizerSettings,
     AudioOutputCheck,
+    AudioOutputFormat,
     ChapterCutRequest,
     ChapterJobResult,
     ChapterOutputCheck,
@@ -62,6 +63,7 @@ import type {
     SeparationRunRequest,
     TtsRunRequest,
     TtsRunResult,
+    TrainingAddFilesResult,
     TrainingAudio,
     TrainingSetDetail,
     TrainingSetSummary,
@@ -71,6 +73,7 @@ import type {
 } from './voice/types';
 
 import type { SilenceOption, TrainingFilterOptions } from './voice/audio-filters';
+import type { AudioFormat } from './audio-format';
 
 export type VoicePresetParams = SeparationPresetParams | MixParams;
 
@@ -179,7 +182,7 @@ export type VoiceApi = {
             id: string,
             paths: string[],
             sentenceId?: string
-        ): Promise<TrainingAudio[]>;
+        ): Promise<TrainingAddFilesResult>;
         removeAudio(feature: VoiceModelFeature, id: string, audioId: string): Promise<void>;
         // 学習用の音のフィルター: 個々の音に加工をかけた結果を作る (作業 workKey の中。確定するまで学習セットは変えない)
         filterAudio(
@@ -300,7 +303,9 @@ export type IpcApi = {
             options: AudioNormalizerSettings
         ): Promise<AudioNormalizeResult>;
         // 実行前の出力先チェック (上書きになるファイルと、出力パスの重複)
-        checkOutputs(files: string[], outputDir: string): Promise<AudioOutputCheck>;
+        checkOutputs(files: string[], outputDir: string, format: AudioOutputFormat): Promise<AudioOutputCheck>;
+        // 使っている ffmpeg で書き出せる形式 (オーディオ正規化と音声機能の書き出しで使う)
+        formats(): Promise<AudioFormat[]>;
     };
     // チャプターカット
     chapter: {

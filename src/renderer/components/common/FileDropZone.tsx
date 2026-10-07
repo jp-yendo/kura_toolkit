@@ -3,6 +3,7 @@ import { Box, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import type { FileFilter } from '@shared/types';
 import type { SxProps, Theme } from '@mui/material/styles';
+import { useFileDrop } from '../../hooks/useFileDrop';
 
 type Props = {
     // 選択/ドロップされた絶対パスを通知する
@@ -36,54 +37,17 @@ export default function FileDropZone({
     children,
 }: Props) {
     const { t } = useTranslation();
-    const [dragOver, setDragOver] = React.useState(false);
-
-    const acceptPath = React.useCallback(
-        (filePath: string) => {
-            if (allowDirectories) return true;
-            if (!accept || accept.length === 0) return true;
-            const dot = filePath.lastIndexOf('.');
-            if (dot < 0) return false;
-            return accept.includes(filePath.slice(dot + 1).toLowerCase());
-        },
-        [accept, allowDirectories]
-    );
-
-    const handleDrop = (event: React.DragEvent) => {
-        event.preventDefault();
-        setDragOver(false);
-        const files = Array.from(event.dataTransfer.files);
-        const paths = files
-            .map(file => window.kuraToolkit.getPathForFile(file))
-            .filter(filePath => filePath && acceptPath(filePath));
-        if (paths.length === 0) {
-            // 何も受け付けられなかったことを伝える (無反応にしない)
-            if (files.length > 0) onRejected?.();
-            return;
-        }
-        onFiles(multiple ? paths : paths.slice(0, 1));
-    };
+    const { dragOver, handlers, deliver } = useFileDrop({ onFiles, accept, allowDirectories, multiple, onRejected });
 
     const handleClick = async () => {
-        const paths = await window.kuraToolkit.dialog.openFiles({ filters, multi: multiple });
         // ダイアログで「すべてのファイル」を選ぶと対象外の形式も選べるため、ここでも絞り込む
-        const accepted = paths.filter(filePath => acceptPath(filePath));
-        if (accepted.length === 0) {
-            if (paths.length > 0) onRejected?.();
-            return;
-        }
-        onFiles(accepted);
+        deliver(await window.kuraToolkit.dialog.openFiles({ filters, multi: multiple }));
     };
 
     return (
         <Box
             onClick={handleClick}
-            onDragOver={event => {
-                event.preventDefault();
-                setDragOver(true);
-            }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={handleDrop}
+            {...handlers}
             sx={{
                 border: 2,
                 borderStyle: 'dashed',

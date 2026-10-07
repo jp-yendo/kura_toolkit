@@ -6,11 +6,7 @@ import {
     DialogActions,
     DialogContent,
     DialogTitle,
-    FormControl,
     IconButton,
-    InputLabel,
-    MenuItem,
-    Select,
     Stack,
     TextField,
     Tooltip,
@@ -27,13 +23,9 @@ import { isCancelledError, voiceErrorMessage } from './voiceErrors';
 import { useJobRunner } from '../../hooks/useJobRunner';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { showNotice } from '../../stores/noticeStore';
-import {
-    EXPORT_BITRATES,
-    EXPORT_SAMPLE_RATES,
-    type AudioExportFormat,
-    type AudioExportSettings,
-    type ExportBitrateMode,
-} from '@shared/voice/types';
+import AudioFormatFields from '../common/AudioFormatFields';
+import { AUDIO_FORMAT_EXTENSIONS } from '@shared/audio-format';
+import type { AudioExportSettings } from '@shared/voice/types';
 
 export type ExportEntry = {
     key: string;
@@ -63,9 +55,11 @@ type Props = {
 
 type EntryState = { checked: boolean; name: string; customPath: string | null };
 
-function extension(format: AudioExportFormat): string {
-    return format === 'mp3' ? 'mp3' : 'flac';
-}
+// ファイル名の末尾の書き出しの形式の拡張子 (利用者が入力した名前から外して付け直す)
+const EXPORT_EXTENSION_PATTERN = new RegExp(
+    `\\.(${[...new Set(Object.values(AUDIO_FORMAT_EXTENSIONS))].join('|')})$`,
+    'i'
+);
 
 // 音声の書き出し。書き出しの設定は音声機能で共通で、変えた時点で保存する。
 // 書き出すものが複数ある場合は、書き出し先ディレクトリと項目ごとのファイル名を指定する。
@@ -87,7 +81,7 @@ export default function ExportDialog({
     const [states, setStates] = React.useState<Record<string, EntryState>>({});
     const [overwrite, setOverwrite] = React.useState<string[] | null>(null);
     const { job, run, cancel } = useJobRunner();
-    const ext = extension(exportSettings.format);
+    const ext = AUDIO_FORMAT_EXTENSIONS[exportSettings.format] ?? 'mp3';
     const base = sanitizeFileName(baseFileName || baseName(sourcePath) || 'output');
 
     // 開くたびに既定値 (元のファイルと同じ場所・自動のファイル名) に戻す
@@ -108,11 +102,11 @@ export default function ExportDialog({
     const fileNameOf = (entry: ExportEntry) => {
         const state = states[entry.key];
         const name = state?.name.trim() ? state.name.trim() : autoName(entry);
-        return `${name.replace(/\.(mp3|flac)$/i, '')}.${ext}`;
+        return `${name.replace(EXPORT_EXTENSION_PATTERN, '')}.${ext}`;
     };
     const destOf = (entry: ExportEntry) => {
         const state = states[entry.key];
-        if (state?.customPath) return state.customPath.replace(/\.(mp3|flac)$/i, '') + `.${ext}`;
+        if (state?.customPath) return state.customPath.replace(EXPORT_EXTENSION_PATTERN, '') + `.${ext}`;
         return joinPath(outputDir, fileNameOf(entry));
     };
     const selected = entries.filter(entry => states[entry.key]?.checked);
@@ -177,64 +171,14 @@ export default function ExportDialog({
                 <DialogContent>
                     <Stack spacing={2} sx={{ mt: 1 }}>
                         <Stack direction='row' spacing={2} sx={{ flexWrap: 'wrap', rowGap: 2 }}>
-                            <FormControl size='small' sx={{ width: 160 }}>
-                                <InputLabel id='export-format'>{t('voice.export.format')}</InputLabel>
-                                <Select
-                                    labelId='export-format'
-                                    label={t('voice.export.format')}
-                                    value={exportSettings.format}
-                                    onChange={event =>
-                                        patchSettings({ format: event.target.value as AudioExportFormat })
-                                    }
-                                >
-                                    <MenuItem value='mp3'>MP3</MenuItem>
-                                    <MenuItem value='flac'>FLAC</MenuItem>
-                                </Select>
-                            </FormControl>
-                            <FormControl size='small' sx={{ width: 180 }} disabled={exportSettings.format !== 'mp3'}>
-                                <InputLabel id='export-sample-rate'>{t('voice.export.sampleRate')}</InputLabel>
-                                <Select
-                                    labelId='export-sample-rate'
-                                    label={t('voice.export.sampleRate')}
-                                    value={exportSettings.sampleRate}
-                                    onChange={event => patchSettings({ sampleRate: Number(event.target.value) })}
-                                >
-                                    {EXPORT_SAMPLE_RATES.map(rate => (
-                                        <MenuItem key={rate} value={rate}>
-                                            {rate} Hz
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-                            <FormControl size='small' sx={{ width: 160 }} disabled={exportSettings.format !== 'mp3'}>
-                                <InputLabel id='export-bitrate-mode'>{t('voice.export.bitrateMode')}</InputLabel>
-                                <Select
-                                    labelId='export-bitrate-mode'
-                                    label={t('voice.export.bitrateMode')}
-                                    value={exportSettings.bitrateMode}
-                                    onChange={event =>
-                                        patchSettings({ bitrateMode: event.target.value as ExportBitrateMode })
-                                    }
-                                >
-                                    <MenuItem value='cbr'>CBR</MenuItem>
-                                    <MenuItem value='vbr'>VBR</MenuItem>
-                                </Select>
-                            </FormControl>
-                            <FormControl size='small' sx={{ width: 160 }} disabled={exportSettings.format !== 'mp3'}>
-                                <InputLabel id='export-bitrate'>{t('voice.export.bitrate')}</InputLabel>
-                                <Select
-                                    labelId='export-bitrate'
-                                    label={t('voice.export.bitrate')}
-                                    value={exportSettings.bitrate}
-                                    onChange={event => patchSettings({ bitrate: Number(event.target.value) })}
-                                >
-                                    {EXPORT_BITRATES.map(bitrate => (
-                                        <MenuItem key={bitrate} value={bitrate}>
-                                            {bitrate} kbps
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
+                            <AudioFormatFields
+                                idPrefix='export'
+                                label={t('voice.export.format')}
+                                format={exportSettings.format}
+                                settings={exportSettings}
+                                onFormat={format => format !== 'keep' && patchSettings({ format })}
+                                onSettings={patchSettings}
+                            />
                         </Stack>
                         {!single && (
                             <>

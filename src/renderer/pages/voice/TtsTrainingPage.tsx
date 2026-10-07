@@ -35,6 +35,7 @@ import { useNavigate } from 'react-router-dom';
 import PageContainer from '../../components/common/PageContainer';
 import Panel from '../../components/common/Panel';
 import AppDialog from '../../components/common/AppDialog';
+import FileDropTarget from '../../components/common/FileDropTarget';
 import ProgressDialog from '../../components/common/ProgressDialog';
 import ReadinessAlert, { useFeatureReadiness } from '../../components/voice/ReadinessAlert';
 import VoiceFeatureHeader from '../../components/voice/VoiceFeatureHeader';
@@ -44,8 +45,8 @@ import TrainingSetBar from '../../components/voice/TrainingSetBar';
 import TrainingFilterDialog from '../../components/voice/TrainingFilterDialog';
 import { silenceOption } from '@shared/voice/audio-filters';
 import { useTrainingSets } from '../../components/voice/useTrainingSets';
-import { audioInputFilters } from '../../components/voice/audioInput';
-import { formatDuration } from '../../components/voice/voiceFormat';
+import { AUDIO_INPUT_EXTENSIONS, audioInputFilters } from '../../components/voice/audioInput';
+import { formatDuration, formatNameList } from '../../components/voice/voiceFormat';
 import { isCancelledError, voiceErrorMessage } from '../../components/voice/voiceErrors';
 import { useJobRunner } from '../../hooks/useJobRunner';
 import { useRemainingTime } from '../../hooks/useRemainingTime';
@@ -60,7 +61,7 @@ type RecordingTarget = { setId: string; sentenceId: string };
 // 読み上げのモデルの学習。学習セット (言語を 1 つ持つ) を選び、左の一覧から文を選んで、
 // 右でその文の音声を録音するか、その文を読み上げた音声ファイルを指定する。読みたくない文は飛ばしてよい
 export default function TtsTrainingPage() {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const navigate = useNavigate();
     const { settings } = useSettingsStore();
     const sets = useTrainingSets('tts');
@@ -138,18 +139,30 @@ export default function TtsTrainingPage() {
     const { minimum, recommended } = LANGUAGE_DEFINITIONS[language].trainingSentences;
     const editDisabled = job !== null || !shown;
 
-    const chooseFile = async () => {
-        if (!sentence || !setId) return;
-        const paths = await window.kuraToolkit.dialog.openFiles({ filters: audioInputFilters(t) });
-        if (!paths[0]) return;
+    // 選んでいる文の音声ファイルを加える (ボタンか、右の枠へのドロップ。どちらも 1 つだけ)。学習セットのほかの文に
+    // すでに同じ名前の音声がある場合は加えず、そのことを示す
+    const addSentenceFile = async (filePath: string | undefined) => {
+        if (!sentence || !setId || !filePath) return;
         try {
-            await run(t('voice.training.adding'), jobId =>
-                window.kuraToolkit.voice.trainingSets.addFiles(jobId, 'tts', setId, [paths[0]], sentence.id)
+            const result = await run(t('voice.training.adding'), jobId =>
+                window.kuraToolkit.voice.trainingSets.addFiles(jobId, 'tts', setId, [filePath], sentence.id)
             );
+            if (result.skipped.length > 0) {
+                showNotice(
+                    'info',
+                    t('voice.training.duplicateSkipped', { names: formatNameList(result.skipped, i18n.language) }),
+                    12000
+                );
+            }
         } catch (error) {
             if (!isCancelledError(error)) showNotice('error', voiceErrorMessage(t, error));
         }
         await refresh();
+    };
+
+    const chooseFile = async () => {
+        const paths = await window.kuraToolkit.dialog.openFiles({ filters: audioInputFilters(t) });
+        await addSentenceFile(paths[0]);
     };
 
     const removeAudio = async (target: TrainingAudio) => {
@@ -284,119 +297,135 @@ export default function TtsTrainingPage() {
                         </Panel>
                     </Stack>
 
-                    {/* 右: 選んだ文の録音・ファイルの指定・再生 */}
-                    <Panel>
-                        {sentence && (
-                            <Stack spacing={2}>
-                                <Stack direction='row' sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <Typography variant='body2' color='text.secondary'>
-                                        {t('voice.training.sentenceIndex', {
-                                            index: index + 1,
-                                            total: sentences.length,
-                                            id: sentence.id,
-                                        })}
+                    {/* 右: 選んだ文の録音・ファイルの指定 (ボタンか、この枠へのドロップ)・再生 */}
+                    <FileDropTarget
+                        accept={AUDIO_INPUT_EXTENSIONS}
+                        disabled={editDisabled || recordingActive || !sentence}
+                        onFiles={paths => void addSentenceFile(paths[0])}
+                        onRejected={() => showNotice('warning', t('voice.training.dropUnsupported'))}
+                    >
+                        <Panel>
+                            {sentence && (
+                                <Stack spacing={2}>
+                                    <Stack
+                                        direction='row'
+                                        sx={{ justifyContent: 'space-between', alignItems: 'center' }}
+                                    >
+                                        <Typography variant='body2' color='text.secondary'>
+                                            {t('voice.training.sentenceIndex', {
+                                                index: index + 1,
+                                                total: sentences.length,
+                                                id: sentence.id,
+                                            })}
+                                        </Typography>
+                                        <Chip
+                                            size='small'
+                                            color={audio ? 'success' : 'default'}
+                                            label={
+                                                audio ? t('voice.training.recorded') : t('voice.training.notRecorded')
+                                            }
+                                        />
+                                    </Stack>
+                                    <Typography sx={{ fontSize: '1.4rem', lineHeight: 1.7, minHeight: 96 }}>
+                                        {sentence.text}
                                     </Typography>
-                                    <Chip
-                                        size='small'
-                                        color={audio ? 'success' : 'default'}
-                                        label={audio ? t('voice.training.recorded') : t('voice.training.notRecorded')}
-                                    />
-                                </Stack>
-                                <Typography sx={{ fontSize: '1.4rem', lineHeight: 1.7, minHeight: 96 }}>
-                                    {sentence.text}
-                                </Typography>
-                                <Stack
-                                    direction='row'
-                                    spacing={1.5}
-                                    sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
-                                >
-                                    <RecorderControl
-                                        disabled={editDisabled}
-                                        label={audio ? t('voice.training.rerecord') : undefined}
-                                        onActiveChange={active =>
-                                            setRecordingTarget(
-                                                active && setId ? { setId, sentenceId: sentence.id } : null
-                                            )
+                                    <Stack
+                                        direction='row'
+                                        spacing={1.5}
+                                        sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
+                                    >
+                                        <RecorderControl
+                                            disabled={editDisabled}
+                                            label={audio ? t('voice.training.rerecord') : undefined}
+                                            onActiveChange={active =>
+                                                setRecordingTarget(
+                                                    active && setId ? { setId, sentenceId: sentence.id } : null
+                                                )
+                                            }
+                                            onRecorded={async recorded => {
+                                                if (!recordingTarget) {
+                                                    void window.kuraToolkit.voice.recording.discard(
+                                                        recorded.recordingId
+                                                    );
+                                                    return;
+                                                }
+                                                try {
+                                                    await window.kuraToolkit.voice.trainingSets.addRecording(
+                                                        'tts',
+                                                        recordingTarget.setId,
+                                                        recorded.recordingId,
+                                                        {
+                                                            name: t('voice.training.recordingName', {
+                                                                date: new Date().toLocaleString(),
+                                                            }),
+                                                            sentenceId: recordingTarget.sentenceId,
+                                                        }
+                                                    );
+                                                } catch (error) {
+                                                    showNotice('error', voiceErrorMessage(t, error));
+                                                }
+                                                await refresh();
+                                            }}
+                                        />
+                                        <Button
+                                            startIcon={<AudioFileOutlinedIcon />}
+                                            disabled={editDisabled || recordingActive}
+                                            onClick={() => void chooseFile()}
+                                        >
+                                            {t('voice.training.chooseSentenceFile')}
+                                        </Button>
+                                        {audio && (
+                                            <Tooltip title={t('voice.filters.filterButton')}>
+                                                <span>
+                                                    <IconButton
+                                                        aria-label={t('voice.filters.filterFor', { name: audio.name })}
+                                                        disabled={editDisabled || recordingActive}
+                                                        onClick={() => setFilterTarget({ open: true, audio })}
+                                                    >
+                                                        <GraphicEqIcon />
+                                                    </IconButton>
+                                                </span>
+                                            </Tooltip>
+                                        )}
+                                        {audio && (
+                                            <Tooltip title={t('voice.training.removeSentenceAudio')}>
+                                                <span>
+                                                    <IconButton
+                                                        aria-label={t('voice.training.removeSentenceAudio')}
+                                                        disabled={editDisabled || recordingActive}
+                                                        onClick={() => setRemoveConfirm({ open: true, audio })}
+                                                    >
+                                                        <DeleteOutlineIcon />
+                                                    </IconButton>
+                                                </span>
+                                            </Tooltip>
+                                        )}
+                                    </Stack>
+                                    <SyncPlayer
+                                        source={
+                                            audio ? { key: audio.id + audio.media.url, url: audio.media.url } : null
                                         }
-                                        onRecorded={async recorded => {
-                                            if (!recordingTarget) {
-                                                void window.kuraToolkit.voice.recording.discard(recorded.recordingId);
-                                                return;
-                                            }
-                                            try {
-                                                await window.kuraToolkit.voice.trainingSets.addRecording(
-                                                    'tts',
-                                                    recordingTarget.setId,
-                                                    recorded.recordingId,
-                                                    {
-                                                        name: t('voice.training.recordingName', {
-                                                            date: new Date().toLocaleString(),
-                                                        }),
-                                                        sentenceId: recordingTarget.sentenceId,
-                                                    }
-                                                );
-                                            } catch (error) {
-                                                showNotice('error', voiceErrorMessage(t, error));
-                                            }
-                                            await refresh();
-                                        }}
                                     />
-                                    <Button
-                                        startIcon={<AudioFileOutlinedIcon />}
-                                        disabled={editDisabled || recordingActive}
-                                        onClick={() => void chooseFile()}
-                                    >
-                                        {t('voice.training.chooseSentenceFile')}
-                                    </Button>
-                                    {audio && (
-                                        <Tooltip title={t('voice.filters.filterButton')}>
-                                            <span>
-                                                <IconButton
-                                                    aria-label={t('voice.filters.filterFor', { name: audio.name })}
-                                                    disabled={editDisabled || recordingActive}
-                                                    onClick={() => setFilterTarget({ open: true, audio })}
-                                                >
-                                                    <GraphicEqIcon />
-                                                </IconButton>
-                                            </span>
-                                        </Tooltip>
-                                    )}
-                                    {audio && (
-                                        <Tooltip title={t('voice.training.removeSentenceAudio')}>
-                                            <span>
-                                                <IconButton
-                                                    aria-label={t('voice.training.removeSentenceAudio')}
-                                                    disabled={editDisabled || recordingActive}
-                                                    onClick={() => setRemoveConfirm({ open: true, audio })}
-                                                >
-                                                    <DeleteOutlineIcon />
-                                                </IconButton>
-                                            </span>
-                                        </Tooltip>
-                                    )}
+                                    <Stack direction='row' spacing={1} sx={{ justifyContent: 'space-between' }}>
+                                        <Button
+                                            startIcon={<NavigateBeforeIcon />}
+                                            disabled={index === 0 || recordingActive}
+                                            onClick={() => setIndex(index - 1)}
+                                        >
+                                            {t('voice.training.previous')}
+                                        </Button>
+                                        <Button
+                                            endIcon={<NavigateNextIcon />}
+                                            disabled={index >= sentences.length - 1 || recordingActive}
+                                            onClick={() => setIndex(index + 1)}
+                                        >
+                                            {t('voice.training.next')}
+                                        </Button>
+                                    </Stack>
                                 </Stack>
-                                <SyncPlayer
-                                    source={audio ? { key: audio.id + audio.media.url, url: audio.media.url } : null}
-                                />
-                                <Stack direction='row' spacing={1} sx={{ justifyContent: 'space-between' }}>
-                                    <Button
-                                        startIcon={<NavigateBeforeIcon />}
-                                        disabled={index === 0 || recordingActive}
-                                        onClick={() => setIndex(index - 1)}
-                                    >
-                                        {t('voice.training.previous')}
-                                    </Button>
-                                    <Button
-                                        endIcon={<NavigateNextIcon />}
-                                        disabled={index >= sentences.length - 1 || recordingActive}
-                                        onClick={() => setIndex(index + 1)}
-                                    >
-                                        {t('voice.training.next')}
-                                    </Button>
-                                </Stack>
-                            </Stack>
-                        )}
-                    </Panel>
+                            )}
+                        </Panel>
+                    </FileDropTarget>
                 </Box>
             )}
 

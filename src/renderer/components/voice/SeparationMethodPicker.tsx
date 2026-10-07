@@ -34,13 +34,16 @@ import {
 import {
     DEREVERB_MODELS,
     dereverbOption,
+    loudnessOption,
     NOISE_REMOVAL_MODELS,
     noiseRemovalOption,
+    SEPARATION_LOUDNESS_DEFAULT_LUFS,
     silenceOption,
 } from '@shared/voice/audio-filters';
 import {
     DereverbFields,
     filterSummary,
+    LoudnessFields,
     NoiseRemovalFields,
     resolvedDereverbOption,
     resolvedNoiseOption,
@@ -53,7 +56,8 @@ import { wrapSelectSx } from '../common/selectStyles';
 // - おすすめ: 目的別のおすすめ (ダウンロード画面と同じ。配布元が検証した組み合わせと、目的に合うモデル) から 1 つを選ぶ
 // - モデル: 取得済みのモデルを、まとまり (分離の種類。ダウンロード画面と同じ名前・順) ごとの欄から選ぶ (欄ごとに複数選べ、
 //   絞り込める)。まとまりをまたいでも選べ、2 つ以上選ぶと各モデルの結果から「結果の決め方」で 1 つの結果を決める
-// - その他: 分離はせず、残響・エコーを除去する・ノイズを除去する・無音部分の雑音を消すで音を加工した 1 つの出力を作る
+// - その他: 分離はせず、残響・エコーを除去する・ノイズを除去する・無音部分の雑音を消す・音量をそろえるで音を加工した
+//   1 つの出力を作る
 // 選んだ内容は SelectedMethodPanel で示す (分岐のダイアログの右側)
 
 export type MethodSelection = SeparationMethodChoice;
@@ -183,13 +187,16 @@ export function resolveMethod(selection: MethodSelection, list: SeparationModelL
     if (mode === 'other') {
         const other = otherChoice(selection);
         const dereverb = resolvedDereverbOption(other.dereverb, installedRecommended(list, DEREVERB_MODELS));
-        if (!dereverb.enabled && !other.noiseRemoval.enabled && !other.muteSilence.enabled) return none;
+        if (!dereverb.enabled && !other.noiseRemoval.enabled && !other.muteSilence.enabled && !other.loudness.enabled) {
+            return none;
+        }
         return {
             method: {
                 kind: 'process',
                 dereverb,
                 noiseRemoval: resolvedNoiseOption(other.noiseRemoval, installedRecommended(list, NOISE_REMOVAL_MODELS)),
                 muteSilence: other.muteSilence,
+                loudness: other.loudness,
             },
             archs: [],
         };
@@ -230,6 +237,7 @@ function otherChoice(selection: MethodSelection): SeparationOtherChoice {
         dereverb: { ...dereverbOption(false), ...selection.other?.dereverb },
         noiseRemoval: { ...noiseRemovalOption(false), ...selection.other?.noiseRemoval },
         muteSilence: { ...silenceOption(false), ...selection.other?.muteSilence },
+        loudness: { ...loudnessOption(false, SEPARATION_LOUDNESS_DEFAULT_LUFS), ...selection.other?.loudness },
     };
 }
 
@@ -407,7 +415,7 @@ export default function SeparationMethodPicker({ models, value, onChange, disabl
                 </FormControl>
             )}
 
-            {/* 処理の順 (残響・エコーの除去 → ノイズ除去 → 無音部分の雑音を消す) に並べる */}
+            {/* 処理の順 (残響・エコーの除去 → ノイズ除去 → 無音部分の雑音を消す → 音量をそろえる) に並べる */}
             {mode === 'other' && (
                 <Stack spacing={1}>
                     <DereverbFields
@@ -427,6 +435,12 @@ export default function SeparationMethodPicker({ models, value, onChange, disabl
                         value={other.muteSilence}
                         disabled={disabled}
                         onChange={muteSilence => update({ other: { ...other, muteSilence } })}
+                    />
+                    <LoudnessFields
+                        value={other.loudness}
+                        defaultLufs={SEPARATION_LOUDNESS_DEFAULT_LUFS}
+                        disabled={disabled}
+                        onChange={loudness => update({ other: { ...other, loudness } })}
                     />
                 </Stack>
             )}

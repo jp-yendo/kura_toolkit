@@ -3,7 +3,8 @@
 
 import type { SymbolReading, TtsModelType, VoiceLanguage } from './languages';
 import type { TagFix, TagIssue } from './control-tags';
-import type { DereverbOption, NoiseRemovalOption, SilenceOption } from './audio-filters';
+import type { DereverbOption, LoudnessOption, NoiseRemovalOption, SilenceOption } from './audio-filters';
+import type { AudioEncodeSettings, AudioFormat } from '../audio-format';
 
 // ---------------------------------------------------------------------------
 // 共通
@@ -18,22 +19,8 @@ export type VoiceModelFeature = 'converter' | 'tts';
 // ダウンロード物が必要になる機能 (削除時の警告と、未取得時の案内に使う)
 export type VoiceFeatureId = 'separation' | 'conversion' | 'conversionTraining' | 'tts' | 'ttsTraining';
 
-export type AudioExportFormat = 'mp3' | 'flac';
-
-// MP3 のビットレートの指定方法 (cbr: 固定 / vbr: 可変)
-export type ExportBitrateMode = 'cbr' | 'vbr';
-
-// 書き出しの設定。sampleRate・bitrateMode・bitrate は MP3 の設定で、FLAC は元のサンプリング周波数のまま書き出す
-export type AudioExportSettings = {
-    format: AudioExportFormat;
-    sampleRate: number;
-    bitrateMode: ExportBitrateMode;
-    // 固定ビットレートの値、または可変ビットレートの目安 (kbps)
-    bitrate: number;
-};
-
-export const EXPORT_SAMPLE_RATES = [8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000];
-export const EXPORT_BITRATES = [320, 256, 224, 192, 160, 144, 128, 112, 96, 80, 64, 56, 48, 40, 32, 24, 16, 8];
+// 書き出しの設定 (形式と、形式ごとの設定。audio-format.ts)
+export type AudioExportSettings = AudioEncodeSettings & { format: AudioFormat };
 
 // プレビューの波形の区間の数 (チャンネルごと)
 export const WAVEFORM_BUCKETS = 4096;
@@ -303,14 +290,21 @@ export type SeparationMethod =
     | { kind: 'verifiedEnsemble'; ensembleId: string }
     | { kind: 'ensemble'; filenames: string[]; algorithm: EnsembleAlgorithm }
     // 分岐の「その他」: 分離はせず、音を加工した 1 つの出力を作る (長さは変わらない。処理の順は、残響・エコーの除去 →
-    // ノイズ除去 → 無音部分の雑音を消す)
-    | { kind: 'process'; dereverb: DereverbOption; noiseRemoval: NoiseRemovalOption; muteSilence: SilenceOption };
+    // ノイズ除去 → 無音部分の雑音を消す → 音量をそろえる)
+    | {
+          kind: 'process';
+          dereverb: DereverbOption;
+          noiseRemoval: NoiseRemovalOption;
+          muteSilence: SilenceOption;
+          loudness: LoudnessOption;
+      };
 
 // 分岐の「その他」で指定する加工
 export type SeparationOtherChoice = {
     dereverb: DereverbOption;
     noiseRemoval: NoiseRemovalOption;
     muteSilence: SilenceOption;
+    loudness: LoudnessOption;
 };
 
 export type SeparationStem = {
@@ -643,6 +637,13 @@ export type TrainingAudio = {
     sentenceId?: string;
     durationSec: number;
     media: MediaRef;
+};
+
+// 音声ファイルを学習セットに加えた結果。skipped は、学習セットにすでに同じ名前の音声があるため加えなかったファイルの名前
+// (同じ名前のファイルを加えるのは誤った操作とみなす)
+export type TrainingAddFilesResult = {
+    added: TrainingAudio[];
+    skipped: string[];
 };
 
 // 読み上げの学習用の文 (言語の読み上げ文)

@@ -9,39 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- Audio Separation, Voice Conversion and Text to Speech (Japanese, English and Chinese) on Windows
-  (x64), macOS 14 or later (Apple Silicon) and Linux (x64)
-- Voice model management and model training for Voice Conversion and Text to Speech
-- Downloads for the Python runtime, package sets and models used by the voice features
-- App Settings: storage locations for libraries, models, the cache and the work directory, and how long
-  unused cache files are kept
+- Audio Separation, Voice Conversion and Text to Speech (Japanese, English and Chinese), with voice model
+  management, model training and downloads of what they need. Available on Windows (x64), macOS 14 or
+  later (Apple Silicon) and Linux (x64).
+- App Settings: storage locations and how long unused cache files are kept.
 
 ### Changed
 
 - The license changed from MIT to the GNU Affero General Public License v3.0 (AGPL-3.0).
-- Only one copy of the app runs at a time. Starting it again brings the open window to the front.
+- Only one copy of the app runs at a time.
 - App Settings: "Search threads" no longer has an upper limit.
-- Chapter Cut: intermediate files are created in the work directory set in App Settings and are
-  deleted when the cut or split ends.
-- Audio Normalizer: the length and channels of each file are shown as soon as it is added to the list.
-  The progress bar advances by the length of the audio processed, also while a file is being processed,
-  and the estimated time left is shown next to the file count.
-- Chapter Cut: the estimated time left is shown, and when splitting, the progress bar advances by the
-  length of each part.
+- Audio Normalizer: files can be saved as MP3, FLAC, Ogg Vorbis, Opus, AAC, WAV or ALAC as well as in
+  their original format, file details are shown as soon as files are added, and progress and time left
+  are shown more accurately.
+- Chapter Cut: intermediate files are kept in the work directory, and the time left is shown.
 
 ### Fixed
 
-- Closing the app while Audio Normalizer or Chapter Cut is working now cancels the task and waits for it
-  to clean up, so no temporary files are left next to the output files.
-- Audio Normalizer no longer changes the balance between quiet and loud parts of a song. It now
-  raises or lowers the whole file by one amount to get close to the target LUFS. Files whose peaks would
-  go over the limit are raised only as far as the limit allows and are listed in the result. Files that
-  were not analyzed first are measured during normalization.
+- An unreadable settings file is no longer overwritten; the app asks what to do at startup.
 - In the dark theme, scroll bars inside lists and text boxes are dark as well.
-- Audio Normalizer and Chapter Cut: when overwriting a file fails or is cancelled, the existing file
-  is kept.
-- A settings file that cannot be read is never overwritten. At startup the app asks whether to
-  continue with the default settings, keeping the unreadable file under another name, or to quit.
+- Audio Normalizer no longer changes the balance between quiet and loud parts of a song.
+- Audio Normalizer and Chapter Cut: closing the app while working no longer leaves temporary files, and
+  the existing file is kept when overwriting fails or is cancelled.
 
 ## [0.2.1] - 2026-08-27
 

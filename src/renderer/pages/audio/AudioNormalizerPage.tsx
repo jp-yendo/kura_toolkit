@@ -5,10 +5,6 @@ import {
     DialogActions,
     DialogContent,
     DialogTitle,
-    FormControl,
-    InputLabel,
-    MenuItem,
-    Select,
     Stack,
     Table,
     TableBody,
@@ -35,7 +31,10 @@ import Panel from '../../components/common/Panel';
 import { showNotice } from '../../stores/noticeStore';
 import { useAudioStore } from '../../stores/audioStore';
 import { useSettingsStore } from '../../stores/settingsStore';
-import type { AudioNormalizeItem, AudioNormalizerSettings, BitrateMode, JobEvent } from '@shared/types';
+import AudioFormatFields from '../../components/common/AudioFormatFields';
+import LufsGuide from '../../components/common/LufsGuide';
+import { isAudioFormat } from '@shared/audio-format';
+import type { AudioNormalizeItem, AudioNormalizerSettings, JobEvent } from '@shared/types';
 
 // ドラッグ&ドロップで受け付ける拡張子。ffmpeg が扱える音声形式を広めに許可し、
 // 実際に正規化できるかどうかの判定は main 側のコーデック判定に委ねる
@@ -61,8 +60,6 @@ function formatDuration(seconds: number): string {
         : `${m}:${String(s).padStart(2, '0')}`;
 }
 const LUFS_WIDTH = 88;
-const SAMPLE_RATES = [8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000];
-const BITRATES = [320, 256, 224, 192, 160, 144, 128, 112, 96, 80, 64, 56, 48, 40, 32, 24, 16, 8];
 
 type RunningJob = {
     jobId: string;
@@ -111,9 +108,14 @@ export default function AudioNormalizerPage() {
     // 上書きになる出力パスの一覧 (null = 確認ダイアログを出さない)
     const [overwriteTargets, setOverwriteTargets] = React.useState<string[] | null>(null);
 
-    // 設定の読み込みが終わったら編集用の値へ一度だけ取り込む
+    // 設定の読み込みが終わったら編集用の値へ一度だけ取り込む (出力形式が知らない値なら MP3 として扱う)
     React.useEffect(() => {
-        setDraft(previous => previous ?? settings?.audioNormalizer ?? null);
+        setDraft(previous => {
+            if (previous || !settings) return previous;
+            const saved = settings.audioNormalizer;
+            const format = saved.outputFormat;
+            return { ...saved, outputFormat: format === 'keep' || isAudioFormat(format) ? format : 'mp3' };
+        });
     }, [settings]);
 
     // ジョブイベント購読
@@ -228,7 +230,8 @@ export default function AudioNormalizerPage() {
         try {
             check = await window.kuraToolkit.audio.checkOutputs(
                 files.map(file => file.path),
-                audioSettings.outputDir
+                audioSettings.outputDir,
+                audioSettings.outputFormat
             );
         } catch (error) {
             showNotice('warning', formatError(error));
@@ -428,55 +431,17 @@ export default function AudioNormalizerPage() {
                                         }
                                     }}
                                 />
-                                <FormControl size='small' sx={{ width: 180 }}>
-                                    <InputLabel id='sample-rate-label'>{t('audioPage.sampleRate')}</InputLabel>
-                                    <Select
-                                        labelId='sample-rate-label'
-                                        label={t('audioPage.sampleRate')}
-                                        value={audioSettings.sampleRate}
-                                        onChange={event => patchSettings({ sampleRate: Number(event.target.value) })}
-                                    >
-                                        {SAMPLE_RATES.map(rate => (
-                                            <MenuItem key={rate} value={rate}>
-                                                {rate} Hz
-                                            </MenuItem>
-                                        ))}
-                                    </Select>
-                                </FormControl>
-                                <FormControl size='small' sx={{ width: 160 }}>
-                                    <InputLabel id='bitrate-mode-label'>{t('audioPage.bitrateMode')}</InputLabel>
-                                    <Select
-                                        labelId='bitrate-mode-label'
-                                        label={t('audioPage.bitrateMode')}
-                                        value={audioSettings.bitrateMode}
-                                        onChange={event =>
-                                            patchSettings({ bitrateMode: event.target.value as BitrateMode })
-                                        }
-                                    >
-                                        <MenuItem value='cbr'>CBR</MenuItem>
-                                        <MenuItem value='vbr'>VBR</MenuItem>
-                                    </Select>
-                                </FormControl>
-                                <FormControl size='small' sx={{ width: 160 }}>
-                                    <InputLabel id='bitrate-label'>{t('audioPage.bitrate')}</InputLabel>
-                                    <Select
-                                        labelId='bitrate-label'
-                                        label={t('audioPage.bitrate')}
-                                        value={audioSettings.bitrate}
-                                        onChange={event => patchSettings({ bitrate: Number(event.target.value) })}
-                                    >
-                                        {BITRATES.map(bitrate => (
-                                            <MenuItem key={bitrate} value={bitrate}>
-                                                {bitrate} kbps
-                                            </MenuItem>
-                                        ))}
-                                    </Select>
-                                </FormControl>
+                                <AudioFormatFields
+                                    idPrefix='normalizer'
+                                    label={t('audioPage.outputFormat')}
+                                    format={audioSettings.outputFormat}
+                                    settings={audioSettings}
+                                    allowKeep
+                                    onFormat={outputFormat => patchSettings({ outputFormat })}
+                                    onSettings={patchSettings}
+                                />
                             </Stack>
-                            {/* ターゲット LUFS は値の大小と音量の関係が直感に反するため、目安を注釈で示す */}
-                            <Typography variant='body2' color='text.secondary' sx={{ lineHeight: 1.6 }}>
-                                {t('audioPage.targetLufsNote')}
-                            </Typography>
+                            <LufsGuide />
                         </Box>
                     </Stack>
                 </Panel>
@@ -520,11 +485,13 @@ export default function AudioNormalizerPage() {
                                     sx={{ wordBreak: 'break-all' }}
                                 >
                                     {item.path}
-                                    {item.error?.startsWith('UNSUPPORTED_CODEC')
-                                        ? ` (${t('audioPage.unsupportedCodec')})`
-                                        : item.error === 'LOUDNESS_UNKNOWN'
-                                          ? ` (${t('audioPage.loudnessUnknown')})`
-                                          : ''}
+                                    {item.error === 'NO_AUDIO_STREAM'
+                                        ? ` (${t('audioPage.noAudioStream')})`
+                                        : item.error?.startsWith('UNSUPPORTED_CODEC')
+                                          ? ` (${t('audioPage.unsupportedCodec')})`
+                                          : item.error === 'LOUDNESS_UNKNOWN'
+                                            ? ` (${t('audioPage.loudnessUnknown')})`
+                                            : ''}
                                 </Typography>
                             ))}
                         </>

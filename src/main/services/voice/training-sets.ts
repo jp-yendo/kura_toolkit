@@ -17,6 +17,7 @@ import { moveToTrash } from '../../utils/trash';
 import type { VoiceLanguage } from '../../../shared/voice/languages';
 import type {
     MediaRef,
+    TrainingAddFilesResult,
     TrainingAudio,
     TrainingSetDetail,
     TrainingSetSummary,
@@ -394,14 +395,16 @@ export async function addTrainingRecording(
 }
 
 // 音声ファイル (動画の音声も含む) を、録音と同じ形式にして学習セットに加える。
-// 読み上げの学習セットでは、その 1 文を読み上げたファイルを 1 つ指定する
+// 読み上げの学習セットでは、その 1 文を読み上げたファイルを 1 つ指定する。学習セットにすでに同じ名前 (大文字・小文字は
+// 区別しない) の音声があるファイルは加えず、名前を返す (同じ名前のファイルを加えるのは誤った操作とみなす。一度に渡した
+// 中で重なる場合は、2 つ目以降を加えない)。読み上げの学習セットで置き換える、その文の今の音声とは比べない
 export async function addTrainingFiles(
     jobId: string,
     feature: VoiceModelFeature,
     setId: string,
     paths: string[],
     sentenceId?: string
-): Promise<TrainingAudio[]> {
+): Promise<TrainingAddFilesResult> {
     startJob(jobId);
     try {
         return await whileAdding(feature, setId, () => addFilesNow(jobId, feature, setId, paths, sentenceId));
@@ -417,11 +420,18 @@ async function addFilesNow(
     setId: string,
     paths: string[],
     sentenceId?: string
-): Promise<TrainingAudio[]> {
+): Promise<TrainingAddFilesResult> {
     const data = readSet(feature, setId);
     checkSentence(data, sentenceId);
     if (sentenceId !== undefined && paths.length !== 1) throw new Error('UNKNOWN_SENTENCE');
+    const nameKey = (name: string) => name.toLowerCase();
+    const names = new Set(
+        data.audios
+            .filter(audio => sentenceId === undefined || audio.sentenceId !== sentenceId)
+            .map(audio => nameKey(audio.name))
+    );
     const added: TrainingAudio[] = [];
+    const skipped: string[] = [];
     for (let i = 0; i < paths.length; i++) {
         if (isCancelled(jobId)) throw new Error('KURA_CANCELLED');
         emitJobEvent({
@@ -432,13 +442,19 @@ async function addFilesNow(
             total: paths.length,
         });
         const source = path.resolve(paths[i]);
+        const name = path.basename(source);
+        if (names.has(nameKey(name))) {
+            skipped.push(name);
+            continue;
+        }
+        names.add(nameKey(name));
         const audioId = crypto.randomUUID();
         const file = audioPath(feature, setId, audioId);
         fs.mkdirSync(path.dirname(file), { recursive: true });
         await encodeTrainingWav(source, file, jobId);
-        added.push(await registerAudio(data, audioId, path.basename(source), 'file', sentenceId, jobId));
+        added.push(await registerAudio(data, audioId, name, 'file', sentenceId, jobId));
     }
-    return added;
+    return { added, skipped };
 }
 
 export function removeTrainingAudio(feature: VoiceModelFeature, setId: string, audioId: string): void {

@@ -1,5 +1,6 @@
 import type { AudioExportSettings, VoiceModelFeature } from './voice/types';
 import type { SymbolReading, VoiceLanguage } from './voice/languages';
+import type { AudioEncodeSettings, AudioFormat } from './audio-format';
 
 // プラットフォーム識別子
 export type PlatformId = 'win32' | 'darwin' | 'linux';
@@ -89,15 +90,18 @@ export type ScanProgress = {
 // オーディオ正規化
 // ---------------------------------------------------------------------------
 
-export type BitrateMode = 'cbr' | 'vbr';
+// 正規化の出力形式 (keep: 元のファイルと同じ形式・同じ設定で書き出す)
+export type AudioOutputFormat = AudioFormat | 'keep';
 
-export type AudioNormalizerSettings = {
+// 出力先・目標のラウドネス・出力形式と、形式ごとの設定 (audio-format.ts)
+export type AudioNormalizerSettings = AudioEncodeSettings & {
     outputDir: string;
     targetLufs: number;
-    sampleRate: number;
-    bitrateMode: BitrateMode;
-    bitrate: number;
+    outputFormat: AudioOutputFormat;
 };
+
+// 目標のラウドネスの初期値 (LUFS。分岐の「その他」の音量をそろえるの初期値もこれに合わせる)
+export const AUDIO_NORMALIZER_DEFAULT_LUFS = -13;
 
 // 正規化を実行する前の出力先チェック結果
 export type AudioOutputCheck = {

@@ -22,6 +22,11 @@ export function formatDuration(seconds: number): string {
         : `${m}:${String(s).padStart(2, '0')}`;
 }
 
+// 名前の並び (画面の言語の区切りで「a、b、c」のようにつなぐ)
+export function formatNameList(names: string[], language: string): string {
+    return new Intl.ListFormat(language, { style: 'narrow', type: 'conjunction' }).format(names);
+}
+
 // 声のモデルの表示名
 export function voiceLabel(voice: VoiceModelInfo): string {
     return voiceDisplayName(voice);

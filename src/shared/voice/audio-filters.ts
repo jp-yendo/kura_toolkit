@@ -1,5 +1,7 @@
+import { AUDIO_NORMALIZER_DEFAULT_LUFS } from '../types';
+
 // 声の音の加工 (残響・エコーの除去・無音の扱い・ノイズ除去・音量をそろえる)。変換のオプション・学習用の音のフィルター・
-// 分岐の「その他」で同じ設定・同じ初期値を使う。どれも「チェックすると設定の欄が出る」形で、欄の値はチェックを外しても
+// 分岐の「その他」で同じ設定・同じ初期値を使う (音量をそろえるの目標だけは、分岐の「その他」ではオーディオ正規化の初期値)。どれも「チェックすると設定の欄が出る」形で、欄の値はチェックを外しても
 // 覚えておく
 
 // 無音の判断。音のピークから thresholdDb (負の値) より小さい状態が minSeconds 以上続く部分を無音とする。
@@ -49,6 +51,8 @@ export const NOISE_REMOVAL_RANGE = {
     waveletPercent: { min: 0, max: 100 },
 };
 export const LOUDNESS_DEFAULT_LUFS = -16;
+// 分岐の「その他」の音量をそろえるの目標の初期値 (オーディオ正規化の初期値に合わせる)
+export const SEPARATION_LOUDNESS_DEFAULT_LUFS = AUDIO_NORMALIZER_DEFAULT_LUFS;
 export const LOUDNESS_RANGE = { min: -30, max: -10 };
 
 export function silenceOption(enabled: boolean): SilenceOption {
@@ -59,8 +63,8 @@ export function noiseRemovalOption(enabled: boolean): NoiseRemovalOption {
     return { enabled, method: 'simple', ...NOISE_REMOVAL_DEFAULTS, model: null };
 }
 
-export function loudnessOption(enabled: boolean): LoudnessOption {
-    return { enabled, targetLufs: LOUDNESS_DEFAULT_LUFS };
+export function loudnessOption(enabled: boolean, targetLufs = LOUDNESS_DEFAULT_LUFS): LoudnessOption {
+    return { enabled, targetLufs };
 }
 
 export function dereverbOption(enabled: boolean): DereverbOption {
@@ -161,11 +165,11 @@ export function sanitizeDereverbOption(value: unknown): DereverbOption {
     return { enabled: item.enabled === true, model: typeof item.model === 'string' ? item.model : null };
 }
 
-export function sanitizeLoudnessOption(value: unknown): LoudnessOption {
+export function sanitizeLoudnessOption(value: unknown, defaultLufs = LOUDNESS_DEFAULT_LUFS): LoudnessOption {
     const item = record(value);
     return {
         enabled: item.enabled === true,
-        targetLufs: clampNumber(item.targetLufs, LOUDNESS_RANGE, LOUDNESS_DEFAULT_LUFS),
+        targetLufs: clampNumber(item.targetLufs, LOUDNESS_RANGE, defaultLufs),
     };
 }
 

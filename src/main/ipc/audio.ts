@@ -1,7 +1,8 @@
 import { ipcMain } from 'electron';
 import { IPC_CHANNELS } from '../../shared/constants';
 import { analyzeFiles, checkOutputs, normalizeFiles, probeFiles } from '../services/audio-normalizer';
-import type { AudioNormalizeInput, AudioNormalizerSettings } from '../../shared/types';
+import { availableAudioFormats } from '../services/audio-formats';
+import type { AudioNormalizeInput, AudioNormalizerSettings, AudioOutputFormat } from '../../shared/types';
 
 export function registerAudioIpcHandlers() {
     ipcMain.handle(IPC_CHANNELS.AUDIO_PROBE, (_e, files: string[]) => {
@@ -19,7 +20,12 @@ export function registerAudioIpcHandlers() {
         }
     );
 
-    ipcMain.handle(IPC_CHANNELS.AUDIO_CHECK_OUTPUTS, (_e, files: string[], outputDir: string) => {
-        return checkOutputs(files, outputDir);
-    });
+    ipcMain.handle(
+        IPC_CHANNELS.AUDIO_CHECK_OUTPUTS,
+        (_e, files: string[], outputDir: string, format: AudioOutputFormat) => {
+            return checkOutputs(files, outputDir, format);
+        }
+    );
+
+    ipcMain.handle(IPC_CHANNELS.AUDIO_FORMATS, () => availableAudioFormats());
 }

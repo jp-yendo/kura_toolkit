@@ -4,6 +4,7 @@ import { probeJson } from '../ffmpeg/ffprobe';
 import { resolveFfmpegPath, runFfmpeg, runTool } from '../ffmpeg/ffmpeg';
 import { discardLater, newTempDir, produceFile } from '../work-dir';
 import type { AudioExportSettings } from '../../../shared/voice/types';
+import { audioEncodeArgs, isAudioFormat, sanitizeAudioEncodeSettings } from '../../../shared/audio-format';
 
 // 音声機能で使う ffmpeg の処理。中間ファイルは 32bit 浮動小数の WAV とする
 // (段階を重ねる処理で音が割れたり精度が落ちたりしないようにするため)。
@@ -384,21 +385,7 @@ export async function mixFiles(
     await runFfmpeg(args, { jobId, totalSec: longest, onProgress });
 }
 
-// MP3 の可変ビットレートの品質 (LAME の -V)。目安のビットレートに平均が近くなる値を選ぶ
-function mp3VbrQuality(bitrate: number): string {
-    if (bitrate >= 245) return '0';
-    if (bitrate >= 225) return '1';
-    if (bitrate >= 190) return '2';
-    if (bitrate >= 175) return '3';
-    if (bitrate >= 165) return '4';
-    if (bitrate >= 130) return '5';
-    if (bitrate >= 115) return '6';
-    if (bitrate >= 100) return '7';
-    if (bitrate >= 85) return '8';
-    return '9';
-}
-
-// 書き出し (MP3 / FLAC)
+// 書き出し。形式と形式ごとの設定は、オーディオ正規化と同じ (audio-format.ts。設定は確かめてから使う)
 export async function encodeExport(
     input: string,
     output: string,
@@ -407,15 +394,18 @@ export async function encodeExport(
     onProgress?: ProgressHandler
 ): Promise<void> {
     const info = await probeAudio(input, jobId);
-    const args = ['-hide_banner', '-nostdin', '-nostats', '-y', '-i', input, '-map', '0:a:0'];
-    if (settings.format === 'mp3') {
-        args.push('-ar', String(settings.sampleRate), '-c:a', 'libmp3lame');
-        if (settings.bitrateMode === 'vbr') args.push('-q:a', mp3VbrQuality(settings.bitrate));
-        else args.push('-b:a', `${settings.bitrate}k`);
-    } else {
-        // FLAC は 24bit で書き出す (浮動小数の中間ファイルから精度を落としすぎないため)
-        args.push('-c:a', 'flac', '-sample_fmt', 's32', '-bits_per_raw_sample', '24');
-    }
+    const format = isAudioFormat(settings.format) ? settings.format : 'mp3';
+    const args = [
+        '-hide_banner',
+        '-nostdin',
+        '-nostats',
+        '-y',
+        '-i',
+        input,
+        '-map',
+        '0:a:0',
+        ...audioEncodeArgs(format, sanitizeAudioEncodeSettings(settings)),
+    ];
     // 別の名前に書いてから、名前の変更で既存のファイルを置き換える (失敗しても既存のファイルは残る)
     await produceFile(output, target =>
         runFfmpeg([...args, target], { jobId, totalSec: info.durationSec, onProgress })

@@ -52,6 +52,7 @@ export const IPC_CHANNELS = {
     AUDIO_ANALYZE: 'audio:analyze',
     AUDIO_NORMALIZE: 'audio:normalize',
     AUDIO_CHECK_OUTPUTS: 'audio:checkOutputs',
+    AUDIO_FORMATS: 'audio:formats',
     AUDIO_PROBE: 'audio:probe',
     CHAPTER_PROBE: 'chapter:probe',
     CHAPTER_CUT: 'chapter:cut',

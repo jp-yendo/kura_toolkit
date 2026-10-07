@@ -16,6 +16,7 @@ import type { TFunction } from 'i18next';
 import CheckIcon from '@mui/icons-material/Check';
 import SliderField from './SliderField';
 import ResetButton from '../common/ResetButton';
+import LufsGuide from '../common/LufsGuide';
 import SeparatorModelSummary from './SeparatorModelSummary';
 import { filterSeparatorModels, separatorDisplayName } from './separatorModelNotes';
 import { useVoiceLibraryStore } from '../../stores/voiceLibraryStore';
@@ -440,14 +441,18 @@ export function NoiseRemovalFields({
     );
 }
 
+// 音量をそろえる (目標の初期値は使う所ごと。学習用の音のフィルターは LOUDNESS_DEFAULT_LUFS、分岐の「その他」は
+// オーディオ正規化の初期値)
 export function LoudnessFields({
     value,
     onChange,
     disabled,
+    defaultLufs = LOUDNESS_DEFAULT_LUFS,
 }: {
     value: LoudnessOption;
     onChange(value: LoudnessOption): void;
     disabled?: boolean;
+    defaultLufs?: number;
 }) {
     const { t } = useTranslation();
     return (
@@ -456,12 +461,12 @@ export function LoudnessFields({
             checked={value.enabled}
             onChecked={enabled => onChange({ ...value, enabled })}
             disabled={disabled}
-            onReset={() => onChange({ ...value, targetLufs: LOUDNESS_DEFAULT_LUFS })}
-            isDefault={value.targetLufs === LOUDNESS_DEFAULT_LUFS}
+            onReset={() => onChange({ ...value, targetLufs: defaultLufs })}
+            isDefault={value.targetLufs === defaultLufs}
         >
             <SliderField
                 label={t('voice.filters.loudnessTarget')}
-                defaultValue={LOUDNESS_DEFAULT_LUFS}
+                defaultValue={defaultLufs}
                 value={value.targetLufs}
                 min={LOUDNESS_RANGE.min}
                 max={LOUDNESS_RANGE.max}
@@ -470,6 +475,7 @@ export function LoudnessFields({
                 disabled={disabled}
                 onChange={targetLufs => onChange({ ...value, targetLufs })}
             />
+            <LufsGuide />
         </OptionBlock>
     );
 }

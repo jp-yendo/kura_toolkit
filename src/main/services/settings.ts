@@ -4,7 +4,14 @@ import path from 'path';
 import { nativeTheme } from 'electron';
 import { getAppRootDir } from '../../shared/constants';
 import { SEARCH_THREADS_MIN } from '../../shared/search';
-import type { AppSettings, DeepPartial, SettingsLoadError, SettingsUpdateResult } from '../../shared/types';
+import { AUDIO_ENCODE_DEFAULTS } from '../../shared/audio-format';
+import {
+    AUDIO_NORMALIZER_DEFAULT_LUFS,
+    type AppSettings,
+    type DeepPartial,
+    type SettingsLoadError,
+    type SettingsUpdateResult,
+} from '../../shared/types';
 
 // 設定ファイルのパス
 const SETTINGS_FILE = 'settings.json';
@@ -32,11 +39,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
         cacheRetentionDays: 30,
     },
     audioNormalizer: {
+        ...AUDIO_ENCODE_DEFAULTS,
         outputDir: '',
-        targetLufs: -13,
-        sampleRate: 44100,
-        bitrateMode: 'cbr',
-        bitrate: 160,
+        targetLufs: AUDIO_NORMALIZER_DEFAULT_LUFS,
+        outputFormat: 'mp3',
     },
     cleanup: {
         customDirs: [],
@@ -45,10 +51,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     },
     voice: {
         export: {
+            ...AUDIO_ENCODE_DEFAULTS,
             format: 'mp3',
-            sampleRate: 44100,
-            bitrateMode: 'cbr',
-            bitrate: 160,
         },
         symbolReadings: {
             ja: null,
