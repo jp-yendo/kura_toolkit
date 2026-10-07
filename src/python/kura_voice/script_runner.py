@@ -130,7 +130,7 @@ def _patch_sbv2(script: str) -> None:
         _patch_single_process_ddp()
     if name == "style_gen.py":
         _patch_wespeaker()
-    if name in ("preprocess_text.py", "bert_gen.py"):
+    if name in ("preprocess_text.py", "bert_gen.py", "sbv2_check_text.py"):
         _patch_pyopenjtalk()
     # BERT and the pretrained weights are read from the app's model directory
     runtime.patch_sbv2_model_paths()

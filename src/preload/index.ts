@@ -108,6 +108,9 @@ const IPC_CHANNELS = {
     VOICE_TRAINING_SETS_ADD_RECORDING: 'voice:trainingSets:addRecording',
     VOICE_TRAINING_SETS_ADD_FILES: 'voice:trainingSets:addFiles',
     VOICE_TRAINING_SETS_REMOVE_AUDIO: 'voice:trainingSets:removeAudio',
+    VOICE_TRAINING_SETS_ADD_GROUP: 'voice:trainingSets:addGroup',
+    VOICE_TRAINING_SETS_SET_GROUP_TEXT: 'voice:trainingSets:setGroupText',
+    VOICE_TRAINING_SETS_REMOVE_GROUP: 'voice:trainingSets:removeGroup',
     VOICE_TRAINING_SETS_FILTER_AUDIO: 'voice:trainingSets:filterAudio',
     VOICE_TRAINING_SETS_REPLACE_AUDIO: 'voice:trainingSets:replaceAudio',
     VOICE_TRAINING_SETS_FILTER_ALL: 'voice:trainingSets:filterAll',
@@ -339,8 +342,8 @@ const api: IpcApi = {
         trainingSets: {
             list: feature => invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_LIST, feature),
             get: (feature, id) => invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_GET, feature, id),
-            create: (feature, name, language) =>
-                invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_CREATE, feature, name, language),
+            create: (feature, name, language, mode) =>
+                invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_CREATE, feature, name, language, mode),
             rename: (feature, id, name) => invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_RENAME, feature, id, name),
             remove: (feature, id) => invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_REMOVE, feature, id),
             addRecording: (feature, id, recordingId, target) =>
@@ -349,6 +352,10 @@ const api: IpcApi = {
                 invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_ADD_FILES, jobId, feature, id, paths, sentenceId),
             removeAudio: (feature, id, audioId) =>
                 invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_REMOVE_AUDIO, feature, id, audioId),
+            addGroup: id => invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_ADD_GROUP, id),
+            setGroupText: (id, groupId, text) =>
+                invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_SET_GROUP_TEXT, id, groupId, text),
+            removeGroup: (id, groupId) => invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_REMOVE_GROUP, id, groupId),
             filterAudio: (jobId, feature, id, audioId, workKey, options) =>
                 invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_FILTER_AUDIO, jobId, feature, id, audioId, workKey, options),
             replaceAudio: (feature, id, audioId, workKey, result) =>

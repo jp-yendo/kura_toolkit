@@ -26,7 +26,13 @@ import {
     type TtsModelType,
     type VoiceLanguage,
 } from '../../../shared/voice/languages';
-import { isValidRvcEpochs, type TrainingStage, type VoiceModelInfo } from '../../../shared/voice/types';
+import {
+    isValidRvcEpochs,
+    type TrainingSentence,
+    type TrainingSetMode,
+    type TrainingStage,
+    type VoiceModelInfo,
+} from '../../../shared/voice/types';
 import { voicePhase } from './job-progress';
 
 // 声のモデルの学習。学習用の音声は学習セット (training-sets.ts) から読む。
@@ -204,17 +210,56 @@ export async function startTtsTraining(jobId: string, options: TtsTrainingOption
     try {
         return await withTrainingSet('tts', options.setId, set => {
             if (!set.language) throw new Error('TRAINING_SET_LANGUAGE_MISMATCH');
-            return trainTts(jobId, set.language, set.audios, options);
+            const clips = ttsClips(set.language, set.mode, set.sentences, set.audios);
+            return trainTts(jobId, set.language, set.mode === 'custom', clips, options);
         });
     } finally {
         finishJob(jobId);
     }
 }
 
+// 学習に使う音声と、その正解テキスト。label は本文を発音に変換できなかったときに示す名前
+type TtsClip = { id: string; text: string; path: string; label: string };
+
+// サンプル文から作成する学習セット: 音声のある文。提示した文章をその音声の正解テキストとしてそのまま使い、
+// 言語ごとの最低の文数に満たなければ学習しない。
+// 任意の文で作成する学習セット: 音声と本文 (空白だけでないもの) がそろったグループ。本文を正解テキストにする。
+// 最低の量は定めない (1 つ以上)。label はグループの番号 (画面の並びの 1 から)
+function ttsClips(
+    language: VoiceLanguage,
+    mode: TrainingSetMode | undefined,
+    sentences: TrainingSentence[],
+    audios: TrainingSetAudio[]
+): TtsClip[] {
+    const byId = new Map(audios.map(audio => [audio.sentenceId, audio.path]));
+    if (mode === 'custom') {
+        const clips = sentences.flatMap((group, index) => {
+            const filePath = byId.get(group.id);
+            return filePath && group.text.trim()
+                ? [{ id: group.id, text: group.text, path: filePath, label: String(index + 1) }]
+                : [];
+        });
+        if (clips.length === 0) throw new Error('TRAINING_GROUPS_EMPTY');
+        return clips;
+    }
+    const used = corpusSentences(language).filter(sentence => byId.has(sentence.id));
+    if (used.length < LANGUAGE_DEFINITIONS[language].trainingSentences.minimum) {
+        throw new Error('TRAINING_DATA_TOO_FEW');
+    }
+    return used.map(sentence => ({
+        id: sentence.id,
+        text: sentence.text,
+        // 学習セットの音声を直接読む
+        path: byId.get(sentence.id) as string,
+        label: sentence.id,
+    }));
+}
+
 async function trainTts(
     jobId: string,
     language: VoiceLanguage,
-    audios: TrainingSetAudio[],
+    custom: boolean,
+    clips: TtsClip[],
     options: TtsTrainingOptions
 ): Promise<VoiceModelInfo> {
     const trimmed = options.name.trim();
@@ -228,19 +273,6 @@ async function trainTts(
     const required = ['component:tts', 'component:tts-train', ...ttsTrainingItems(options.modelType, language)];
     const missing = required.filter(item => !isItemInstalled(item));
     if (missing.length > 0) throw new Error(`MODEL_REQUIRED: ${missing.join(', ')}`);
-
-    const byId = new Map(audios.map(audio => [audio.sentenceId, audio.path]));
-    const sentences = corpusSentences(language).filter(sentence => byId.has(sentence.id));
-    if (sentences.length < LANGUAGE_DEFINITIONS[language].trainingSentences.minimum) {
-        throw new Error('TRAINING_DATA_TOO_FEW');
-    }
-    const clips = sentences.map(sentence => ({
-        id: sentence.id,
-        // 提示した文章を、その音声の正解テキストとしてそのまま使う
-        text: sentence.text,
-        // 学習セットの音声を直接読む
-        path: byId.get(sentence.id) as string,
-    }));
 
     const memory = platform.gpu.memoryMb ?? 0;
     const batchSize = memory >= 12000 ? 4 : memory >= 10000 ? 3 : memory >= 8000 ? 2 : 1;
@@ -266,6 +298,9 @@ async function trainTts(
                     language,
                     useJpExtra: options.modelType === 'jp-extra',
                     clips,
+                    // 学習の前に本文を確かめ、発音に変換できないものを示すエラー (任意の文で作成する学習セットは
+                    // グループの番号で、サンプル文から作成する学習セットは文の ID で示す)
+                    textErrorCode: custom ? 'TRAINING_GROUP_TEXT_INVALID' : 'TRAINING_TEXT_INVALID',
                     epochs,
                     batchSize,
                     cpuCores: Math.max(1, Math.floor(cpuCount() / 2)),

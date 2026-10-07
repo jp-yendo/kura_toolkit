@@ -184,6 +184,7 @@ export default function ExportDialog({
                             <>
                                 <PathField
                                     label={t('voice.export.outputDir')}
+                                    browse='folder'
                                     value={outputDir}
                                     onChange={setOutputDir}
                                     onBrowse={() =>

@@ -626,12 +626,19 @@ export type TtsRunResult =
 
 // 学習セット (学習用の音声に名前を付けて残したもの)。声のモデルの機能ごとに持つ。
 // 読み上げの学習セットは言語を 1 つ持ち、その言語の読み上げ文の文ごとに音声を 1 つ持てる
+// 読み上げの学習セットの作り方。sentences: サンプル文から作成 (言語の学習用の文章の文ごとに音声を指定する)。
+// custom: 任意の文で作成 (音声と本文の組 (グループ) を利用者が並べる)。作成した後は変えない
+export type TrainingSetMode = 'sentences' | 'custom';
+export const TRAINING_SET_MODES: TrainingSetMode[] = ['sentences', 'custom'];
+
 export type TrainingSetSummary = {
     id: string;
     feature: VoiceModelFeature;
     name: string;
     // 読み上げの学習セットの言語 (音声変換の学習セットには無い)
     language?: VoiceLanguage;
+    // 読み上げの学習セットの作り方 (音声変換の学習セットには無い)
+    mode?: TrainingSetMode;
     // 音声の数と合計の長さ
     audioCount: number;
     durationSec: number;
@@ -667,7 +674,8 @@ export type TrainingSentence = {
 export type TrainingSetDetail = {
     summary: TrainingSetSummary;
     audios: TrainingAudio[];
-    // 読み上げの学習セットの言語の読み上げ文 (音声変換の学習セットでは空)
+    // 読み上げの学習セットの文。サンプル文から作成する学習セットは言語の学習用の文章、任意の文で作成する学習セットは
+    // グループ (id と本文。並びは利用者が加えた順)。音声変換の学習セットでは空。音声は sentenceId で文に結び付く
     sentences: TrainingSentence[];
 };
 

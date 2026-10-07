@@ -461,6 +461,7 @@ export default function ChapterCutPage() {
                             <Stack spacing={2}>
                                 <PathField
                                     label={t('chapterPage.outputDir')}
+                                    browse='folder'
                                     value={store.outputDir}
                                     onChange={value => store.setOutputDir(value)}
                                     onBrowse={() =>

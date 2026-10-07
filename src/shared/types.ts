@@ -389,7 +389,14 @@ type VoiceSettings = {
     symbolReadings: Record<VoiceLanguage, SymbolReading[] | null>;
     // 音声機能の更新の確認を表示したアプリのバージョン (同じバージョンでは起動のたびに確認しない)
     updatePromptVersion: string;
+    // 録音に使うマイク (deviceId)。空文字 = OS の既定のマイク (設定画面では「OS の既定のマイク」と示す)
+    microphoneId: string;
+    // 録音の入力ゲイン (アプリの中で音を大きく・小さくする量。dB、MIC_INPUT_GAIN_DB の範囲)
+    inputGainDb: number;
 };
+
+// 録音の入力ゲイン (dB)。0 はマイクの入力のまま、正で大きく、負で小さくする
+export const MIC_INPUT_GAIN_DB = { default: 0, min: -30, max: 30 };
 
 // 保存場所の種類 (ライブラリ・モデル・キャッシュ・作業ディレクトリ)
 export type StorageKind = 'library' | 'model' | 'cache' | 'work';

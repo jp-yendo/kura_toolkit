@@ -1,8 +1,10 @@
 import React from 'react';
 import { Button, DialogActions, DialogContent, DialogTitle, Stack, Typography } from '@mui/material';
+import GraphicEqIcon from '@mui/icons-material/GraphicEq';
 import { useTranslation } from 'react-i18next';
 import AppDialog from '../common/AppDialog';
 import Panel from '../common/Panel';
+import SectionLabel from '../common/SectionLabel';
 import ProgressDialog from '../common/ProgressDialog';
 import SyncPlayer from './SyncPlayer';
 import {
@@ -90,7 +92,8 @@ export default function TrainingFilterDialog({ open, feature, setId, audio, onCl
     const scope = audio ? 'audio' : 'set';
     const [options, setOptions] = React.useState<TrainingFilterOptions>(trainingFilterDefaults(scope));
     const [results, setResults] = React.useState<FilterResult[]>([]);
-    const [selectedId, setSelectedId] = React.useState<string>('original');
+    // 選んでいる適用結果 (確定で学習セットの音と置き換えるもの。元の音は選べない)
+    const [selectedId, setSelectedId] = React.useState<string | null>(null);
     const [workKey, setWorkKey] = React.useState(newWorkKey);
     const { job, run, cancel } = useJobRunner();
     const noiseModels = useNoiseRemovalModels();
@@ -104,7 +107,7 @@ export default function TrainingFilterDialog({ open, feature, setId, audio, onCl
         if (!open) return;
         setOptions(trainingFilterDefaults(audio ? 'audio' : 'set'));
         setResults([]);
-        setSelectedId('original');
+        setSelectedId(null);
         setWorkKey(newWorkKey());
         // eslint-disable-next-line react-hooks/exhaustive-deps -- 開いた時点で初期化する
     }, [open]);
@@ -186,9 +189,23 @@ export default function TrainingFilterDialog({ open, feature, setId, audio, onCl
         }
     };
 
-    // 選べるカード (元の音と結果)。クリック (再生を含む) で選ぶ
-    const card = (id: string, label: string, summary: string | null, media: MediaRef) => (
-        <Panel key={id} selected={selectedId === id} onClick={() => setSelectedId(id)}>
+    // 2 列のときの列 (列ごとにスクロールする)
+    const columnSx = {
+        pt: 1,
+        minHeight: 0,
+        overflowY: { md: 'auto' },
+        scrollbarGutter: { md: 'stable' },
+        pr: { md: 1.5 },
+    } as const;
+
+    // 音のカード。適用結果はクリック (再生を含む) で選ぶ。元の音は聞き比べるためのもので、選べない
+    // (元の音のままにする場合はキャンセルで閉じる)
+    const card = (id: string, label: string, summary: string | null, media: MediaRef, selectable: boolean) => (
+        <Panel
+            key={id}
+            selected={selectable && selectedId === id}
+            onClick={selectable ? () => setSelectedId(id) : undefined}
+        >
             <Stack spacing={0.5}>
                 <Typography variant='body2' sx={{ fontWeight: 600 }}>
                     {label}
@@ -205,43 +222,77 @@ export default function TrainingFilterDialog({ open, feature, setId, audio, onCl
 
     return (
         <>
-            <AppDialog open={open} onClose={busy ? undefined : close} maxWidth='md' fullWidth>
+            <AppDialog
+                open={open}
+                onClose={busy ? undefined : close}
+                maxWidth={audio ? 'lg' : 'md'}
+                fullWidth
+                // 個々の音では、高さは中身によらず一定にし、列ごとにスクロールする (分岐のダイアログと同じ)
+                slotProps={audio ? { paper: { sx: { height: 'min(760px, calc(100% - 64px))' } } } : undefined}
+            >
                 <DialogTitle sx={{ overflowWrap: 'anywhere' }}>
                     {audio ? t('voice.filters.filterTitle', { name: audio.name }) : t('voice.filters.filterAllTitle')}
                 </DialogTitle>
-                <DialogContent>
-                    <Stack spacing={2} sx={{ pt: 1 }}>
-                        <FilterOptionFields
-                            value={options}
-                            onChange={setOptions}
-                            disabled={busy}
-                            dereverbModels={dereverbModels}
-                            noiseModels={noiseModels}
-                        />
-                        {audio && (
-                            <>
-                                <Stack direction='row'>
-                                    <Button
-                                        variant='outlined'
-                                        disabled={busy || !hasTrainingFilter(options)}
-                                        onClick={() => void process()}
-                                    >
-                                        {t('voice.filters.process')}
-                                    </Button>
-                                </Stack>
-                                {card('original', t('voice.filters.original'), null, audio.media)}
-                                {results.map((item, index) =>
-                                    card(
-                                        item.id,
-                                        t('voice.filters.processResult', { index: index + 1 }),
-                                        item.summary,
-                                        item.media
-                                    )
-                                )}
-                            </>
-                        )}
-                    </Stack>
-                </DialogContent>
+                {audio ? (
+                    // 個々の音: 左に加工の設定 (幅は 400px に抑える)、右に波形のプレビュー (元の音と加工の結果を聞き比べ、選ぶ。
+                    // 残りの幅を使う)。2 列のときは列ごとに
+                    // スクロールし、1 列のときは全体をスクロールする。列はスクロールバーの幅を常に空け、右に余白を取る
+                    <DialogContent
+                        sx={{
+                            display: 'grid',
+                            gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: '400px minmax(0, 1fr)' },
+                            gridTemplateRows: { md: 'minmax(0, 1fr)' },
+                            columnGap: 3,
+                            rowGap: 2,
+                            overflowY: { xs: 'auto', md: 'hidden' },
+                        }}
+                    >
+                        <Stack sx={columnSx}>
+                            <FilterOptionFields
+                                value={options}
+                                onChange={setOptions}
+                                disabled={busy}
+                                dereverbModels={dereverbModels}
+                                noiseModels={noiseModels}
+                            />
+                        </Stack>
+                        <Stack spacing={2} sx={columnSx}>
+                            <SectionLabel>{t('voice.filters.preview')}</SectionLabel>
+                            {card('original', t('voice.filters.original'), null, audio.media, false)}
+                            {/* 元の音の下に目立つように置く。押すたびに、チェックしているフィルターを元の音にかけた結果を下に足す */}
+                            <Button
+                                variant='contained'
+                                fullWidth
+                                startIcon={<GraphicEqIcon />}
+                                disabled={busy || !hasTrainingFilter(options)}
+                                onClick={() => void process()}
+                            >
+                                {t('voice.filters.process')}
+                            </Button>
+                            {results.map((item, index) =>
+                                card(
+                                    item.id,
+                                    t('voice.filters.processResult', { index: index + 1 }),
+                                    item.summary,
+                                    item.media,
+                                    true
+                                )
+                            )}
+                        </Stack>
+                    </DialogContent>
+                ) : (
+                    <DialogContent>
+                        <Stack spacing={2} sx={{ pt: 1 }}>
+                            <FilterOptionFields
+                                value={options}
+                                onChange={setOptions}
+                                disabled={busy}
+                                dereverbModels={dereverbModels}
+                                noiseModels={noiseModels}
+                            />
+                        </Stack>
+                    </DialogContent>
+                )}
                 <DialogActions>
                     <Button onClick={close} disabled={busy}>
                         {t('common.cancel')}
@@ -249,7 +300,7 @@ export default function TrainingFilterDialog({ open, feature, setId, audio, onCl
                     {audio ? (
                         <Button
                             variant='contained'
-                            disabled={busy || selectedId === 'original'}
+                            disabled={busy || selectedId === null}
                             onClick={() => void confirm()}
                         >
                             {t('voice.filters.confirm')}

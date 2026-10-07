@@ -401,6 +401,7 @@ export default function AudioNormalizerPage() {
                     <Stack spacing={2}>
                         <PathField
                             label={t('audioPage.outputDir')}
+                            browse='folder'
                             value={audioSettings.outputDir}
                             onChange={value => patchSettings({ outputDir: value })}
                             onBrowse={() =>

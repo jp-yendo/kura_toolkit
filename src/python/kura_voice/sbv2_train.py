@@ -29,6 +29,9 @@ from kura_voice.protocol import KuraError, StandaloneContext  # noqa: E402
 from kura_voice.training_common import main, run_step  # noqa: E402
 
 EPOCH_LINE = re.compile(r"====> Epoch: (\d+), step: (\d+)")
+HERE = os.path.dirname(os.path.abspath(__file__))
+# Checks the transcripts the way the repository's text preprocessing reads them
+CHECK_TEXT = os.path.join(HERE, "sbv2_check_text.py")
 # The sample rate of the training audio (what the Web UI passes to the repository's resample.py)
 SAMPLE_RATE = 44100
 
@@ -107,6 +110,31 @@ def resample_clip(source: str, dest: str) -> None:
     soundfile.write(dest, wav, sample_rate)
 
 
+def transcript(clip: dict) -> str:
+    """The clip's transcript as written to the training list (one line; "|" separates the fields).
+
+    It is the presented sentence (training from sample sentences) or the text given with the audio.
+    """
+    return str(clip["text"]).replace("|", " ").replace("\r", " ").replace("\n", " ").strip()
+
+
+def check_texts(context: StandaloneContext, repo: str, job_dir: str, job: dict) -> None:
+    """Stop with the labels of the transcripts that the text preprocessing or BERT features would fail on."""
+    texts = os.path.join(job_dir, "texts.json")
+    with open(texts, "w", encoding="utf-8") as handle:
+        json.dump(
+            [{"label": clip["label"], "text": transcript(clip)} for clip in job["clips"]], handle, ensure_ascii=False
+        )
+    run_step(
+        context,
+        "sbv2",
+        repo,
+        job_dir,
+        "prepare",
+        [CHECK_TEXT, texts, job["language"], str(bool(job["useJpExtra"])), job["textErrorCode"]],
+    )
+
+
 def prepare_dataset(dataset: str, job: dict) -> None:
     """The training list and the resampled audio, read directly from each clip.
 
@@ -121,9 +149,7 @@ def prepare_dataset(dataset: str, job: dict) -> None:
     for clip in job["clips"]:
         name = f"{clip['id']}.wav"
         tasks.append((clip["path"], os.path.join(wavs, name)))
-        # The transcript is the sentence presented when the clip was recorded.
-        text = str(clip["text"]).replace("|", " ").replace("\n", " ").strip()
-        lines.append(f"{name}|{job['modelName']}|{language}|{text}")
+        lines.append(f"{name}|{job['modelName']}|{language}|{transcript(clip)}")
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, int(job["cpuCores"]))) as executor:
         for future in [executor.submit(resample_clip, source, dest) for source, dest in tasks]:
             future.result()
@@ -146,9 +172,11 @@ def train(job: dict, context: StandaloneContext, job_dir: str) -> None:
 
     context.event(kind="stage", stage="prepare")
     write_configs(repo, job_dir, name, dataset, output_dir)
+    # Before the text check: it sets the folder of the pretrained weights that the patched scripts need
+    config_path = initialize(repo, dataset, job)
+    check_texts(context, repo, job_dir, job)
     context.event(kind="stage", stage="preprocess")
     prepare_dataset(dataset, job)
-    config_path = initialize(repo, dataset, job)
     processes = str(job["cpuCores"])
 
     text_args = [

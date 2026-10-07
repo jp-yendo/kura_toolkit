@@ -252,22 +252,27 @@ export default function RvcTrainingPage() {
                                     await refresh();
                                 }}
                             />
-                            <Button
-                                variant='outlined'
-                                startIcon={<AddIcon />}
-                                disabled={job !== null || recording}
-                                onClick={() => void addFiles()}
-                            >
-                                {t('voice.training.addFiles')}
-                            </Button>
+                            {/* 録音中は使えないボタンを出さない (録音のメーターの幅を空けるため) */}
+                            {!recording && (
+                                <Button
+                                    variant='outlined'
+                                    startIcon={<AddIcon />}
+                                    disabled={job !== null}
+                                    onClick={() => void addFiles()}
+                                >
+                                    {t('voice.training.addFiles')}
+                                </Button>
+                            )}
                             <Box sx={{ flexGrow: 1 }} />
-                            <Button
-                                startIcon={<GraphicEqIcon />}
-                                disabled={job !== null || recording || items.length === 0}
-                                onClick={() => setFilterTarget({ open: true, audio: null })}
-                            >
-                                {t('voice.filters.filterAll')}
-                            </Button>
+                            {!recording && (
+                                <Button
+                                    startIcon={<GraphicEqIcon />}
+                                    disabled={job !== null || items.length === 0}
+                                    onClick={() => setFilterTarget({ open: true, audio: null })}
+                                >
+                                    {t('voice.filters.filterAll')}
+                                </Button>
+                            )}
                         </Stack>
 
                         <FileDropTarget

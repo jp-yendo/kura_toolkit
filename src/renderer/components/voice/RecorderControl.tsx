@@ -1,7 +1,9 @@
-import { Box, Button, LinearProgress, Stack, Typography } from '@mui/material';
+import { Button, IconButton, Stack, Tooltip, Typography } from '@mui/material';
+import CloseIcon from '@mui/icons-material/Close';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import StopIcon from '@mui/icons-material/Stop';
 import { useTranslation } from 'react-i18next';
+import LevelMeter from './LevelMeter';
 import { useRecorder, type RecordedAudio } from './useRecorder';
 import { formatDuration } from './voiceFormat';
 import { showNotice } from '../../stores/noticeStore';
@@ -13,6 +15,9 @@ type Props = {
     disabled?: boolean;
     label?: string;
 };
+
+// 録音・停止のボタンの高さ (px)。録音のボタン (MUI の通常の大きさのボタン) に合わせ、録音中も行の高さを変えない
+const CONTROL_HEIGHT = 36;
 
 // マイク録音のボタンと入力レベル。録音を止めると、main が書き終えた録音 (16bit の WAV) を渡す
 export default function RecorderControl({ onRecorded, onActiveChange, disabled, label }: Props) {
@@ -46,12 +51,60 @@ export default function RecorderControl({ onRecorded, onActiveChange, disabled, 
         }
     };
 
+    // 録音をやめて捨てる (保存しない。録り直しの場合は前の音声が残る)
+    const cancel = () => {
+        recorder.cancel();
+        onActiveChange?.(false);
+    };
+
     return (
-        <Stack direction='row' spacing={1.5} sx={{ alignItems: 'center' }}>
+        <Stack direction='row' spacing={1.5} sx={{ alignItems: 'center', minHeight: CONTROL_HEIGHT }}>
+            {/* 録音中は、停止・メーター・ピークの値・経過時間・キャンセルを同じ間隔で並べる */}
             {recording ? (
-                <Button variant='contained' color='error' startIcon={<StopIcon />} onClick={() => void stop()}>
-                    {t('voice.recorder.stop')}
-                </Button>
+                <>
+                    {/* 幅を取らないよう、録音中の停止はアイコンだけにする (何をするかはツールチップと読み上げの名前で示す) */}
+                    <Tooltip title={t('voice.recorder.stop')}>
+                        <IconButton
+                            aria-label={t('voice.recorder.stop')}
+                            onClick={() => void stop()}
+                            sx={{
+                                width: CONTROL_HEIGHT,
+                                height: CONTROL_HEIGHT,
+                                p: 0,
+                                bgcolor: 'error.main',
+                                color: 'error.contrastText',
+                                '&:hover': { bgcolor: 'error.dark' },
+                            }}
+                        >
+                            <StopIcon />
+                        </IconButton>
+                    </Tooltip>
+                    <LevelMeter
+                        level={recorder.level}
+                        trailing={
+                            <>
+                                <Typography
+                                    variant='body2'
+                                    color='text.secondary'
+                                    sx={{ fontVariantNumeric: 'tabular-nums' }}
+                                >
+                                    {formatDuration(recorder.elapsed)}
+                                </Typography>
+                                {/* キャンセルは経過時間の右。ボタンの内側の余白を詰め、見た目の間隔をほかとそろえる */}
+                                <Tooltip title={t('voice.recorder.cancel')}>
+                                    <IconButton
+                                        size='small'
+                                        aria-label={t('voice.recorder.cancel')}
+                                        onClick={cancel}
+                                        sx={{ p: 0.25 }}
+                                    >
+                                        <CloseIcon fontSize='small' />
+                                    </IconButton>
+                                </Tooltip>
+                            </>
+                        }
+                    />
+                </>
             ) : (
                 <Button
                     variant='outlined'
@@ -62,19 +115,6 @@ export default function RecorderControl({ onRecorded, onActiveChange, disabled, 
                 >
                     {label ?? t('voice.recorder.start')}
                 </Button>
-            )}
-            {recording && (
-                <Box sx={{ width: 160 }}>
-                    <LinearProgress
-                        variant='determinate'
-                        value={Math.min(100, recorder.level * 100)}
-                        color={recorder.level > 0.95 ? 'error' : 'primary'}
-                    />
-                    <Typography variant='caption' color='text.secondary'>
-                        {formatDuration(recorder.elapsed)}
-                        {recorder.level > 0.95 ? ` ${t('voice.recorder.clipping')}` : ''}
-                    </Typography>
-                </Box>
             )}
             {recorder.error && (
                 <Typography variant='caption' color='error'>

@@ -65,7 +65,9 @@ import type {
     TtsRunResult,
     TrainingAddFilesResult,
     TrainingAudio,
+    TrainingSentence,
     TrainingSetDetail,
+    TrainingSetMode,
     TrainingSetSummary,
     VoiceFeatureId,
     VoiceModelFeature,
@@ -163,8 +165,13 @@ export type VoiceApi = {
     trainingSets: {
         list(feature: VoiceModelFeature): Promise<TrainingSetSummary[]>;
         get(feature: VoiceModelFeature, id: string): Promise<TrainingSetDetail>;
-        // 読み上げの学習セットは言語を指定し、音声変換の学習セットは指定しない
-        create(feature: VoiceModelFeature, name: string, language?: VoiceLanguage): Promise<TrainingSetSummary>;
+        // 読み上げの学習セットは言語と作り方を指定し、音声変換の学習セットは指定しない
+        create(
+            feature: VoiceModelFeature,
+            name: string,
+            language?: VoiceLanguage,
+            mode?: TrainingSetMode
+        ): Promise<TrainingSetSummary>;
         rename(feature: VoiceModelFeature, id: string, name: string): Promise<TrainingSetSummary>;
         // ごみ箱に移す
         remove(feature: VoiceModelFeature, id: string): Promise<void>;
@@ -184,6 +191,10 @@ export type VoiceApi = {
             sentenceId?: string
         ): Promise<TrainingAddFilesResult>;
         removeAudio(feature: VoiceModelFeature, id: string, audioId: string): Promise<void>;
+        // 任意の文で作成する読み上げの学習セットのグループ: 加える (本文は空)・本文を変える・削除する (音声も消す)
+        addGroup(id: string): Promise<TrainingSentence>;
+        setGroupText(id: string, groupId: string, text: string): Promise<void>;
+        removeGroup(id: string, groupId: string): Promise<void>;
         // 学習用の音のフィルター: 個々の音に加工をかけた結果を作る (作業 workKey の中。確定するまで学習セットは変えない)
         filterAudio(
             jobId: string,

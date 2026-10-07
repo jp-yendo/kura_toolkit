@@ -26,21 +26,30 @@ import { voiceErrorMessage } from './voiceErrors';
 import type { TrainingSetsState } from './useTrainingSets';
 import { showNotice } from '../../stores/noticeStore';
 import { VOICE_LANGUAGES, type VoiceLanguage } from '@shared/voice/languages';
-import type { TrainingSetSummary, VoiceModelFeature } from '@shared/voice/types';
+import {
+    TRAINING_SET_MODES,
+    type TrainingSetMode,
+    type TrainingSetSummary,
+    type VoiceModelFeature,
+} from '@shared/voice/types';
 
-// 名前の入力の内容。閉じる間も表示が変わらないよう、開閉とは別に持つ
-type NameDialog = { open: boolean; mode: 'create' | 'rename'; name: string; language: VoiceLanguage };
+// 名前の入力の内容。閉じる間も表示が変わらないよう、開閉とは別に持つ。setMode は新しく作る読み上げの学習セットの作り方
+type NameDialog = {
+    open: boolean;
+    mode: 'create' | 'rename';
+    name: string;
+    language: VoiceLanguage;
+    setMode: TrainingSetMode;
+};
 
-// 学習セットの内容の要約 (読み上げは言語と音声のある文の数、音声変換は音声の数と、合計の長さ)
+// 学習セットの内容の要約 (読み上げは言語・作り方と音声の数、音声変換は音声の数と、合計の長さ)
 export function trainingSetDetail(t: TFunction, set: TrainingSetSummary): string {
     const duration = formatDuration(set.durationSec);
-    return set.language
-        ? t('voice.trainingSets.ttsDetail', {
-              language: t(`voice.languages.${set.language}`),
-              count: set.audioCount,
-              duration,
-          })
-        : t('voice.trainingSets.rvcDetail', { count: set.audioCount, duration });
+    if (!set.language) return t('voice.trainingSets.rvcDetail', { count: set.audioCount, duration });
+    const language = t(`voice.languages.${set.language}`);
+    return set.mode === 'custom'
+        ? t('voice.trainingSets.ttsCustomDetail', { language, count: set.audioCount, duration })
+        : t('voice.trainingSets.ttsDetail', { language, count: set.audioCount, duration });
 }
 
 type Props = {
@@ -60,6 +69,7 @@ export default function TrainingSetBar({ feature, state, defaultLanguage = 'ja',
         mode: 'create',
         name: '',
         language: defaultLanguage,
+        setMode: 'sentences',
     });
     // 削除の確認の対象。閉じる間も表示が変わらないよう、開閉とは別に持つ
     const [removeConfirm, setRemoveConfirm] = React.useState<{ open: boolean; set: TrainingSetSummary | null }>({
@@ -78,7 +88,8 @@ export default function TrainingSetBar({ feature, state, defaultLanguage = 'ja',
                 const created = await window.kuraToolkit.voice.trainingSets.create(
                     feature,
                     name,
-                    feature === 'tts' ? nameDialog.language : undefined
+                    feature === 'tts' ? nameDialog.language : undefined,
+                    feature === 'tts' ? nameDialog.setMode : undefined
                 );
                 select(created.id);
             } else if (selected) {
@@ -141,7 +152,13 @@ export default function TrainingSetBar({ feature, state, defaultLanguage = 'ja',
                             aria-label={t('voice.trainingSets.create')}
                             disabled={disabled}
                             onClick={() =>
-                                setNameDialog({ open: true, mode: 'create', name: '', language: defaultLanguage })
+                                setNameDialog({
+                                    open: true,
+                                    mode: 'create',
+                                    name: '',
+                                    language: defaultLanguage,
+                                    setMode: 'sentences',
+                                })
                             }
                         >
                             <AddIcon fontSize='small' />
@@ -161,6 +178,7 @@ export default function TrainingSetBar({ feature, state, defaultLanguage = 'ja',
                                     mode: 'rename',
                                     name: selected.name,
                                     language: selected.language ?? defaultLanguage,
+                                    setMode: selected.mode ?? 'sentences',
                                 })
                             }
                         >
@@ -191,7 +209,13 @@ export default function TrainingSetBar({ feature, state, defaultLanguage = 'ja',
                         startIcon={<AddIcon />}
                         disabled={disabled}
                         onClick={() =>
-                            setNameDialog({ open: true, mode: 'create', name: '', language: defaultLanguage })
+                            setNameDialog({
+                                open: true,
+                                mode: 'create',
+                                name: '',
+                                language: defaultLanguage,
+                                setMode: 'sentences',
+                            })
                         }
                     >
                         {t('voice.trainingSets.create')}
@@ -232,6 +256,28 @@ export default function TrainingSetBar({ feature, state, defaultLanguage = 'ja',
                                     {VOICE_LANGUAGES.map(item => (
                                         <MenuItem key={item} value={item}>
                                             {t(`voice.languages.${item}`)}
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+                        )}
+                        {feature === 'tts' && nameDialog.mode === 'create' && (
+                            <FormControl size='small'>
+                                <InputLabel id='training-set-mode'>{t('voice.trainingSets.mode')}</InputLabel>
+                                <Select
+                                    labelId='training-set-mode'
+                                    label={t('voice.trainingSets.mode')}
+                                    value={nameDialog.setMode}
+                                    onChange={event =>
+                                        setNameDialog(previous => ({
+                                            ...previous,
+                                            setMode: event.target.value as TrainingSetMode,
+                                        }))
+                                    }
+                                >
+                                    {TRAINING_SET_MODES.map(item => (
+                                        <MenuItem key={item} value={item}>
+                                            {t(`voice.trainingSets.modes.${item}`)}
                                         </MenuItem>
                                     ))}
                                 </Select>

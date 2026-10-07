@@ -7,6 +7,7 @@ import { SEARCH_THREADS_MIN } from '../../shared/search';
 import { AUDIO_ENCODE_DEFAULTS } from '../../shared/audio-format';
 import {
     AUDIO_NORMALIZER_DEFAULT_LUFS,
+    MIC_INPUT_GAIN_DB,
     type AppSettings,
     type DeepPartial,
     type SettingsLoadError,
@@ -60,6 +61,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
             zh: null,
         },
         updatePromptVersion: '',
+        microphoneId: '',
+        inputGainDb: MIC_INPUT_GAIN_DB.default,
     },
 };
 

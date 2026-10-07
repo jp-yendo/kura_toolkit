@@ -39,10 +39,13 @@ import { startRvcTraining, startTtsTraining } from '../services/voice/training';
 import {
     addTrainingFiles,
     addTrainingRecording,
+    addTrainingGroup,
     createTrainingSet,
     getTrainingSet,
     listTrainingSets,
     removeTrainingAudio,
+    removeTrainingGroup,
+    setTrainingGroupText,
     filterTrainingAudio,
     replaceTrainingAudio,
     filterTrainingSet,
@@ -64,16 +67,18 @@ import {
     setVoiceLanguages,
 } from '../services/voice/voice-models';
 import { isVoiceLanguage, type TtsModelType, type VoiceLanguage } from '../../shared/voice/languages';
-import type {
-    AudioExportSettings,
-    ConversionRunRequest,
-    ExportItem,
-    MixRenderRequest,
-    PresetKind,
-    SeparationRunRequest,
-    TtsRunRequest,
-    VoiceFeatureId,
-    VoiceModelFeature,
+import {
+    TRAINING_SET_MODES,
+    type AudioExportSettings,
+    type ConversionRunRequest,
+    type ExportItem,
+    type MixRenderRequest,
+    type PresetKind,
+    type SeparationRunRequest,
+    type TrainingSetMode,
+    type TtsRunRequest,
+    type VoiceFeatureId,
+    type VoiceModelFeature,
 } from '../../shared/voice/types';
 
 // 外部ブラウザで開く URL は https に限る (ライセンス・配布元・モデル検索のリンク)
@@ -94,6 +99,11 @@ function checkLanguages(values: unknown): VoiceLanguage[] {
 }
 
 // renderer から渡された声のモデルの機能を確かめる (保存先のフォルダ名に使うため、決まった値に限る)
+function checkTrainingSetMode(value: unknown): TrainingSetMode {
+    if (!TRAINING_SET_MODES.includes(value as TrainingSetMode)) throw new Error('TRAINING_SET_MODE_MISMATCH');
+    return value as TrainingSetMode;
+}
+
 function checkFeatureId(value: unknown): VoiceModelFeature {
     if (value !== 'converter' && value !== 'tts') throw new Error(`INVALID_FEATURE: ${String(value)}`);
     return value;
@@ -242,8 +252,15 @@ export function registerVoiceIpcHandlers() {
     ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_SETS_GET, (_e, feature: unknown, id: string) =>
         getTrainingSet(checkFeatureId(feature), id)
     );
-    ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_SETS_CREATE, (_e, feature: unknown, name: string, language: unknown) =>
-        createTrainingSet(checkFeatureId(feature), name, language === undefined ? undefined : checkLanguage(language))
+    ipcMain.handle(
+        IPC_CHANNELS.VOICE_TRAINING_SETS_CREATE,
+        (_e, feature: unknown, name: string, language: unknown, mode: unknown) =>
+            createTrainingSet(
+                checkFeatureId(feature),
+                name,
+                language === undefined ? undefined : checkLanguage(language),
+                mode === undefined ? undefined : checkTrainingSetMode(mode)
+            )
     );
     ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_SETS_RENAME, (_e, feature: unknown, id: string, name: string) =>
         renameTrainingSet(checkFeatureId(feature), id, name)
@@ -263,6 +280,13 @@ export function registerVoiceIpcHandlers() {
     );
     ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_SETS_REMOVE_AUDIO, (_e, feature: unknown, id: string, audioId: string) =>
         removeTrainingAudio(checkFeatureId(feature), id, audioId)
+    );
+    ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_SETS_ADD_GROUP, (_e, id: string) => addTrainingGroup(id));
+    ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_SETS_SET_GROUP_TEXT, (_e, id: string, groupId: string, text: unknown) =>
+        setTrainingGroupText(id, groupId, typeof text === 'string' ? text : '')
+    );
+    ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_SETS_REMOVE_GROUP, (_e, id: string, groupId: string) =>
+        removeTrainingGroup(id, groupId)
     );
     ipcMain.handle(
         IPC_CHANNELS.VOICE_TRAINING_SETS_FILTER_AUDIO,

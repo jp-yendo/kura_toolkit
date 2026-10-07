@@ -50,6 +50,7 @@ import SymbolReadingsDialog, { symbolReadingsFor } from '../../components/voice/
 import SyncPlayer from '../../components/voice/SyncPlayer';
 import SliderField from '../../components/voice/SliderField';
 import ExportDialog, { type ExportEntry } from '../../components/voice/ExportDialog';
+import { TEXT_EXTENSIONS } from '../../components/voice/textInput';
 import { voiceLabel } from '../../components/voice/voiceFormat';
 import { isCancelledError, voiceErrorMessage } from '../../components/voice/voiceErrors';
 import { useJobRunner } from '../../hooks/useJobRunner';
@@ -91,7 +92,6 @@ import { wrapMenuItemSx, wrapSelectSx } from '../../components/common/selectStyl
 const OVERFLOW_MODES: TimelineOverflowMode[] = ['speedup', 'overlap', 'shift', 'warn'];
 const INPUT_MODES: TtsInputMode[] = ['normal', 'timed'];
 // 入力方法ごとのファイルの種類 (通常はテキスト、タイミング指定の保存は SRT だけ)
-const TEXT_EXTENSIONS = ['txt'];
 const SAVE_EXTENSION: Record<TtsInputMode, string> = { normal: 'txt', timed: 'srt' };
 const SAVE_FILTER_KEYS: Record<TtsInputMode, string> = {
     normal: 'voice.fileFilters.text',

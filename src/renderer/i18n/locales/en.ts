@@ -39,6 +39,8 @@ export default {
             float32: '32 bit (float)',
         },
         resetToDefault: 'Reset to default',
+        selectFolder: 'Select Folder',
+        selectFile: 'Select File',
         lufsGuide:
             'The closer the LUFS value is to 0, the louder the output. As a guide, streaming services (YouTube, Spotify, etc.) use -14, commercial music CDs are around -9 to -11, and broadcast (EBU R128) uses -23.',
         ffmpegNotFound: 'ffmpeg not found. Please set its path in App Settings.',
@@ -326,6 +328,13 @@ export default {
         searchThreadsHint:
             'Number of threads used to scan directories (1 or more). Higher values are faster on SSDs, but may be slower on HDDs or network drives.',
         ffmpegSection: 'ffmpeg / ffprobe',
+        recordingSection: 'Recording',
+        microphone: 'Microphone',
+        microphoneDefault: 'OS default microphone',
+        microphoneUnnamed: 'Microphone {{index}}',
+        inputGain: 'Input gain',
+        micTest: 'Test Microphone',
+        micTestStop: 'Stop Test',
         ffmpegPath: 'Path to ffmpeg executable',
         ffprobePath: 'Path to ffprobe executable',
         autoDetectHint: 'If empty, the tool is auto-detected from PATH.',

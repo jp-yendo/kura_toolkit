@@ -1,5 +1,6 @@
 import React from 'react';
 import { parseError } from '../common/errorMessage';
+import { currentInputGainFactor, openMicrophone } from './microphones';
 
 // マイク録音。学習用の音声を録るため、ブラウザ側のエコーキャンセル・ノイズ抑制・自動ゲイン調整を無効にし、
 // 圧縮せずに PCM のまま受け取って 16bit の WAV にする (MediaRecorder は Opus などに圧縮してしまうため使わない)。
@@ -38,11 +39,12 @@ type RecorderOptions = {
     onAbort?(): void;
 };
 
-// -1〜1 の音声を 16bit の PCM (リトルエンディアン) にする
-function toPcm16(samples: Float32Array): Int16Array {
+// -1〜1 の音声に入力ゲインの倍率 (gain) をかけて、16bit の PCM (リトルエンディアン) にする。16bit にする前にかけるため、
+// 小さい音を 16bit にしてから大きくするより細かさを失わない。最大を超えた分は最大に収める (音割れ)
+function toPcm16(samples: Float32Array, gain: number): Int16Array {
     const pcm = new Int16Array(samples.length);
     for (let i = 0; i < samples.length; i++) {
-        const sample = Math.max(-1, Math.min(1, samples[i]));
+        const sample = Math.max(-1, Math.min(1, samples[i] * gain));
         pcm[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
     }
     return pcm;
@@ -141,14 +143,7 @@ export function useRecorder(options: RecorderOptions = {}) {
             if (recordingId) void window.kuraToolkit.voice.recording.discard(recordingId).catch(() => undefined);
         };
         try {
-            stream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    echoCancellation: false,
-                    noiseSuppression: false,
-                    autoGainControl: false,
-                    channelCount: 1,
-                },
-            });
+            stream = await openMicrophone();
             if (!mounted.current) {
                 discard();
                 return false;
@@ -179,15 +174,17 @@ export function useRecorder(options: RecorderOptions = {}) {
                 writes: Promise.resolve(),
                 failure: null,
             };
-            // 入力レベル (ピーク) をメーター表示に使う。音声の塊は 1 秒に数百回届くため、
+            // 入力ゲイン (アプリの設定。録音を始めた時点の値を、録音の終わりまで使う)
+            const gain = currentInputGainFactor();
+            // 入力レベル (ピーク。入力ゲインをかけた後) をメーター表示に使う。音声の塊は 1 秒に数百回届くため、
             // 画面への反映と main への書き込み (1 秒分たまったとき) は下のタイマーでまとめて行う
             let peakSinceTick = 0;
             node.port.onmessage = (event: MessageEvent<Float32Array>) => {
-                current.pending.push(toPcm16(event.data));
+                current.pending.push(toPcm16(event.data, gain));
                 current.pendingSamples += event.data.length;
                 current.samples += event.data.length;
                 for (let i = 0; i < event.data.length; i++) {
-                    peakSinceTick = Math.max(peakSinceTick, Math.abs(event.data[i]));
+                    peakSinceTick = Math.max(peakSinceTick, Math.min(1, Math.abs(event.data[i] * gain)));
                 }
             };
             sourceNode.connect(node);
@@ -257,5 +254,15 @@ export function useRecorder(options: RecorderOptions = {}) {
         }
     }, [closeInput, flush]);
 
-    return { state, level, elapsed, error, start, stop };
+    // 録音をやめて捨てる (録音しなかったことにする。録音のファイルも消す)
+    const cancel = React.useCallback(() => {
+        const current = session.current;
+        if (!current) return;
+        session.current = null;
+        setLevel(0);
+        abandon(current);
+        setState('idle');
+    }, [abandon]);
+
+    return { state, level, elapsed, error, start, stop, cancel };
 }

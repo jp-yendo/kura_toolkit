@@ -19,7 +19,9 @@ import type {
     MediaRef,
     TrainingAddFilesResult,
     TrainingAudio,
+    TrainingSentence,
     TrainingSetDetail,
+    TrainingSetMode,
     TrainingSetSummary,
     VoiceModelFeature,
 } from '../../../shared/voice/types';
@@ -45,11 +47,18 @@ type StoredAudio = {
     addedAt: number;
 };
 
+// 任意の文で作成する読み上げの学習セットのグループ (音声は StoredAudio の sentenceId で結び付く)
+type StoredGroup = { id: string; text: string };
+
 type StoredSet = {
     id: string;
     feature: VoiceModelFeature;
     name: string;
     language?: VoiceLanguage;
+    // 読み上げの学習セットの作り方 (無い場合はサンプル文から作成。作り方を選べるようになる前の学習セット)
+    mode?: TrainingSetMode;
+    // 任意の文で作成する学習セットのグループ (加えた順)
+    groups?: StoredGroup[];
     createdAt: number;
     updatedAt: number;
     audios: StoredAudio[];
@@ -184,12 +193,19 @@ function checkName(name: string): string {
     return trimmed;
 }
 
+// 読み上げの学習セットの作り方 (音声変換の学習セットは undefined)
+function modeOf(data: StoredSet): TrainingSetMode | undefined {
+    if (!data.language) return undefined;
+    return data.mode ?? 'sentences';
+}
+
 function toSummary(data: StoredSet): TrainingSetSummary {
     return {
         id: data.id,
         feature: data.feature,
         name: data.name,
         language: data.language,
+        mode: modeOf(data),
         audioCount: data.audios.length,
         durationSec: data.audios.reduce((sum, audio) => sum + audio.durationSec, 0),
         createdAt: data.createdAt,
@@ -242,24 +258,36 @@ export function getTrainingSet(feature: VoiceModelFeature, id: string): Training
     return {
         summary: toSummary(data),
         audios: data.audios.map(audio => toAudio(data, audio)),
-        sentences: data.language ? corpusSentences(data.language) : [],
+        sentences: sentencesOf(data),
     };
+}
+
+// 学習セットの文 (サンプル文から作成する学習セットは言語の学習用の文章、任意の文で作成する学習セットはグループ)
+function sentencesOf(data: StoredSet): TrainingSentence[] {
+    if (!data.language) return [];
+    if (modeOf(data) === 'custom') return (data.groups ?? []).map(group => ({ id: group.id, text: group.text }));
+    return corpusSentences(data.language);
 }
 
 export function createTrainingSet(
     feature: VoiceModelFeature,
     name: string,
-    language?: VoiceLanguage
+    language?: VoiceLanguage,
+    mode?: TrainingSetMode
 ): TrainingSetSummary {
-    // 読み上げの学習セットは言語を 1 つ持ち、音声変換の学習セットは言語を持たない
+    // 読み上げの学習セットは言語と作り方を 1 つずつ持ち、音声変換の学習セットはどちらも持たない
     if ((feature === 'tts') !== (language !== undefined)) throw new Error('TRAINING_SET_LANGUAGE_MISMATCH');
+    if (feature !== 'tts' && mode !== undefined) throw new Error('TRAINING_SET_LANGUAGE_MISMATCH');
     checkNotMoving();
     const now = Date.now();
+    const tts = feature === 'tts';
     const data: StoredSet = {
         id: crypto.randomUUID(),
         feature,
         name: checkName(name),
         language,
+        ...(tts ? { mode: mode ?? 'sentences' } : {}),
+        ...(tts && mode === 'custom' ? { groups: [] } : {}),
         createdAt: now,
         updatedAt: now,
         audios: [],
@@ -317,15 +345,67 @@ function removeAudioFiles(feature: VoiceModelFeature, setId: string, audios: Sto
     }
 }
 
-// 読み上げの学習セットでは読み上げ文の文を 1 つ指定し、音声変換の学習セットでは指定しない
+// 読み上げの学習セットでは文 (サンプル文から作成する学習セットは読み上げ文、任意の文で作成する学習セットはグループ) を
+// 1 つ指定し、音声変換の学習セットでは指定しない
 function checkSentence(data: StoredSet, sentenceId: string | undefined): void {
     if (!data.language) {
         if (sentenceId !== undefined) throw new Error('UNKNOWN_SENTENCE');
         return;
     }
-    if (!sentenceId || !corpusSentences(data.language).some(sentence => sentence.id === sentenceId)) {
+    if (!sentenceId || !sentencesOf(data).some(sentence => sentence.id === sentenceId)) {
         throw new Error('UNKNOWN_SENTENCE');
     }
+}
+
+// --- 任意の文で作成する読み上げの学習セットのグループ ---
+
+function readCustomSet(setId: string): StoredSet {
+    const data = readSet('tts', setId);
+    if (modeOf(data) !== 'custom') throw new Error('TRAINING_SET_MODE_MISMATCH');
+    return data;
+}
+
+function findGroup(data: StoredSet, groupId: string): StoredGroup {
+    const group = (data.groups ?? []).find(item => item.id === groupId);
+    if (!group) throw new Error('UNKNOWN_SENTENCE');
+    return group;
+}
+
+// グループを末尾に加える (本文は空、音声は無し)
+export function addTrainingGroup(setId: string): TrainingSentence {
+    checkNotInUse('tts', setId);
+    const data = readCustomSet(setId);
+    const group: StoredGroup = { id: crypto.randomUUID(), text: '' };
+    writeSet({ ...data, updatedAt: Date.now(), groups: [...(data.groups ?? []), group] });
+    return { ...group };
+}
+
+// グループの本文を変える (入力の途中で保存するため、空も受け付ける。学習では本文が空のグループを使わない)
+export function setTrainingGroupText(setId: string, groupId: string, text: string): void {
+    checkNotInUse('tts', setId);
+    const data = readCustomSet(setId);
+    findGroup(data, groupId);
+    writeSet({
+        ...data,
+        updatedAt: Date.now(),
+        groups: (data.groups ?? []).map(group => (group.id === groupId ? { ...group, text } : group)),
+    });
+}
+
+// グループを削除する (そのグループの音声も消す。元に戻せない)
+export function removeTrainingGroup(setId: string, groupId: string): void {
+    checkNotInUse('tts', setId);
+    checkNotFiltering('tts', setId);
+    const data = readCustomSet(setId);
+    findGroup(data, groupId);
+    const removed = data.audios.filter(audio => audio.sentenceId === groupId);
+    writeSet({
+        ...data,
+        updatedAt: Date.now(),
+        groups: (data.groups ?? []).filter(group => group.id !== groupId),
+        audios: data.audios.filter(audio => audio.sentenceId !== groupId),
+    });
+    removeAudioFiles('tts', setId, removed);
 }
 
 // 保存した音声を調べて記録に加える。記録に加えられなければ保存した音声を消す
@@ -672,11 +752,17 @@ export async function trainingSilenceReport(
 // 学習に使う音声 (学習セットの中のファイル)
 export type TrainingSetAudio = { path: string; sentenceId?: string; durationSec: number };
 
-// 学習に使う学習セットの内容。fn の実行中は学習セットを変更・削除させない
+// 学習に使う学習セットの内容。fn の実行中は学習セットを変更・削除させない。
+// sentences は読み上げの学習セットの文 (任意の文で作成する学習セットはグループ。getTrainingSet と同じ)
 export async function withTrainingSet<T>(
     feature: VoiceModelFeature,
     setId: string,
-    fn: (set: { language?: VoiceLanguage; audios: TrainingSetAudio[] }) => Promise<T>
+    fn: (set: {
+        language?: VoiceLanguage;
+        mode?: TrainingSetMode;
+        sentences: TrainingSentence[];
+        audios: TrainingSetAudio[];
+    }) => Promise<T>
 ): Promise<T> {
     checkIdle(feature, setId);
     const data = readSet(feature, setId);
@@ -690,7 +776,7 @@ export async function withTrainingSet<T>(
     const activity = activityOf(feature, setId);
     activity.training = true;
     try {
-        return await fn({ language: data.language, audios });
+        return await fn({ language: data.language, mode: modeOf(data), sentences: sentencesOf(data), audios });
     } finally {
         activity.training = false;
     }

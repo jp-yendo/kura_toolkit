@@ -39,6 +39,8 @@ export default {
             float32: '32 bit (浮動小数)',
         },
         resetToDefault: '初期値に戻す',
+        selectFolder: 'フォルダ選択',
+        selectFile: 'ファイル選択',
         lufsGuide:
             'LUFS値は 0 に近いほど音量が大きくなります。目安は、配信サービス (YouTube・Spotify 等) が -14、市販の音楽CD相当が -9 〜 -11、放送 (EBU R128) が -23 です。',
         ffmpegNotFound: 'ffmpeg が見つかりません。アプリ設定でパスを指定してください。',
@@ -326,6 +328,13 @@ export default {
         searchThreadsHint:
             'ディレクトリの走査に使うスレッド数です (1 以上)。大きいほど速くなりますが、HDD やネットワークドライブでは逆に遅くなることがあります。',
         ffmpegSection: 'ffmpeg / ffprobe',
+        recordingSection: '録音',
+        microphone: 'マイク',
+        microphoneDefault: 'OS の既定のマイク',
+        microphoneUnnamed: 'マイク {{index}}',
+        inputGain: '入力ゲイン',
+        micTest: 'マイクテスト',
+        micTestStop: 'テストを止める',
         ffmpegPath: 'ffmpeg の実行ファイルパス',
         ffprobePath: 'ffprobe の実行ファイルパス',
         autoDetectHint: '空欄の場合は PATH から自動検出します。',
