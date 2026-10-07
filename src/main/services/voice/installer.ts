@@ -6,9 +6,13 @@ import { updateManifest } from './manifest';
 import { bundledResourceDir, envPythonExecutable, libraryPaths, modelPaths } from './paths';
 import { buildPythonEnv } from './python-env';
 import { runProcess, WINDOWS_DLL_NOT_FOUND } from './process-runner';
+import { cachePath } from '../cache-dir';
 import {
     componentVariant,
+    COMPONENT_SPECS,
+    MODEL_SPECS,
     PYTHON_SPEC,
+    SEPARATOR_MODEL_DIR,
     pythonExecutable,
     TORCH_INDEX,
     type ComponentSpec,
@@ -35,7 +39,10 @@ export type InstallContext = {
 };
 
 // 1 ファイルを取得元の URL から dest (絶対パス) に取得し、取得したファイルの大きさを返す。
-// 取得に失敗したらそのまま失敗とする (別の URL からは取得しない)
+// 取得に失敗したらそのまま失敗とする (別の URL からは取得しない)。
+// キャンセル (アプリの終了に伴うものを含む) では、取得途中のファイル (.part) を消して、取得しなかったことにする。
+// ネットワークの切断などの意図しない失敗では残し、アプリを起動したまま取得し直したときに続きから取得する
+// (アプリを終了したら、次の起動時に消す。removeInstallLeftovers)
 async function fetchAsset(
     asset: DownloadAsset,
     dest: string,
@@ -55,7 +62,11 @@ async function fetchAsset(
                 }),
         });
     } catch (error) {
-        if (isAbortError(error) || context.signal.aborted) throw new Error('KURA_CANCELLED');
+        if (isAbortError(error) || context.signal.aborted) {
+            // 消せなかった場合は、次の起動時に消す (removeInstallLeftovers)
+            await fs.promises.rm(`${dest}.part`, { force: true }).catch(() => undefined);
+            throw new Error('KURA_CANCELLED');
+        }
         throw error;
     }
     return fs.statSync(dest).size;
@@ -83,6 +94,62 @@ async function extractSpecZip(dest: string): Promise<void> {
         await fs.promises.rm(staging, { recursive: true, force: true });
     }
     await fs.promises.rm(dest, { force: true });
+}
+
+// 前回の起動で完了しなかった導入の残り (名前で見分ける)。強制終了で残った作りかけ (展開途中のもの・書庫・設定と
+// キャッシュの利用記録の書きかけ) と、意図しない失敗の後に続きの取得・再試行のために残しておいた取得途中のファイル (.part)
+// と pip のキャッシュ。
+// 続きからの取得は、アプリを起動している間だけ行う
+function installLeftovers(): string[] {
+    const lib = libraryPaths();
+    const models = modelPaths();
+    const paths = [
+        `${lib.python}.staging`,
+        lib.pythonArchive,
+        `${lib.pythonArchive}.part`,
+        lib.pipCache,
+        `${lib.manifest}.tmp`,
+        `${models.manifest}.tmp`,
+        cachePath('cache.json.tmp'),
+    ];
+    for (const owner of ['converter', 'tts'] as const) {
+        paths.push(`${lib.source(owner)}.staging`, lib.sourceArchive(owner), `${lib.sourceArchive(owner)}.part`);
+    }
+    for (const spec of [...MODEL_SPECS, ...COMPONENT_SPECS]) {
+        for (const file of spec.files) {
+            const dest = models.file(file.dest);
+            paths.push(`${dest}.part`);
+            if (file.extractZip) paths.push(`${zipExtractedDir(dest)}.staging`);
+        }
+    }
+    // 分離モデルは一覧から取得するため、置き場所の中の取得途中のファイルを名前で探す
+    const separatorDir = models.file(SEPARATOR_MODEL_DIR);
+    try {
+        for (const name of fs.readdirSync(separatorDir)) {
+            if (name.endsWith('.part')) paths.push(path.join(separatorDir, name));
+        }
+    } catch {
+        // まだ分離モデルを取得していない
+    }
+    return paths;
+}
+
+// 起動時に、前回の起動で完了しなかった導入の残りを裏で消す (起動は待たせない。導入はまだ始まっていない)
+let leftoversRemoval: Promise<void> = Promise.resolve();
+
+export function removeInstallLeftovers(): void {
+    leftoversRemoval = Promise.all(
+        installLeftovers().map(target =>
+            fs.promises.rm(target, { recursive: true, force: true }).catch(error => {
+                console.warn(`failed to remove a leftover of an install: ${target}`, error);
+            })
+        )
+    ).then(() => undefined);
+}
+
+// 起動時の、前回の導入の残りの削除が終わるのを待つ (導入を始める前に呼ぶ)
+export function installLeftoversRemoved(): Promise<void> {
+    return leftoversRemoval;
 }
 
 // モデルディレクトリに置くファイルを 1 つ取得する
@@ -138,7 +205,8 @@ export async function installPython(platform: VoicePlatformInfo, context: Instal
     const asset = PYTHON_SPEC.assets[platform.platform];
     const lib = libraryPaths();
     // 書庫は展開先と同じディスク (ライブラリディレクトリ) に取得し、展開したら消す。
-    // 失敗・キャンセルの場合も書庫と展開途中のものを消す (取得途中の .part は続きの取得に使うため残る)
+    // 失敗・キャンセルの場合も書庫と展開途中のものを消す (取得途中の .part は、キャンセルでは消し、意図しない失敗では
+    // 続きの取得に使うため残す)
     const archive = lib.pythonArchive;
     const staging = `${lib.python}.staging`;
     try {
@@ -304,8 +372,8 @@ async function runPip(
         jobId: context.jobId,
         env: buildPythonEnv(null, {
             // キャッシュは展開先 (仮想環境) と同じディスクのライブラリディレクトリに置く。同じ PyTorch を使う
-            // パッケージ一式を続けて導入するときと、途中で失敗・中断して再試行するときに取得し直さないため、
-            // ダウンロードの処理が全て成功してから消す
+            // パッケージ一式を続けて導入するときと、意図しない失敗の後に再試行するときに取得し直さないため、
+            // ダウンロードの処理が全て成功したとき・キャンセルしたときに消す (次の起動時にも消す)
             PIP_CACHE_DIR: libraryPaths().pipCache,
             PIP_DISABLE_PIP_VERSION_CHECK: '1',
         }),
@@ -358,7 +426,8 @@ async function installSource(spec: ComponentSpec, context: InstallContext): Prom
     if (!spec.source) return;
     const owner = sourceOwner(spec);
     // 書庫は展開先と同じディスク (そのライブラリのディレクトリ) に取得し、展開したら消す。
-    // 失敗・キャンセルの場合も書庫と展開途中のものを消す (取得途中の .part は続きの取得に使うため残る)
+    // 失敗・キャンセルの場合も書庫と展開途中のものを消す (取得途中の .part は、キャンセルでは消し、意図しない失敗では
+    // 続きの取得に使うため残す)
     const archive = libraryPaths().sourceArchive(owner);
     const target = libraryPaths().source(owner);
     const staging = `${target}.staging`;

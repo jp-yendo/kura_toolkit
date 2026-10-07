@@ -3,6 +3,11 @@ import fs from 'fs';
 import path from 'path';
 import { emitJobEvent, finishJob, isCancelled, startJob } from '../job-manager';
 import { encodeTrainingWav, probeAudio } from './audio-tools';
+import { editSilence, normalizeLoudness, removeNoise } from './audio-filters';
+import { discardLater, isInsideWork, newId, newTempDir, sessionDir, sessionPath } from '../work-dir';
+import { mediaRef } from './media';
+import type { SilenceOption, TrainingFilterOptions } from '../../../shared/voice/audio-filters';
+import { getWorker } from './python-worker';
 import { corpusSentences } from './corpus';
 import { readJsonFile, writeJsonFile } from './json-file';
 import { forgetMedia, forgetMediaUnder, mediaUrl } from '../media-protocol';
@@ -11,6 +16,7 @@ import { discardRecording, moveRecordingTo } from './recording';
 import { moveToTrash } from '../../utils/trash';
 import type { VoiceLanguage } from '../../../shared/voice/languages';
 import type {
+    MediaRef,
     TrainingAudio,
     TrainingSetDetail,
     TrainingSetSummary,
@@ -48,8 +54,8 @@ type StoredSet = {
     audios: StoredAudio[];
 };
 
-// 学習セットごとの処理中の状態。学習中・削除中は音声を変えさせず、音声の追加中は学習・削除を始めさせない
-// (追加の途中で学習を始めると、録り直しで消える前の音声を学習が読むことになるため)
+// 学習セットごとの処理中の状態。学習中・削除中は音声を変えさせず、音声の追加中と置き換え中 (学習用の音のフィルターの
+// 確定・全体への適用) は学習・削除を始めさせない (途中で学習を始めると、消える前・置き換わる前の音声を学習が読むことになるため)
 type SetActivity = { training: boolean; removing: boolean; adding: number };
 const activities = new Map<string, SetActivity>();
 
@@ -63,7 +69,7 @@ function activityOf(feature: VoiceModelFeature, id: string): SetActivity {
     return activity;
 }
 
-// 学習・削除・音声の追加のいずれかを行っている学習セットがあるか (保存場所の移動を断るため)
+// 学習・削除・音声の追加・置き換えのいずれかを行っている学習セットがあるか (保存場所の移動を断るため)
 function hasBusyTrainingSets(): boolean {
     return [...activities.values()].some(activity => activity.training || activity.removing || activity.adding > 0);
 }
@@ -85,7 +91,7 @@ function checkNotMoving(): void {
     if (storageMoves > 0) throw new Error('LIBRARY_BUSY');
 }
 
-// 音声の追加中は、学習と削除を始めさせない
+// 音声の追加中・置き換え中は、学習と削除を始めさせない
 async function whileAdding<T>(feature: VoiceModelFeature, id: string, fn: () => Promise<T>): Promise<T> {
     checkNotInUse(feature, id);
     const activity = activityOf(feature, id);
@@ -95,6 +101,26 @@ async function whileAdding<T>(feature: VoiceModelFeature, id: string, fn: () => 
     } finally {
         activity.adding -= 1;
     }
+}
+
+// すべての音にフィルターを適用している学習セット。その間は、音の削除と個々の音の置き換えを断る
+// (適用の結果で、削除した音を作り直したり、個々に置き換えた音を上書きしたりしないため)
+const filteringSets = new Set<string>();
+
+function checkNotFiltering(feature: VoiceModelFeature, id: string): void {
+    if (filteringSets.has(setKey(feature, id))) throw new Error('TRAINING_SET_IN_USE');
+}
+
+async function whileFiltering<T>(feature: VoiceModelFeature, id: string, fn: () => Promise<T>): Promise<T> {
+    checkNotFiltering(feature, id);
+    return whileAdding(feature, id, async () => {
+        filteringSets.add(setKey(feature, id));
+        try {
+            return await fn();
+        } finally {
+            filteringSets.delete(setKey(feature, id));
+        }
+    });
 }
 
 function setKey(feature: VoiceModelFeature, id: string): string {
@@ -417,11 +443,207 @@ async function addFilesNow(
 
 export function removeTrainingAudio(feature: VoiceModelFeature, setId: string, audioId: string): void {
     checkNotInUse(feature, setId);
+    checkNotFiltering(feature, setId);
     const data = readSet(feature, setId);
     const removed = data.audios.filter(audio => audio.id === audioId);
     if (removed.length === 0) return;
     writeSet({ ...data, updatedAt: Date.now(), audios: data.audios.filter(audio => audio.id !== audioId) });
     removeAudioFiles(feature, setId, removed);
+}
+
+// --- 学習用の音のフィルター ---
+
+// 加工する。無音部分の除去 → ノイズ除去 → 音量をそろえるの順に行い、最後に学習用の音声と同じ形式 (16bit・モノラル) に
+// して output に書く (聞いた音と置き換える音を同じにするため)。途中のファイルは work に作る
+async function applyTrainingFilters(
+    jobId: string,
+    feature: VoiceModelFeature,
+    input: string,
+    output: string,
+    options: TrainingFilterOptions,
+    work: string
+): Promise<void> {
+    let current = input;
+    if (options.removeSilence.enabled) {
+        const next = path.join(work, 'silence.wav');
+        // 無音の判断は、その機能の処理役で行う (音声変換の学習は変換、読み上げの学習は読み上げ)
+        await editSilence(jobId, feature, current, next, options.removeSilence, 'remove');
+        current = next;
+    }
+    if (options.noiseRemoval.enabled) {
+        const next = path.join(work, 'noise.wav');
+        await removeNoise(jobId, current, next, options.noiseRemoval, work);
+        current = next;
+    }
+    if (options.loudness.enabled) {
+        const next = path.join(work, 'loudness.wav');
+        await normalizeLoudness(jobId, current, next, options.loudness);
+        current = next;
+    }
+    await encodeTrainingWav(current, output, jobId);
+}
+
+function findAudio(data: StoredSet, audioId: string): StoredAudio {
+    const audio = data.audios.find(item => item.id === audioId);
+    if (!audio) throw new Error('TRAINING_AUDIO_NOT_FOUND');
+    return audio;
+}
+
+// 個々の音に加工をかけた結果を作る (作業 workKey の中に置く。確定するまで学習セットは変えない)
+export async function filterTrainingAudio(
+    jobId: string,
+    feature: VoiceModelFeature,
+    setId: string,
+    audioId: string,
+    workKey: string,
+    options: TrainingFilterOptions
+): Promise<{ media: MediaRef; durationSec: number }> {
+    startJob(jobId);
+    try {
+        const data = readSet(feature, setId);
+        findAudio(data, audioId);
+        const dir = sessionDir(workKey, 'filters', newId());
+        const output = path.join(dir, 'result.wav');
+        try {
+            await applyTrainingFilters(jobId, feature, audioPath(feature, setId, audioId), output, options, dir);
+        } catch (error) {
+            discardLater(dir);
+            throw error;
+        }
+        emitJobEvent({ jobId, kind: 'progress', percent: 100 });
+        const media = await mediaRef(output);
+        return { media, durationSec: media.durationSec ?? 0 };
+    } finally {
+        finishJob(jobId);
+    }
+}
+
+// 加工した結果のファイルを、学習セットの音のファイルとして置く (元の音のファイルは消え、置き換わる)。
+// 同じドライブなら名前の変更で済ませ、別のドライブなら学習セットの中へ写してから置き換える
+async function moveIntoSet(result: string, file: string): Promise<void> {
+    try {
+        await fs.promises.rename(result, file);
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EXDEV') throw error;
+        const staging = `${file}.kura-tmp`;
+        await fs.promises.copyFile(result, staging);
+        await fs.promises.rename(staging, file);
+        await fs.promises.rm(result, { force: true });
+    }
+    forgetMedia(file);
+}
+
+// 置き換えた音の長さなどを記録に反映する
+async function updateAudioInfo(feature: VoiceModelFeature, setId: string, audioIds: string[]): Promise<void> {
+    const infos = new Map<string, Awaited<ReturnType<typeof probeAudio>>>();
+    for (const audioId of audioIds) infos.set(audioId, await probeAudio(audioPath(feature, setId, audioId)));
+    const current = readSet(feature, setId);
+    writeSet({
+        ...current,
+        updatedAt: Date.now(),
+        audios: current.audios.map(audio => {
+            const info = infos.get(audio.id);
+            return info
+                ? { ...audio, durationSec: info.durationSec, sampleRate: info.sampleRate, channels: info.channels }
+                : audio;
+        }),
+    });
+}
+
+// 個々の音のフィルターの確定: 選んだ結果で学習セットの音を置き換える
+export async function replaceTrainingAudio(
+    feature: VoiceModelFeature,
+    setId: string,
+    audioId: string,
+    workKey: string,
+    result: string
+): Promise<TrainingAudio> {
+    // 置き換えに使えるのは、その作業で作ったフィルターの結果のファイルだけ
+    const resolved = path.resolve(result);
+    const filters = path.join(sessionPath(workKey), 'filters') + path.sep;
+    if (!isInsideWork(workKey, resolved) || !resolved.startsWith(filters) || !fs.statSync(resolved).isFile()) {
+        throw new Error('INVALID_PATH');
+    }
+    checkNotFiltering(feature, setId);
+    return whileAdding(feature, setId, async () => {
+        findAudio(readSet(feature, setId), audioId);
+        await moveIntoSet(resolved, audioPath(feature, setId, audioId));
+        await updateAudioInfo(feature, setId, [audioId]);
+        const data = readSet(feature, setId);
+        return toAudio(data, findAudio(data, audioId));
+    });
+}
+
+// 学習セットのすべての音に同じ加工をかけて置き換える。キャンセルしたら何も置き換えない (しなかったことにする) ため、
+// すべての音の加工を済ませてから、まとめて置き換える
+export async function filterTrainingSet(
+    jobId: string,
+    feature: VoiceModelFeature,
+    setId: string,
+    options: TrainingFilterOptions
+): Promise<void> {
+    startJob(jobId);
+    let work: string | null = null;
+    try {
+        work = newTempDir();
+        const workDir = work;
+        await whileFiltering(feature, setId, async () => {
+            const audios = readSet(feature, setId).audios;
+            const results: { audioId: string; path: string }[] = [];
+            for (const [index, audio] of audios.entries()) {
+                if (isCancelled(jobId)) throw new Error('KURA_CANCELLED');
+                emitJobEvent({
+                    jobId,
+                    kind: 'progress',
+                    percent: (index / audios.length) * 100,
+                    current: index + 1,
+                    total: audios.length,
+                });
+                const dir = path.join(workDir, String(index));
+                fs.mkdirSync(dir, { recursive: true });
+                const output = path.join(dir, 'result.wav');
+                await applyTrainingFilters(jobId, feature, audioPath(feature, setId, audio.id), output, options, dir);
+                results.push({ audioId: audio.id, path: output });
+            }
+            if (isCancelled(jobId)) throw new Error('KURA_CANCELLED');
+            // 置き換えている途中で失敗しても、置き換えたものの記録 (長さなど) は必ず直す
+            const replaced: string[] = [];
+            try {
+                const remaining = new Set(readSet(feature, setId).audios.map(audio => audio.id));
+                for (const item of results) {
+                    // 加工している間に削除された音は置き換えない (記録に無いファイルを作らないため)
+                    if (!remaining.has(item.audioId)) continue;
+                    await moveIntoSet(item.path, audioPath(feature, setId, item.audioId));
+                    replaced.push(item.audioId);
+                }
+            } finally {
+                if (replaced.length > 0) await updateAudioInfo(feature, setId, replaced);
+            }
+        });
+        emitJobEvent({ jobId, kind: 'progress', percent: 100 });
+    } finally {
+        if (work) discardLater(work);
+        finishJob(jobId);
+    }
+}
+
+// 学習前の確かめ: 音ごとの、無音部分の長さの合計 (秒)。判断はフィルターの無音部分の除去と同じ
+export async function trainingSilenceReport(
+    feature: VoiceModelFeature,
+    setId: string,
+    option: SilenceOption
+): Promise<{ audioId: string; silenceSec: number }[]> {
+    const audios = readSet(feature, setId).audios;
+    const paths = audios.map(audio => audioPath(feature, setId, audio.id));
+    const result = await getWorker(feature).request<{ files: { path: string; silenceSec: number }[] }>(
+        'detect_silence',
+        {
+            paths,
+            thresholdDb: option.thresholdDb,
+            minSeconds: option.minSeconds,
+        }
+    );
+    return audios.map((audio, index) => ({ audioId: audio.id, silenceSec: result.files[index]?.silenceSec ?? 0 }));
 }
 
 // 学習に使う音声 (学習セットの中のファイル)
@@ -451,8 +673,8 @@ export async function withTrainingSet<T>(
     }
 }
 
-// 起動時に、前回の起動で書きかけのまま残った音声 (ファイルの変換の途中で終了したもの) を消す。
-// 記録に無い音声のファイルは、記録に加える前に終了したもの
+// 起動時に、前回の起動で書きかけのまま残った音声 (ファイルの変換・置き換えの途中で終了したもの) を消す。
+// 記録に無い音声のファイル (置き換えの一時ファイル `.kura-tmp` を含む) は、記録に加える前に終了したもの
 export function removeTrainingSetLeftovers(): void {
     for (const feature of ['converter', 'tts'] as const) {
         let summaries: TrainingSetSummary[];

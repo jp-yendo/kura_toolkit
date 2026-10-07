@@ -75,3 +75,6 @@ coverage/
 # Python
 __pycache__/
 *.pyc
+
+# Project ignore
+/sample/

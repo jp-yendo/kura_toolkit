@@ -1,5 +1,7 @@
 // 音声分離の目的別のおすすめ (ダウンロードの画面と分離の画面で共有する)
 
+import { NOISE_REMOVAL_MODELS } from '@shared/voice/audio-filters';
+
 // 目的別のおすすめ。配布元が検証した組み合わせ (ensemble) を目的ごとに並べる。同梱の組み合わせが無い目的は、
 // その目的のための単体のモデル (model) を示す。配布元は組み合わせの間に順位や「標準」を決めていないため、
 // 順位の印は付けない。labelKey は、2 回に分けて分離する目的で、どの回に使うかを行に添えるもの
@@ -31,6 +33,20 @@ export const SEPARATOR_PURPOSES: Purpose[] = [
         entries: [
             { kind: 'ensemble', id: 'vocal_balanced', labelKey: 'voice.library.separatorPurposeLabels.step1' },
             { kind: 'ensemble', id: 'karaoke', labelKey: 'voice.library.separatorPurposeLabels.step2' },
+        ],
+    },
+    // ノイズ除去のおすすめは、ノイズ除去の「モデルで除去する」で選べるモデルと同じ (NOISE_REMOVAL_MODELS)
+    {
+        id: 'denoise',
+        entries: NOISE_REMOVAL_MODELS.map(model => ({ kind: 'model' as const, filename: model.filename })),
+    },
+    {
+        id: 'dereverb',
+        entries: [
+            { kind: 'model', filename: 'dereverb_echo_mbr_fused.ckpt' },
+            { kind: 'model', filename: 'dereverb_mel_band_roformer_less_aggressive_anvuew_sdr_18.8050.ckpt' },
+            { kind: 'model', filename: 'MDX23C-De-Reverb-aufr33-jarredou.ckpt' },
+            { kind: 'model', filename: 'UVR-De-Echo-Normal.pth' },
         ],
     },
 ];

@@ -390,6 +390,15 @@ export default function VoiceLibraryDialog() {
                         VOICE_FEATURES.map(feature => {
                             const active = feature === tab;
                             const missingRequired = requiredItems(feature).filter(id => !isInstalled(id));
+                            const ttsTrainingUnavailable = feature === 'ttsTraining' && !platform.ttsTrainingAvailable;
+                            // 下の警告のどれかを出すか (出さなければ、警告のまとまりを置かない)
+                            const alertsShown =
+                                !platform.supported ||
+                                platform.vcRuntimeMissing ||
+                                platform.gpu.driverUpdateRequired ||
+                                platform.storageNonAscii ||
+                                ttsTrainingUnavailable ||
+                                missingRequired.length > 0;
                             return (
                                 <Box
                                     key={feature}
@@ -408,64 +417,75 @@ export default function VoiceLibraryDialog() {
                                         visibility: active ? 'visible' : 'hidden',
                                     }}
                                 >
-                                    <Stack spacing={2}>
-                                        {!platform.supported && (
-                                            <Alert severity='error'>
-                                                <AlertTitle>{t('voice.platform.unsupportedTitle')}</AlertTitle>
-                                                {t(`voice.platform.unsupported.${platform.unsupportedReason ?? 'os'}`)}
-                                            </Alert>
-                                        )}
-                                        {platform.vcRuntimeMissing && (
-                                            <Alert
-                                                severity='warning'
-                                                action={
-                                                    <Button
-                                                        color='inherit'
-                                                        size='small'
-                                                        onClick={() =>
-                                                            void window.kuraToolkit.voice.openExternal(VC_REDIST_URL)
+                                    <Stack spacing={3}>
+                                        {/* 警告はまとめて 1 つのまとまりにする (警告同士は 1、まとまり同士は 3) */}
+                                        {alertsShown && (
+                                            <Stack spacing={1}>
+                                                {!platform.supported && (
+                                                    <Alert severity='error'>
+                                                        <AlertTitle>{t('voice.platform.unsupportedTitle')}</AlertTitle>
+                                                        {t(
+                                                            `voice.platform.unsupported.${platform.unsupportedReason ?? 'os'}`
+                                                        )}
+                                                    </Alert>
+                                                )}
+                                                {platform.vcRuntimeMissing && (
+                                                    <Alert
+                                                        severity='warning'
+                                                        action={
+                                                            <Button
+                                                                color='inherit'
+                                                                size='small'
+                                                                onClick={() =>
+                                                                    void window.kuraToolkit.voice.openExternal(
+                                                                        VC_REDIST_URL
+                                                                    )
+                                                                }
+                                                            >
+                                                                {t('voice.library.vcRuntimeOpen')}
+                                                            </Button>
                                                         }
                                                     >
-                                                        {t('voice.library.vcRuntimeOpen')}
-                                                    </Button>
-                                                }
-                                            >
-                                                {t('voice.library.vcRuntimeMissing')}
-                                            </Alert>
-                                        )}
-                                        {platform.gpu.driverUpdateRequired && (
-                                            <Alert severity='warning'>{t('voice.library.driverUpdate')}</Alert>
-                                        )}
-                                        {platform.storageNonAscii && (
-                                            <Alert severity='warning'>{t('voice.library.nonAsciiPath')}</Alert>
-                                        )}
+                                                        {t('voice.library.vcRuntimeMissing')}
+                                                    </Alert>
+                                                )}
+                                                {platform.gpu.driverUpdateRequired && (
+                                                    <Alert severity='warning'>{t('voice.library.driverUpdate')}</Alert>
+                                                )}
+                                                {platform.storageNonAscii && (
+                                                    <Alert severity='warning'>{t('voice.library.nonAsciiPath')}</Alert>
+                                                )}
 
-                                        {feature === 'ttsTraining' && !platform.ttsTrainingAvailable ? (
-                                            <Alert severity='info'>{t('voice.library.ttsTrainingUnavailable')}</Alert>
-                                        ) : (
-                                            missingRequired.length > 0 && (
-                                                <Alert
-                                                    severity='info'
-                                                    action={
-                                                        <Button
-                                                            color='inherit'
-                                                            size='small'
-                                                            onClick={() => selectMany(missingRequired, true)}
+                                                {ttsTrainingUnavailable ? (
+                                                    <Alert severity='info'>
+                                                        {t('voice.library.ttsTrainingUnavailable')}
+                                                    </Alert>
+                                                ) : (
+                                                    missingRequired.length > 0 && (
+                                                        <Alert
+                                                            severity='info'
+                                                            action={
+                                                                <Button
+                                                                    color='inherit'
+                                                                    size='small'
+                                                                    onClick={() => selectMany(missingRequired, true)}
+                                                                >
+                                                                    {t('voice.library.selectMissing')}
+                                                                </Button>
+                                                            }
                                                         >
-                                                            {t('voice.library.selectMissing')}
-                                                        </Button>
-                                                    }
-                                                >
-                                                    {t('voice.library.missingRequired', {
-                                                        feature: t(`voice.features.${feature}`),
-                                                        count: missingRequired.length,
-                                                    })}
-                                                </Alert>
-                                            )
+                                                            {t('voice.library.missingRequired', {
+                                                                feature: t(`voice.features.${feature}`),
+                                                                count: missingRequired.length,
+                                                            })}
+                                                        </Alert>
+                                                    )
+                                                )}
+                                            </Stack>
                                         )}
 
                                         {FEATURE_REQUIREMENTS[feature].map((group, index) => (
-                                            <Box key={group.titleKey}>
+                                            <Stack key={group.titleKey} spacing={1}>
                                                 <SectionLabel>
                                                     {t('voice.library.groupTitle', {
                                                         name: t(group.titleKey),
@@ -476,7 +496,7 @@ export default function VoiceLibraryDialog() {
                                                     <Typography
                                                         variant='body2'
                                                         color='text.secondary'
-                                                        sx={{ mb: 1, lineHeight: 1.6 }}
+                                                        sx={{ lineHeight: 1.6 }}
                                                     >
                                                         {t(group.noteKey)}
                                                     </Typography>
@@ -505,7 +525,7 @@ export default function VoiceLibraryDialog() {
                                                         progress={progress}
                                                     />
                                                 )}
-                                            </Box>
+                                            </Stack>
                                         ))}
                                     </Stack>
                                 </Box>
@@ -513,7 +533,7 @@ export default function VoiceLibraryDialog() {
                         })}
                 </DialogContent>
                 {/* 削除はダウンロードの操作から離して左端に置く (押すと確認を出す) */}
-                <DialogActions sx={{ px: 3, py: 1.5, gap: 1.5, flexWrap: 'wrap' }}>
+                <DialogActions disableSpacing sx={{ px: 3, py: 1.5, gap: 1, flexWrap: 'wrap' }}>
                     <Button
                         color='error'
                         startIcon={<DeleteOutlineIcon />}
@@ -552,30 +572,32 @@ export default function VoiceLibraryDialog() {
             <AppDialog open={result !== null} onClose={() => setResult(null)} maxWidth='sm' fullWidth>
                 <DialogTitle>{t('voice.library.resultTitle')}</DialogTitle>
                 <DialogContent>
-                    <Typography variant='body2' sx={{ mb: 1, lineHeight: 1.6 }}>
-                        {t('voice.library.resultMessage')}
-                    </Typography>
-                    {result?.results
-                        .filter(item => !item.ok)
-                        .map(item => {
-                            const entry = byId.get(item.id);
-                            return (
-                                <Box key={item.id} sx={{ mb: 1 }}>
-                                    <Typography variant='body2' sx={{ fontWeight: 600 }}>
-                                        {entry ? itemLabel(t, entry) : item.id}
-                                    </Typography>
-                                    <Typography
-                                        variant='caption'
-                                        color='text.secondary'
-                                        sx={{ wordBreak: 'break-all' }}
-                                    >
-                                        {item.cancelled
-                                            ? t('voice.library.progress.cancelled')
-                                            : voiceErrorMessage(t, new Error(item.error ?? ''))}
-                                    </Typography>
-                                </Box>
-                            );
-                        })}
+                    <Stack spacing={1}>
+                        <Typography variant='body2' sx={{ lineHeight: 1.6 }}>
+                            {t('voice.library.resultMessage')}
+                        </Typography>
+                        {result?.results
+                            .filter(item => !item.ok)
+                            .map(item => {
+                                const entry = byId.get(item.id);
+                                return (
+                                    <Box key={item.id}>
+                                        <Typography variant='body2' sx={{ fontWeight: 600 }}>
+                                            {entry ? itemLabel(t, entry) : item.id}
+                                        </Typography>
+                                        <Typography
+                                            variant='caption'
+                                            color='text.secondary'
+                                            sx={{ wordBreak: 'break-all' }}
+                                        >
+                                            {item.cancelled
+                                                ? t('voice.library.progress.cancelled')
+                                                : voiceErrorMessage(t, new Error(item.error ?? ''))}
+                                        </Typography>
+                                    </Box>
+                                );
+                            })}
+                    </Stack>
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setResult(null)}>{t('common.close')}</Button>
@@ -595,38 +617,38 @@ export default function VoiceLibraryDialog() {
             <AppDialog open={removeTargets !== null} onClose={() => setRemoveTargets(null)} maxWidth='sm' fullWidth>
                 <DialogTitle>{t('voice.library.removeTitle')}</DialogTitle>
                 <DialogContent>
-                    <Box component='ul' sx={{ mt: 0, pl: 2.5 }}>
-                        {removeItemsList.map(item => (
-                            <Typography component='li' variant='body2' key={item.id}>
-                                {itemLabel(t, item)}
+                    <Stack spacing={1}>
+                        <Box component='ul' sx={{ my: 0, pl: 2.5 }}>
+                            {removeItemsList.map(item => (
+                                <Typography component='li' variant='body2' key={item.id}>
+                                    {itemLabel(t, item)}
+                                </Typography>
+                            ))}
+                        </Box>
+                        {removingPythonItem && (
+                            <Alert severity='warning'>{t('voice.library.removePythonWarning')}</Alert>
+                        )}
+                        {!removingPythonItem && removingAllComponents && (
+                            <FormControlLabel
+                                control={
+                                    <Checkbox checked={removePython} onChange={(_e, value) => setRemovePython(value)} />
+                                }
+                                label={t('voice.library.alsoRemovePython')}
+                            />
+                        )}
+                        {affected.size > 0 && (
+                            <Typography variant='body2' sx={{ lineHeight: 1.6 }}>
+                                {t('voice.library.removeAffects', {
+                                    features: [...affected]
+                                        .map(feature => t(`voice.features.${feature}`))
+                                        .join(t('voice.common.listSeparator')),
+                                })}
                             </Typography>
-                        ))}
-                    </Box>
-                    {removingPythonItem && (
-                        <Alert severity='warning' sx={{ mb: 1 }}>
-                            {t('voice.library.removePythonWarning')}
-                        </Alert>
-                    )}
-                    {!removingPythonItem && removingAllComponents && (
-                        <FormControlLabel
-                            control={
-                                <Checkbox checked={removePython} onChange={(_e, value) => setRemovePython(value)} />
-                            }
-                            label={t('voice.library.alsoRemovePython')}
-                        />
-                    )}
-                    {affected.size > 0 && (
-                        <Typography variant='body2' sx={{ lineHeight: 1.6, mt: 1 }}>
-                            {t('voice.library.removeAffects', {
-                                features: [...affected]
-                                    .map(feature => t(`voice.features.${feature}`))
-                                    .join(t('voice.common.listSeparator')),
-                            })}
+                        )}
+                        <Typography variant='body2' color='text.secondary' sx={{ lineHeight: 1.6 }}>
+                            {t('voice.library.removeNote')}
                         </Typography>
-                    )}
-                    <Typography variant='body2' color='text.secondary' sx={{ lineHeight: 1.6, mt: 1 }}>
-                        {t('voice.library.removeNote')}
-                    </Typography>
+                    </Stack>
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setRemoveTargets(null)}>{t('common.cancel')}</Button>

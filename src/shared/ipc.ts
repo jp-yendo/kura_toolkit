@@ -70,6 +70,8 @@ import type {
     VoiceModelInfo,
 } from './voice/types';
 
+import type { SilenceOption, TrainingFilterOptions } from './voice/audio-filters';
+
 export type VoicePresetParams = SeparationPresetParams | MixParams;
 
 // 音声分離・音声変換・読み上げの API
@@ -89,6 +91,8 @@ export type VoiceApi = {
     };
     // https の URL を外部ブラウザで開く (ライセンス・配布元など)
     openExternal(url: string): Promise<void>;
+    // 開いている機能 (画面の経路の先頭 2 つ) を知らせる。その機能で使わない Python の処理役を止める
+    setFeature(feature: string | null): Promise<void>;
     // マイクの利用許可 (macOS)
     requestMicrophone(): Promise<boolean>;
     // マイク録音の書き込み (16bit・モノラルの PCM を少しずつ送り、main が作業ディレクトリの WAV へ追記する)
@@ -177,6 +181,31 @@ export type VoiceApi = {
             sentenceId?: string
         ): Promise<TrainingAudio[]>;
         removeAudio(feature: VoiceModelFeature, id: string, audioId: string): Promise<void>;
+        // 学習用の音のフィルター: 個々の音に加工をかけた結果を作る (作業 workKey の中。確定するまで学習セットは変えない)
+        filterAudio(
+            jobId: string,
+            feature: VoiceModelFeature,
+            id: string,
+            audioId: string,
+            workKey: string,
+            options: TrainingFilterOptions
+        ): Promise<{ media: MediaRef; durationSec: number }>;
+        // 個々の音のフィルターの確定: 選んだ結果 (result) で学習セットの音を置き換える
+        replaceAudio(
+            feature: VoiceModelFeature,
+            id: string,
+            audioId: string,
+            workKey: string,
+            result: string
+        ): Promise<TrainingAudio>;
+        // 学習セットのすべての音に同じ加工をかけて置き換える
+        filterAll(jobId: string, feature: VoiceModelFeature, id: string, options: TrainingFilterOptions): Promise<void>;
+        // 学習前の確かめ: 音ごとの、無音部分の長さの合計 (秒)
+        silenceReport(
+            feature: VoiceModelFeature,
+            id: string,
+            option: SilenceOption
+        ): Promise<{ audioId: string; silenceSec: number }[]>;
     };
     training: {
         rvcStart(jobId: string, setId: string, name: string): Promise<VoiceModelInfo>;
@@ -219,10 +248,10 @@ export type IpcApi = {
         // 読み込めなかった設定ファイルを別の名前で残し、既定の設定で保存し直す。残した場所を返す
         resetBroken(): Promise<string>;
     };
-    // 保存場所 (ライブラリ・モデル・作業ディレクトリ)
+    // 保存場所 (ライブラリ・モデル・キャッシュ・作業ディレクトリ)
     storage: {
         getInfo(): Promise<StorageInfo>;
-        // ライブラリ・モデルディレクトリの中身を選んだフォルダへ移動し (中身がある場合はまとまりごとにマージする)、
+        // ライブラリ・モデル・キャッシュディレクトリの中身を選んだフォルダへ移動し (中身がある場合はまとまりごとにマージする)、
         // そのフォルダを新しい場所にする (進捗は job:event)。targetDir が null の場合は既定の場所へ戻す
         move(
             jobId: string,

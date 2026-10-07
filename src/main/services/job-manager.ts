@@ -16,6 +16,8 @@ type JobEntry = {
 };
 
 const jobs = new Map<string, JobEntry>();
+// 実行中のジョブが無くなるのを待っている処理 (アプリの終了時)
+const idleWaiters = new Set<() => void>();
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -49,6 +51,23 @@ export function onJobCancel(jobId: string, handler: () => void): () => void {
 // ジョブを終了して登録解除する (finally で呼ぶ)
 export function finishJob(jobId: string): void {
     jobs.delete(jobId);
+    if (jobs.size > 0) return;
+    for (const resolve of idleWaiters) resolve();
+    idleWaiters.clear();
+}
+
+// 実行中のジョブがすべて終わる (キャンセルしたジョブの後片付けを含む) まで待つ。時間内に終わらなければ待つのをやめる
+export function waitForJobsToFinish(timeoutMs: number): Promise<void> {
+    if (jobs.size === 0) return Promise.resolve();
+    return new Promise<void>(resolve => {
+        const done = () => {
+            clearTimeout(timer);
+            idleWaiters.delete(done);
+            resolve();
+        };
+        const timer = setTimeout(done, timeoutMs);
+        idleWaiters.add(done);
+    });
 }
 
 // 実行中のジョブがあるか
@@ -101,7 +120,7 @@ export function cancelJob(jobId: string): void {
     entry.cancelHandlers.clear();
 }
 
-// すべてのジョブをキャンセルする (ウィンドウクローズ時)
+// すべてのジョブをキャンセルする (ウィンドウを閉じたとき・アプリの終了時)
 export function cancelAllJobs(): void {
     for (const jobId of jobs.keys()) {
         cancelJob(jobId);

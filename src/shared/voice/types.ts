@@ -3,6 +3,7 @@
 
 import type { SymbolReading, TtsModelType, VoiceLanguage } from './languages';
 import type { TagFix, TagIssue } from './control-tags';
+import type { NoiseRemovalOption, SilenceOption } from './audio-filters';
 
 // ---------------------------------------------------------------------------
 // 共通
@@ -105,7 +106,7 @@ export type VoicePlatformInfo = {
     ttsTrainingAvailable: boolean;
     libraryDir: string;
     modelDir: string;
-    // Windows でライブラリ・モデル・作業ディレクトリのいずれかのパスに ASCII 以外の文字が含まれる
+    // Windows でライブラリ・モデル・キャッシュ・作業ディレクトリのいずれかのパスに ASCII 以外の文字が含まれる
     // (一部のライブラリが扱えない)
     storageNonAscii: boolean;
 };
@@ -115,7 +116,7 @@ export type LibraryItemGroup = 'runtime' | 'separator' | 'converter' | 'tts';
 // missing: 未取得 / installed: 取得済み / outdated: アプリの更新で取得し直しが必要 / broken: 不完全 (再取得が必要)
 export type LibraryItemStatus = 'missing' | 'installed' | 'outdated' | 'broken';
 
-export type SeparationCategory = 'vocals' | 'multi' | 'karaoke' | 'cleanup' | 'other';
+export type SeparationCategory = 'vocals' | 'multi' | 'karaoke' | 'denoise' | 'dereverb' | 'other';
 export type SeparationArch = 'MDX' | 'VR' | 'Demucs' | 'MDXC';
 
 export type LibraryItem = {
@@ -300,7 +301,12 @@ export type SeparationParams = {
 export type SeparationMethod =
     | { kind: 'model'; filename: string }
     | { kind: 'verifiedEnsemble'; ensembleId: string }
-    | { kind: 'ensemble'; filenames: string[]; algorithm: EnsembleAlgorithm };
+    | { kind: 'ensemble'; filenames: string[]; algorithm: EnsembleAlgorithm }
+    // 分岐の「その他」: 分離はせず、音を加工した 1 つの出力を作る (長さは変わらない)
+    | { kind: 'process'; muteSilence: SilenceOption; noiseRemoval: NoiseRemovalOption };
+
+// 分岐の「その他」で指定する加工
+export type SeparationOtherChoice = { muteSilence: SilenceOption; noiseRemoval: NoiseRemovalOption };
 
 export type SeparationStem = {
     // モデルが出力した名前 (Vocals / Instrumental / drums など)
@@ -328,6 +334,8 @@ export type SeparationRunRequest = {
     channels: number;
     method: SeparationMethod;
     params: SeparationParams;
+    // 「その他」の出力の名前 (画面の言語で付ける)
+    outputName?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -347,6 +355,10 @@ export type ConversionParams = {
     volumeEnvelope: number;
     // 子音の保護の強さ (0-0.5)
     protect: number;
+    // 無音部分の雑音を消す (変換前のボーカルが無音の部分で、変換後の音量を 0 にする。長さは変わらない)
+    muteSilence: SilenceOption;
+    // 変換後の声のノイズ除去
+    noiseRemoval: NoiseRemovalOption;
 };
 
 export type ConversionCandidate = {
@@ -422,14 +434,16 @@ export type PresetRecord<T> = {
 
 // 分離の方式の選び方 (画面の選択の状態)。おすすめから 1 つを選ぶか、モデル (複数可) を選ぶ
 export type SeparationMethodChoice = {
-    // 選び方 (おすすめ / モデル。null は、選べる選び方のうち先頭)
-    mode: 'recommended' | 'model' | null;
+    // 選び方 (おすすめ / モデル / その他。null は、選べる選び方のうち先頭)
+    mode: 'recommended' | 'model' | 'other' | null;
     // おすすめから選んだもの (`verified:<組み合わせの ID>` または `model:<ファイル名>`)
     recommended: string;
     // モデルの一覧から選んだもの (`model:<ファイル名>`)
     keys: string[];
     // 2 つ以上のモデルを選んだときの結果の決め方
     algorithm: EnsembleAlgorithm;
+    // 「その他」で指定した加工 (無い場合は初期値)
+    other?: SeparationOtherChoice;
 };
 
 // 分離のプリセット。方式の選び方 (おすすめ・組み合わせるモデル・組み合わせ方) と詳細な設定 (全アーキテクチャの
@@ -650,6 +664,8 @@ export type VoicePhaseId =
     | 'finishStems'
     | 'convert'
     | 'loudness'
+    | 'silence'
+    | 'noiseRemoval'
     | 'pitchShift'
     | 'mix'
     | 'synthesize'

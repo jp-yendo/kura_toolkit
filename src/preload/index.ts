@@ -64,6 +64,7 @@ const IPC_CHANNELS = {
     VOICE_LIBRARY_PENDING_UPDATES: 'voice:library:pendingUpdates',
     VOICE_LIBRARY_MARK_PROMPTED: 'voice:library:markPrompted',
     VOICE_OPEN_EXTERNAL: 'voice:openExternal',
+    VOICE_SET_FEATURE: 'voice:setFeature',
     VOICE_REQUEST_MICROPHONE: 'voice:requestMicrophone',
     VOICE_RECORDING_BEGIN: 'voice:recording:begin',
     VOICE_RECORDING_APPEND: 'voice:recording:append',
@@ -106,6 +107,10 @@ const IPC_CHANNELS = {
     VOICE_TRAINING_SETS_ADD_RECORDING: 'voice:trainingSets:addRecording',
     VOICE_TRAINING_SETS_ADD_FILES: 'voice:trainingSets:addFiles',
     VOICE_TRAINING_SETS_REMOVE_AUDIO: 'voice:trainingSets:removeAudio',
+    VOICE_TRAINING_SETS_FILTER_AUDIO: 'voice:trainingSets:filterAudio',
+    VOICE_TRAINING_SETS_REPLACE_AUDIO: 'voice:trainingSets:replaceAudio',
+    VOICE_TRAINING_SETS_FILTER_ALL: 'voice:trainingSets:filterAll',
+    VOICE_TRAINING_SETS_SILENCE: 'voice:trainingSets:silence',
     VOICE_TRAINING_RVC_START: 'voice:training:rvcStart',
     VOICE_TRAINING_TTS_START: 'voice:training:ttsStart',
     VOICE_EXPORT_RUN: 'voice:export:run',
@@ -275,6 +280,7 @@ const api: IpcApi = {
             markUpdatePrompted: () => invoke(IPC_CHANNELS.VOICE_LIBRARY_MARK_PROMPTED),
         },
         openExternal: url => invoke(IPC_CHANNELS.VOICE_OPEN_EXTERNAL, url),
+        setFeature: feature => invoke(IPC_CHANNELS.VOICE_SET_FEATURE, feature),
         requestMicrophone: () => invoke(IPC_CHANNELS.VOICE_REQUEST_MICROPHONE),
         recording: {
             begin: sampleRate => invoke(IPC_CHANNELS.VOICE_RECORDING_BEGIN, sampleRate),
@@ -339,6 +345,14 @@ const api: IpcApi = {
                 invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_ADD_FILES, jobId, feature, id, paths, sentenceId),
             removeAudio: (feature, id, audioId) =>
                 invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_REMOVE_AUDIO, feature, id, audioId),
+            filterAudio: (jobId, feature, id, audioId, workKey, options) =>
+                invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_FILTER_AUDIO, jobId, feature, id, audioId, workKey, options),
+            replaceAudio: (feature, id, audioId, workKey, result) =>
+                invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_REPLACE_AUDIO, feature, id, audioId, workKey, result),
+            filterAll: (jobId, feature, id, options) =>
+                invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_FILTER_ALL, jobId, feature, id, options),
+            silenceReport: (feature, id, option) =>
+                invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_SILENCE, feature, id, option),
         },
         training: {
             rvcStart: (jobId, setId, name) => invoke(IPC_CHANNELS.VOICE_TRAINING_RVC_START, jobId, setId, name),

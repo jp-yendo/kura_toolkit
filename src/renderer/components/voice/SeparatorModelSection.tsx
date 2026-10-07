@@ -55,12 +55,9 @@ type PurposeRow =
           rows: RequirementRow[];
       };
 
-// 並べる順: 分離の品質 (出力のうち最も高い値) が高いモデル、名前の順 (分離の画面と同じ)
+// 並べる順: 名前の順 (分離の画面と同じ)
 function compareModels(a: LibraryItem, b: LibraryItem): number {
-    return compareSeparatorModels(
-        { name: a.name ?? '', sdr: a.separator?.sdr },
-        { name: b.name ?? '', sdr: b.separator?.sdr }
-    );
+    return compareSeparatorModels({ name: a.name ?? '' }, { name: b.name ?? '' });
 }
 
 type EnsembleRowProps = {
@@ -170,7 +167,10 @@ export default function SeparatorModelSection({
     const [search, setSearch] = React.useState('');
     const [installedOnly, setInstalledOnly] = React.useState(false);
     const [archFilter, setArchFilter] = React.useState<SeparationArch | 'all'>('all');
-    const [outputFilter, setOutputFilter] = React.useState<string>('all');
+    // 出力で絞り込む (選んだ出力をすべて持つモデルだけ示す。種類を切り替えると外す)
+    const [outputFilter, setOutputFilter] = React.useState<string[]>([]);
+    // おすすめ (目的別のおすすめに載っているモデル。組み合わせのモデルを含む) で絞り込む
+    const [recommendedFilter, setRecommendedFilter] = React.useState<'all' | 'only' | 'others'>('all');
     const [purposeId, setPurposeId] = React.useState(SEPARATOR_PURPOSES[0].id);
 
     const byId = React.useMemo(() => new Map(items.map(item => [item.id, item])), [items]);
@@ -178,45 +178,80 @@ export default function SeparatorModelSection({
         () => items.filter(item => item.kind === 'model' && item.separator).sort(compareModels),
         [items]
     );
+    // 目的別のおすすめに載っているモデル (項目 ID)
+    const recommendedIds = React.useMemo(() => {
+        const ensembleById = new Map(status.separatorEnsembles.map(ensemble => [ensemble.id, ensemble]));
+        return new Set(
+            SEPARATOR_PURPOSES.flatMap(purpose =>
+                purpose.entries.flatMap(entry =>
+                    entry.kind === 'model'
+                        ? [`${SEPARATOR_MODEL_PREFIX}${entry.filename}`]
+                        : (ensembleById.get(entry.id)?.models ?? [])
+                )
+            )
+        );
+    }, [status.separatorEnsembles]);
+    // 方式の選択肢は、すべての種類のモデルにあるもの
+    const archOptions = React.useMemo(
+        () => SEPARATION_ARCHS.filter(arch => allModels.some(item => item.separator?.arch === arch)),
+        [allModels]
+    );
+    const arch = archFilter !== 'all' && archOptions.includes(archFilter) ? archFilter : 'all';
+    // 種類を選ぶ前の共通の絞り込み (キーワード・方式・おすすめ・取得済みのみ)
+    const filteredModels = React.useMemo(() => {
+        // キーワードは空白 (全角を含む) で区切り、どの語も、一覧に見えている文字のうち他の絞り込みに無いもの
+        // (名前・概要・ライセンス・クレジット) のどれかに含まれるものを示す (語ごとに別の項目で見つかってよい)
+        const keywords = search.toLowerCase().split(/\s+/).filter(Boolean);
+        const matches = (item: LibraryItem) => {
+            if (keywords.length === 0) return true;
+            const note = separatorNoteKey(item);
+            const fields = [itemLabel(t, item), note ? t(note) : '', item.license?.name ?? '', item.credit ?? ''].map(
+                value => value.toLowerCase()
+            );
+            return keywords.every(keyword => fields.some(value => value.includes(keyword)));
+        };
+        return allModels
+            .filter(item => !installedOnly || item.status === 'installed')
+            .filter(item => arch === 'all' || item.separator?.arch === arch)
+            .filter(
+                item => recommendedFilter === 'all' || recommendedIds.has(item.id) === (recommendedFilter === 'only')
+            )
+            .filter(matches);
+    }, [allModels, search, installedOnly, arch, recommendedFilter, recommendedIds, t]);
+    // 種類のボタンの件数は共通の絞り込みの後の件数。モデルのある種類は、0 件になってもボタンを残す
     const categoryCounts = React.useMemo(() => {
         const counts = new Map<SeparationCategory, number>();
-        for (const item of allModels) {
+        for (const item of allModels) counts.set(item.separator?.category as SeparationCategory, 0);
+        for (const item of filteredModels) {
             const value = item.separator?.category as SeparationCategory;
             counts.set(value, (counts.get(value) ?? 0) + 1);
         }
         return counts;
-    }, [allModels]);
+    }, [allModels, filteredModels]);
     const inCategory = React.useMemo(
-        () => allModels.filter(item => item.separator?.category === category),
-        [allModels, category]
+        () => filteredModels.filter(item => item.separator?.category === category),
+        [filteredModels, category]
     );
-    // 絞り込みの選択肢は、選んでいる種類のモデルにあるものだけ
-    const archOptions = React.useMemo(
-        () => SEPARATION_ARCHS.filter(arch => inCategory.some(item => item.separator?.arch === arch)),
-        [inCategory]
-    );
+    // 出力のチップは、選んでいる種類の、共通の絞り込みを通ったモデルにあるものだけ
     const outputOptions = React.useMemo(
         () => [...new Set(inCategory.flatMap(separatorOutputs))].sort((a, b) => a.localeCompare(b)),
         [inCategory]
     );
-    const arch = archFilter !== 'all' && archOptions.includes(archFilter) ? archFilter : 'all';
-    const output = outputFilter !== 'all' && outputOptions.includes(outputFilter) ? outputFilter : 'all';
+    const outputs = React.useMemo(
+        () => outputFilter.filter(value => outputOptions.includes(value)),
+        [outputFilter, outputOptions]
+    );
     const rows = React.useMemo(() => {
-        const keyword = search.trim().toLowerCase();
-        // 名前・概要・出力のどれかに含まれるものを探す
-        const matches = (item: LibraryItem) => {
-            if (!keyword) return true;
-            const note = separatorNoteKey(item);
-            const text = [itemLabel(t, item), note ? t(note) : '', ...separatorOutputs(item)].join('\n').toLowerCase();
-            return text.includes(keyword);
-        };
-        const models = inCategory
-            .filter(item => !installedOnly || item.status === 'installed')
-            .filter(item => arch === 'all' || item.separator?.arch === arch)
-            .filter(item => output === 'all' || separatorOutputs(item).includes(output))
-            .filter(matches);
+        const models = inCategory.filter(item => {
+            const itemOutputs = separatorOutputs(item);
+            return outputs.every(value => itemOutputs.includes(value));
+        });
         return requirementRows(group, models);
-    }, [inCategory, group, search, installedOnly, arch, output, t]);
+    }, [inCategory, outputs, group]);
+    const toggleOutput = (value: string) =>
+        setOutputFilter(previous =>
+            previous.includes(value) ? previous.filter(item => item !== value) : [...previous, value]
+        );
     // 目的別のおすすめは常にすべて示す (絞り込みは個別のモデルの一覧だけに効く)。一覧に無い組み合わせ・モデルは示さない
     const purposes = React.useMemo(() => {
         const ensembleById = new Map(status.separatorEnsembles.map(ensemble => [ensemble.id, ensemble]));
@@ -252,7 +287,7 @@ export default function SeparatorModelSection({
         const unlisted = requirementRows(group, items);
         const packageInstalled = items.find(item => item.id === 'component:separator')?.status === 'installed';
         return (
-            <Stack spacing={1}>
+            <Stack spacing={1.5}>
                 {listError ? (
                     <Alert
                         severity='error'
@@ -267,7 +302,7 @@ export default function SeparatorModelSection({
                 ) : (
                     <Panel>
                         {packageInstalled ? (
-                            <Stack direction='row' spacing={1.5} sx={{ alignItems: 'center' }}>
+                            <Stack direction='row' spacing={1} sx={{ alignItems: 'center' }}>
                                 <CircularProgress size={16} />
                                 <Typography variant='body2' color='text.secondary'>
                                     {t('voice.library.separatorListCreating')}
@@ -293,202 +328,220 @@ export default function SeparatorModelSection({
         );
     }
 
+    // 余白: 小見出しのまとまり同士は 2、見出し・補足文から内容までは 1、同じまとまりの中で縦に並ぶ部品同士は 1.5、
+    // 横に並ぶ部品同士は 1
     return (
-        <Stack spacing={3}>
+        <Stack spacing={2}>
             {activePurpose && (
-                <Stack spacing={1.5}>
-                    <Stack spacing={0.5}>
-                        <Typography variant='subtitle1' sx={{ fontWeight: 700 }}>
-                            {t('voice.library.separatorRecommendations')}
-                        </Typography>
-                        <Typography variant='body2' color='text.secondary' sx={{ lineHeight: 1.6 }}>
-                            {t('voice.library.separatorRecommendationsNote')}
-                        </Typography>
-                    </Stack>
-                    <Tabs
-                        value={activePurpose.id}
-                        onChange={(_event, value: string) => setPurposeId(value)}
-                        variant='scrollable'
-                        scrollButtons='auto'
-                        sx={{ borderBottom: 1, borderColor: 'divider', minHeight: 40 }}
-                    >
-                        {purposes.map(purpose => (
-                            <Tab
-                                key={purpose.id}
-                                value={purpose.id}
-                                label={t(`voice.library.separatorPurposes.${purpose.id}.title`)}
-                                sx={{ minHeight: 40 }}
-                            />
-                        ))}
-                    </Tabs>
-                    <Stack spacing={0.5}>
-                        {/* 補足は、2 回に分けて分離する目的のように、手順の説明が要るものだけが持つ */}
-                        {t(`voice.library.separatorPurposes.${activePurpose.id}.note`, { defaultValue: '' }) && (
-                            <Typography variant='body2' color='text.secondary' sx={{ lineHeight: 1.6 }}>
-                                {t(`voice.library.separatorPurposes.${activePurpose.id}.note`)}
-                            </Typography>
-                        )}
-                        <LibraryTableShell>
-                            {activePurpose.entries.map(entry =>
-                                'ensemble' in entry ? (
-                                    <React.Fragment key={entry.key}>
-                                        <EnsembleRow
-                                            ensemble={entry.ensemble}
-                                            labelKey={entry.labelKey}
-                                            models={entry.models}
-                                            selectedCount={entry.models.filter(item => selected.has(item.id)).length}
-                                            selectMany={selectMany}
-                                        />
-                                        {entry.rows.map(row => (
-                                            <ItemRow
-                                                key={row.key}
-                                                row={row}
-                                                checked={selected.has(row.item.id)}
-                                                toggle={toggle}
-                                                onRemove={onRemove}
-                                                progress={progress[row.item.id]}
-                                            />
-                                        ))}
-                                    </React.Fragment>
-                                ) : (
-                                    <ItemRow
-                                        key={entry.key}
-                                        row={entry.row}
-                                        checked={selected.has(entry.row.item.id)}
-                                        toggle={toggle}
-                                        onRemove={onRemove}
-                                        progress={progress[entry.row.item.id]}
-                                    />
-                                )
+                <Stack spacing={1}>
+                    <Typography variant='subtitle1' sx={{ fontWeight: 700 }}>
+                        {t('voice.library.separatorRecommendations')}
+                    </Typography>
+                    <Stack spacing={1.5}>
+                        <Tabs
+                            value={activePurpose.id}
+                            onChange={(_event, value: string) => setPurposeId(value)}
+                            variant='scrollable'
+                            scrollButtons='auto'
+                            sx={{ borderBottom: 1, borderColor: 'divider', minHeight: 40 }}
+                        >
+                            {purposes.map(purpose => (
+                                <Tab
+                                    key={purpose.id}
+                                    value={purpose.id}
+                                    label={t(`voice.library.separatorPurposes.${purpose.id}.title`)}
+                                    sx={{ minHeight: 40 }}
+                                />
+                            ))}
+                        </Tabs>
+                        <Stack spacing={1}>
+                            {/* 補足は、2 回に分けて分離する目的のように、手順の説明が要るものだけが持つ */}
+                            {t(`voice.library.separatorPurposes.${activePurpose.id}.note`, { defaultValue: '' }) && (
+                                <Typography variant='body2' color='text.secondary' sx={{ lineHeight: 1.6 }}>
+                                    {t(`voice.library.separatorPurposes.${activePurpose.id}.note`)}
+                                </Typography>
                             )}
-                        </LibraryTableShell>
+                            <LibraryTableShell>
+                                {activePurpose.entries.map(entry =>
+                                    'ensemble' in entry ? (
+                                        <React.Fragment key={entry.key}>
+                                            <EnsembleRow
+                                                ensemble={entry.ensemble}
+                                                labelKey={entry.labelKey}
+                                                models={entry.models}
+                                                selectedCount={
+                                                    entry.models.filter(item => selected.has(item.id)).length
+                                                }
+                                                selectMany={selectMany}
+                                            />
+                                            {entry.rows.map(row => (
+                                                <ItemRow
+                                                    key={row.key}
+                                                    row={row}
+                                                    checked={selected.has(row.item.id)}
+                                                    toggle={toggle}
+                                                    onRemove={onRemove}
+                                                    progress={progress[row.item.id]}
+                                                />
+                                            ))}
+                                        </React.Fragment>
+                                    ) : (
+                                        <ItemRow
+                                            key={entry.key}
+                                            row={entry.row}
+                                            checked={selected.has(entry.row.item.id)}
+                                            toggle={toggle}
+                                            onRemove={onRemove}
+                                            progress={progress[entry.row.item.id]}
+                                        />
+                                    )
+                                )}
+                            </LibraryTableShell>
+                        </Stack>
                     </Stack>
                 </Stack>
             )}
 
-            <Stack spacing={1.5}>
-                <Stack spacing={0.5}>
-                    <Typography variant='subtitle1' sx={{ fontWeight: 700 }}>
-                        {t('voice.library.separatorSingleModels')}
-                    </Typography>
-                    <Typography variant='body2' color='text.secondary' sx={{ lineHeight: 1.6 }}>
-                        {t('voice.library.separatorSingleModelsNote')}
-                    </Typography>
-                </Stack>
-                {/* 分離の種類の切り替え。幅が足りなければ折り返す */}
-                <ToggleButtonGroup
-                    exclusive
-                    size='small'
-                    value={category}
-                    onChange={(_event, value: SeparationCategory | null) => value && setCategory(value)}
-                    sx={{
-                        flexWrap: 'wrap',
-                        gap: 0.75,
-                        '& .MuiToggleButtonGroup-grouped': {
-                            border: 1,
-                            borderColor: 'divider',
-                            borderRadius: 1,
-                            m: 0,
-                            px: 1.5,
-                            textTransform: 'none',
-                        },
-                        '& .MuiToggleButtonGroup-grouped:not(:first-of-type)': {
-                            borderLeft: 1,
-                            borderColor: 'divider',
-                        },
-                    }}
-                >
-                    {SEPARATION_CATEGORIES.filter(value => categoryCounts.has(value)).map(value => (
-                        <ToggleButton key={value} value={value}>
-                            {t('voice.library.separatorCategoryCount', {
-                                name: t(`voice.separation.categories.${value}`),
-                                count: categoryCounts.get(value),
-                            })}
-                        </ToggleButton>
-                    ))}
-                </ToggleButtonGroup>
-                <Panel>
-                    <Stack spacing={1.5}>
-                        <Typography variant='body2' color='text.secondary' sx={{ lineHeight: 1.6 }}>
-                            {t(`voice.library.separatorCategoryNotes.${category}`)}
-                        </Typography>
-                        <Stack direction='row' sx={{ flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
-                            <FormControl size='small' sx={{ minWidth: 180 }}>
-                                <InputLabel id='separator-arch'>{t('voice.library.separatorFilterArch')}</InputLabel>
-                                <Select
-                                    labelId='separator-arch'
-                                    label={t('voice.library.separatorFilterArch')}
-                                    value={arch}
-                                    onChange={event => setArchFilter(event.target.value as SeparationArch | 'all')}
-                                >
-                                    <MenuItem value='all'>{t('voice.library.separatorFilterAll')}</MenuItem>
-                                    {archOptions.map(value => (
-                                        <MenuItem key={value} value={value}>
-                                            {SEPARATOR_ARCH_LABELS[value]}
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-                            <FormControl size='small' sx={{ minWidth: 180 }}>
-                                <InputLabel id='separator-output'>
-                                    {t('voice.library.separatorFilterOutput')}
-                                </InputLabel>
-                                <Select
-                                    labelId='separator-output'
-                                    label={t('voice.library.separatorFilterOutput')}
-                                    value={output}
-                                    onChange={event => setOutputFilter(event.target.value)}
-                                >
-                                    <MenuItem value='all'>{t('voice.library.separatorFilterAll')}</MenuItem>
-                                    {outputOptions.map(value => (
-                                        <MenuItem key={value} value={value}>
-                                            {value}
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-                            <TextField
-                                size='small'
-                                placeholder={t('voice.library.searchModels')}
-                                value={search}
-                                onChange={event => setSearch(event.target.value)}
-                                sx={{ minWidth: 260, flexGrow: 1, maxWidth: 420 }}
-                                slotProps={{
-                                    input: {
-                                        startAdornment: (
-                                            <InputAdornment position='start'>
-                                                <SearchIcon fontSize='small' />
-                                            </InputAdornment>
-                                        ),
-                                    },
-                                }}
-                            />
-                            <FormControlLabel
-                                control={
-                                    <Checkbox
-                                        size='small'
-                                        checked={installedOnly}
-                                        onChange={(_e, value) => setInstalledOnly(value)}
-                                    />
+            <Stack spacing={1}>
+                <Typography variant='subtitle1' sx={{ fontWeight: 700 }}>
+                    {t('voice.library.separatorSingleModels')}
+                </Typography>
+                <Stack spacing={1.5}>
+                    {/* 種類を選ぶ前の共通の絞り込み。件数は種類のボタンに出す */}
+                    <Stack direction='row' sx={{ flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
+                        <TextField
+                            size='small'
+                            placeholder={t('voice.library.searchModels')}
+                            value={search}
+                            onChange={event => setSearch(event.target.value)}
+                            sx={{ minWidth: 260, flexGrow: 1, maxWidth: 420 }}
+                            slotProps={{
+                                input: {
+                                    startAdornment: (
+                                        <InputAdornment position='start'>
+                                            <SearchIcon fontSize='small' />
+                                        </InputAdornment>
+                                    ),
+                                },
+                            }}
+                        />
+                        <FormControl size='small' sx={{ minWidth: 180 }}>
+                            <InputLabel id='separator-arch'>{t('voice.library.separatorFilterArch')}</InputLabel>
+                            <Select
+                                labelId='separator-arch'
+                                label={t('voice.library.separatorFilterArch')}
+                                value={arch}
+                                onChange={event => setArchFilter(event.target.value as SeparationArch | 'all')}
+                            >
+                                <MenuItem value='all'>{t('voice.library.separatorFilterAll')}</MenuItem>
+                                {archOptions.map(value => (
+                                    <MenuItem key={value} value={value}>
+                                        {SEPARATOR_ARCH_LABELS[value]}
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+                        <FormControl size='small' sx={{ minWidth: 180 }}>
+                            <InputLabel id='separator-recommended'>
+                                {t('voice.library.separatorFilterRecommended')}
+                            </InputLabel>
+                            <Select
+                                labelId='separator-recommended'
+                                label={t('voice.library.separatorFilterRecommended')}
+                                value={recommendedFilter}
+                                onChange={event =>
+                                    setRecommendedFilter(event.target.value as 'all' | 'only' | 'others')
                                 }
-                                label={t('voice.library.installedOnly')}
-                            />
-                        </Stack>
-                        {rows.length === 0 ? (
-                            <Typography variant='body2' color='text.secondary'>
-                                {t('voice.library.separatorNoMatch')}
-                            </Typography>
-                        ) : (
-                            <LibraryItemTable
-                                rows={rows}
-                                selected={selected}
-                                toggle={toggle}
-                                onRemove={onRemove}
-                                progress={progress}
-                            />
-                        )}
+                            >
+                                <MenuItem value='all'>{t('voice.library.separatorFilterAll')}</MenuItem>
+                                <MenuItem value='only'>{t('voice.library.separatorRecommendedOnly')}</MenuItem>
+                                <MenuItem value='others'>{t('voice.library.separatorRecommendedOthers')}</MenuItem>
+                            </Select>
+                        </FormControl>
+                        <FormControlLabel
+                            control={
+                                <Checkbox
+                                    size='small'
+                                    checked={installedOnly}
+                                    onChange={(_e, value) => setInstalledOnly(value)}
+                                />
+                            }
+                            label={t('voice.library.installedOnly')}
+                        />
                     </Stack>
-                </Panel>
+                    {/* 分離の種類の切り替え。幅が足りなければ折り返す */}
+                    <ToggleButtonGroup
+                        exclusive
+                        size='small'
+                        value={category}
+                        onChange={(_event, value: SeparationCategory | null) => {
+                            if (!value) return;
+                            setCategory(value);
+                            setOutputFilter([]);
+                        }}
+                        sx={{
+                            flexWrap: 'wrap',
+                            gap: 1,
+                            '& .MuiToggleButtonGroup-grouped': {
+                                border: 1,
+                                borderColor: 'divider',
+                                borderRadius: 1,
+                                m: 0,
+                                px: 1.5,
+                                textTransform: 'none',
+                            },
+                            '& .MuiToggleButtonGroup-grouped:not(:first-of-type)': {
+                                borderLeft: 1,
+                                borderColor: 'divider',
+                            },
+                        }}
+                    >
+                        {SEPARATION_CATEGORIES.filter(value => categoryCounts.has(value)).map(value => (
+                            <ToggleButton key={value} value={value}>
+                                {t('voice.library.separatorCategoryCount', {
+                                    name: t(`voice.separation.categories.${value}`),
+                                    count: categoryCounts.get(value),
+                                })}
+                            </ToggleButton>
+                        ))}
+                    </ToggleButtonGroup>
+                    <Panel>
+                        <Stack spacing={1.5}>
+                            {/* 出力のチップ。押すと選び、もう一度押すと外す */}
+                            {outputOptions.length > 0 && (
+                                <Stack direction='row' sx={{ flexWrap: 'wrap', gap: 1 }}>
+                                    {outputOptions.map(value => {
+                                        const chosen = outputs.includes(value);
+                                        return (
+                                            <Chip
+                                                key={value}
+                                                label={value}
+                                                size='small'
+                                                color={chosen ? 'primary' : 'default'}
+                                                variant={chosen ? 'filled' : 'outlined'}
+                                                aria-pressed={chosen}
+                                                onClick={() => toggleOutput(value)}
+                                            />
+                                        );
+                                    })}
+                                </Stack>
+                            )}
+                            {rows.length === 0 ? (
+                                <Typography variant='body2' color='text.secondary'>
+                                    {t('voice.library.separatorNoMatch')}
+                                </Typography>
+                            ) : (
+                                <LibraryItemTable
+                                    rows={rows}
+                                    selected={selected}
+                                    toggle={toggle}
+                                    onRemove={onRemove}
+                                    progress={progress}
+                                />
+                            )}
+                        </Stack>
+                    </Panel>
+                </Stack>
             </Stack>
         </Stack>
     );

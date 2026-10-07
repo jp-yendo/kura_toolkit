@@ -1,7 +1,9 @@
 import { create } from 'zustand';
+import { noiseRemovalOption, silenceOption } from '@shared/voice/audio-filters';
 import type { ConversionCandidate, ConversionParams, MediaRef, MixParams } from '@shared/voice/types';
 
-// 音声変換の作業 (入力と分離の後の段階)。入力と分離は useConversionSeparationStore が持つ
+// 音声変換の作業 (入力の選び方・変換する音と伴奏の選択・候補・合成)。元の音源と分離の結果の木は
+// useConversionSeparationStore が持つ
 
 export type ConversionInputMode = 'separate' | 'direct';
 
@@ -11,6 +13,9 @@ const DEFAULT_CONVERSION_PARAMS: ConversionParams = {
     indexRate: 0.75,
     volumeEnvelope: 1,
     protect: 0.5,
+    // 無音部分の雑音を消すは、初期値でチェックする。ノイズ除去は、初期値ではチェックしない
+    muteSilence: silenceOption(true),
+    noiseRemoval: noiseRemovalOption(false),
 };
 
 const DEFAULT_MIX_PARAMS: MixParams = {
@@ -32,10 +37,10 @@ type ConversionState = {
     candidates: ConversionCandidate[];
     // 候補を作ったときの入力 (ボーカルと伴奏)。入力が変わったら候補は無効になる
     candidatesInput: string | null;
-    adoptedId: string | null;
+    selectedId: string | null;
     mixParams: MixParams;
     mix: MediaRef | null;
-    // 合成結果を作ったときの入力 (採用やパラメーターが変わったら作り直しが必要)
+    // 合成結果を作ったときの入力 (選んだ候補・入力 (伴奏)・パラメーターが変わったら作り直しが必要)
     mixSignature: string | null;
     setStep(step: number): void;
     setInputMode(mode: ConversionInputMode): void;
@@ -44,10 +49,10 @@ type ConversionState = {
     setVoiceId(id: string): void;
     setParams(params: ConversionParams): void;
     addCandidate(candidate: ConversionCandidate, inputKey: string): void;
-    // 候補の、伴奏と重ねた試聴用の音を差し替える
+    // 候補の、伴奏と重ねた試聴用の音を設定する
     setCandidatePreview(id: string, media: MediaRef): void;
     removeCandidate(id: string): void;
-    setAdopted(id: string | null): void;
+    selectCandidate(id: string | null): void;
     setMixParams(params: MixParams): void;
     setMix(mix: MediaRef | null, signature: string | null): void;
     // 入力が変わったので変換以降の結果を捨てる (捨てた候補を返す)
@@ -64,7 +69,7 @@ export const useConversionStore = create<ConversionState>((set, get) => ({
     params: DEFAULT_CONVERSION_PARAMS,
     candidates: [],
     candidatesInput: null,
-    adoptedId: null,
+    selectedId: null,
     mixParams: DEFAULT_MIX_PARAMS,
     mix: null,
     mixSignature: null,
@@ -90,7 +95,7 @@ export const useConversionStore = create<ConversionState>((set, get) => ({
         set({
             candidates: [...get().candidates, candidate],
             candidatesInput: inputKey,
-            adoptedId: get().adoptedId ?? candidate.id,
+            selectedId: get().selectedId ?? candidate.id,
         });
     },
     setCandidatePreview(id, media) {
@@ -100,10 +105,10 @@ export const useConversionStore = create<ConversionState>((set, get) => ({
     },
     removeCandidate(id) {
         const candidates = get().candidates.filter(item => item.id !== id);
-        set({ candidates, adoptedId: get().adoptedId === id ? (candidates[0]?.id ?? null) : get().adoptedId });
+        set({ candidates, selectedId: get().selectedId === id ? (candidates[0]?.id ?? null) : get().selectedId });
     },
-    setAdopted(adoptedId) {
-        set({ adoptedId });
+    selectCandidate(selectedId) {
+        set({ selectedId });
     },
     setMixParams(mixParams) {
         set({ mixParams });
@@ -113,7 +118,7 @@ export const useConversionStore = create<ConversionState>((set, get) => ({
     },
     clearResults() {
         const removed = get().candidates;
-        set({ candidates: [], candidatesInput: null, adoptedId: null, mix: null, mixSignature: null });
+        set({ candidates: [], candidatesInput: null, selectedId: null, mix: null, mixSignature: null });
         return removed;
     },
     reset() {
@@ -124,7 +129,7 @@ export const useConversionStore = create<ConversionState>((set, get) => ({
             accompanimentTracks: null,
             candidates: [],
             candidatesInput: null,
-            adoptedId: null,
+            selectedId: null,
             mix: null,
             mixSignature: null,
         });

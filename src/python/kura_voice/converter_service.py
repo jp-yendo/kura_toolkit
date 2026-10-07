@@ -14,6 +14,8 @@ from typing import Any, Dict, Tuple
 
 from kura_voice import runtime
 from kura_voice.protocol import Context, KuraError
+# The silence handling requests are shared by every component (the worker looks up rpc_<method> in this module)
+from kura_voice.silence import rpc_detect_silence, rpc_edit_silence  # noqa: F401
 
 APPLIO_ROOT = os.getcwd()
 if APPLIO_ROOT not in sys.path:
@@ -85,12 +87,12 @@ def _instance(device: str) -> Any:
 
 # The conversion is done in chunks of about this length (seconds), cut at the quietest point near each boundary.
 # Each chunk is converted with this much real audio before and after it (seconds), which is cut off again at exact
-# sample positions, so the chunks join without a gap or an overlap.
+# sample positions, so the kept parts of the chunks follow each other without a gap (the joins are crossfaded, below).
 #
 # Applio's own splitting (pipeline() for long input) is not used: a chunk can come back one feature frame (10 ms)
-# short, which drops the end of that chunk and moves everything after it 10 ms earlier, and each chunk is scaled
-# down on its own when its peak exceeds 0.99, which changes the level from chunk to chunk. Here a short result only
-# loses part of the context that is cut off anyway, and nothing is rescaled.
+# short, which drops the end of that chunk and moves everything after it 10 ms earlier. Here a short result only
+# loses part of the context that is cut off anyway. Applio's scaling of the whole result when its peak exceeds 0.99
+# is not done either (the app matches the loudness of the result to the input afterwards).
 _CHUNK_SECONDS = 20
 _CHUNK_CONTEXT_SECONDS = 1
 _CHUNK_SEARCH_SECONDS = 2
@@ -101,7 +103,10 @@ _CHUNK_CROSSFADE_SECONDS = 0.02
 
 
 def _chunk_bounds(audio: Any, sample_rate: int, window: int) -> list:
-    """Chunk boundaries (samples, multiples of the frame size) at the quietest frames near every _CHUNK_SECONDS."""
+    """Chunks as (start, end) sample pairs, cut at the quietest frames near every _CHUNK_SECONDS.
+
+    The cuts are multiples of the frame size; the last chunk ends at the end of the audio.
+    """
     import numpy as np
 
     frames = len(audio) // window
@@ -187,6 +192,18 @@ def rpc_convert(params: dict, context: Context) -> dict:
         if peak > 1:
             audio = audio / peak
         ratio = vc.tgt_sr / vc.sample_rate
+        # Silence the noise in silent parts: where the input (the vocals before conversion) is silent, the result is
+        # muted. The silent parts are found on the whole input, then applied to each chunk of the result.
+        mute = params.get("muteSilence") or {}
+        mute_runs = []
+        if mute.get("enabled"):
+            from kura_voice.silence import mono_runs
+
+            mute_runs = [
+                (round(begin * ratio), round(end * ratio))
+                for begin, end in mono_runs(audio, vc.sample_rate, float(mute["thresholdDb"]), float(mute["minSeconds"]))
+            ]
+        mute_fade = max(1, round(vc.tgt_sr * 0.01))
         context_samples = _CHUNK_CONTEXT_SECONDS * vc.sample_rate
         chunks = _chunk_bounds(audio, vc.sample_rate, vc.window)
         crossfade = max(1, round(_CHUNK_CROSSFADE_SECONDS * vc.tgt_sr))
@@ -212,6 +229,10 @@ def rpc_convert(params: dict, context: Context) -> dict:
                     fade = np.linspace(0.0, 1.0, count, endpoint=False, dtype=np.float32)
                     kept[:count] = carry[:count] * (1.0 - fade) + kept[:count] * fade
                 carry = np.asarray(converted[first + length : first + length + crossfade], dtype=np.float32)
+                if mute_runs:
+                    from kura_voice.silence import block_gain
+
+                    kept = kept * block_gain(round(start * ratio), len(kept), mute_runs, mute_fade)
                 out.write(kept)
                 context.progress(0.05 + 0.95 * (number + 1) / len(chunks), "convert")
                 context.phase("convert", (number + 1) / len(chunks))
@@ -368,7 +389,7 @@ def rpc_export_model(params: dict, context: Context) -> dict:
     checkpoint = {
         "weight": load_file(weights_path),
         "config": meta["config"],
-        # Applio and RVC WebUI write the sampling rate as "40k" and so on
+        # Written as RVC WebUI writes it ("40k" and so on)
         "sr": f"{sample_rate // 1000}k" if sample_rate % 1000 == 0 else str(sample_rate),
         "f0": int(meta["f0"]),
         "version": meta["version"],
@@ -388,7 +409,7 @@ def rpc_export_model(params: dict, context: Context) -> dict:
 _MIX_BLOCK_SECONDS = 10
 
 # Upper limit of the sample peak of the mix (dBFS). When the mix goes over it, the whole mix is lowered by one
-# constant gain, so the balance between quiet and loud parts is kept (no limiter or compressor).
+# constant gain, so the balance between quiet and loud parts is kept.
 _MIX_PEAK_LIMIT_DB = -1.0
 
 # pedalboard's Reverb (JUCE) multiplies dry_level by 2 and wet_level by 3 internally. The parameters are divided
@@ -408,7 +429,8 @@ def _stereo(block: Any) -> Any:
 def rpc_mix(params: dict, context: Context) -> dict:
     """Vocal / accompaniment balance, reverb on the vocals and the master volume.
 
-    The preview and the export use this same rendering, so they always sound the same.
+    The mix shown in the app and the export use this same rendering, so they always sound the same. The vocals
+    layered on the accompaniment on the conversion step use it too, with the volumes unchanged and no reverb.
     Processed block by block; the effects keep their state between blocks (reset=False), so the result is the
     same as processing the whole audio at once. When the peak of the mix goes over _MIX_PEAK_LIMIT_DB, the
     written file is lowered by one constant gain in a second pass.

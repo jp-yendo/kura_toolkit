@@ -4,8 +4,9 @@ The main process parses the control tags and sends ready-made pieces:
   {"kind": "speech", "parts": [...], "rate": 1.0, "pitch": 0.0, "volume": 0.0}
   {"kind": "silence", "ms": 500}
 Each speech part is either plain text ({"text": ...}), a Japanese accent override
-({"surface": ..., "kataTone": [[mora, tone], ...], "reading": ...}) or an English IPA override
-({"surface": ..., "words": [[ARPAbet, ...], ...]}).
+({"surface": ..., "kataTone": [[mora, tone], ...], "reading": ...}), an English IPA override
+({"surface": ..., "words": [[ARPAbet, ...], ...]}) or a Chinese pinyin override
+({"surface": ..., "pinyin": [[syllable, tone], ...]}).
 """
 
 from __future__ import annotations
@@ -18,6 +19,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from kura_voice import runtime
 from kura_voice.protocol import Context, KuraError
+# The silence handling requests are shared by every component (the worker looks up rpc_<method> in this module)
+from kura_voice.silence import rpc_detect_silence, rpc_edit_silence  # noqa: F401
 
 SILENT_DB = -200.0
 # Every synthesized clip comes back normalised to full scale; keep some headroom.
@@ -126,8 +129,9 @@ def _chinese_given(parts: List[dict]) -> Tuple[str, List[str], List[int]]:
 
     The whole text is converted as usual, then the phones and tones of the overridden characters are
     replaced. Every syllable maps to two phones, so the length (and the alignment with the text) stays
-    the same. The overridden characters are Han characters only, which normalization keeps as they
-    are, so their position in the normalized text is the normalized length of the parts before them.
+    the same. The overridden characters are Han characters only, which normalization keeps one for one
+    (a few are replaced by another character, such as 嗯 -> 恩), so their position in the normalized text is
+    the normalized length of the parts before them.
     """
     from style_bert_vits2.constants import Languages
     from style_bert_vits2.nlp import clean_text
@@ -174,7 +178,8 @@ def _english_overrides(parts: List[dict]) -> Tuple[str, Dict[int, Tuple[list, in
     normalised text, which is what the library's g2p walks through. Only the wrapped words get the given
     pronunciation; the same word elsewhere is read as usual. Each target also carries the number of tokens of the
     wrapped word: the library joins a following "-" or "'" and what comes after it to the same word ("GAN-based",
-    "Kura's"), and those tokens are read as usual.
+    "Kura's"). The tokens after a "-" are read as usual; a contraction ("'s", "'ll") is read as the ending of the
+    wrapped word.
     """
     from style_bert_vits2.nlp.english import g2p as english_g2p
     from style_bert_vits2.nlp.english.normalizer import normalize_text
@@ -226,7 +231,8 @@ def _english_contraction(text: str, last: str) -> Optional[list]:
 
 def _english_g2p_with(targets: Dict[int, Tuple[list, int]]) -> Any:
     """The library's English g2p (style_bert_vits2.nlp.english.g2p.g2p, style-bert-vits2-mk 2.8.8) with the given
-    pronunciations for the words at the given positions. Everything else follows the library's code unchanged."""
+    pronunciations for the words at the given positions. A contraction right after a wrapped word is read as its
+    ending; everything else follows the library's code (its consistency assertions are left out)."""
     from style_bert_vits2.nlp.english import g2p as module
     from style_bert_vits2.nlp.symbols import PUNCTUATIONS
 
@@ -514,7 +520,7 @@ def rpc_assemble(params: dict, context: Context) -> dict:
             mix[first - begin : last - begin] += data.mean(axis=1)
         return mix
 
-    # Pass 1: the peak of the whole mix (to scale it down only when it would clip, as before)
+    # Pass 1: the peak of the whole mix (the mix is scaled down only when it would clip)
     peak = 0.0
     context.phase("assemble", 0.0)
     for begin in range(0, length, block):
@@ -533,7 +539,10 @@ def rpc_assemble(params: dict, context: Context) -> dict:
 
 
 def rpc_inspect_style_vectors(params: dict, context: Context) -> dict:
-    """Read style_vectors.npy as a plain numeric array (no pickle) and store a clean copy."""
+    """Read style_vectors.npy as a plain numeric array and, when output is given, store a clean copy.
+
+    Pickle data is not read unless the user accepted the risk (allowUnsafe); the copy never contains pickle data.
+    """
     import numpy as np
 
     path = params["path"]

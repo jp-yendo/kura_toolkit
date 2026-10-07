@@ -14,7 +14,7 @@ import type {
     AudioOutputCheck,
 } from '../../shared/types';
 
-// オーディオのラウドネス解析と正規化 (元: AudioNormalizer/audio_normalizer.py)
+// オーディオのラウドネス解析と正規化
 
 type FfprobeStream = {
     codec_type?: string;
@@ -138,9 +138,9 @@ function weightedPercent(weights: number[], index: number, filePercent = 0): num
 
 // 正規化で上げたあとの True Peak の上限 (dBTP)。非可逆圧縮での書き出しやサンプリング周波数の変換でピークが少し
 // 上がるための余白
-const TRUE_PEAK_LIMIT = -1.5;
+export const TRUE_PEAK_LIMIT = -1.5;
 
-type Loudness = { lufs: number | null; truePeak: number | null };
+export type Loudness = { lufs: number | null; truePeak: number | null };
 
 function finiteOrNull(value: string | undefined): number | null {
     const parsed = value === undefined ? Number.NaN : Number.parseFloat(value);
@@ -149,7 +149,7 @@ function finiteOrNull(value: string | undefined): number | null {
 
 // 曲全体の実測値 (ラウドネスと True Peak)。loudnorm の測定 (結果を出力しない 1 回目) の結果から取る
 // (目標値は実測値に影響しない)。無音などで測れないものは null
-async function measureLoudness(
+export async function measureLoudness(
     filePath: string,
     jobId: string,
     totalSec: number | undefined,

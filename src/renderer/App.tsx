@@ -27,7 +27,8 @@ import { showNotice } from './stores/noticeStore';
 import { featureOf, leaveFeature } from './stores/featureWork';
 import { handleCloseRequest } from './stores/navigationGuard';
 
-// 別の機能へ移ったときに前の機能の作業を破棄し、機能に入ったときに要らなくなった一時ファイルを消す
+// 別の機能へ移ったときに前の機能の作業を破棄し、機能に入ったときに要らなくなった一時ファイルを消す。
+// 開いた機能を main へ知らせ、その機能で使わない Python の処理役を止めさせる
 function FeatureWorkLifecycle() {
     const { pathname } = useLocation();
     const current = React.useRef<string | null>(null);
@@ -36,6 +37,7 @@ function FeatureWorkLifecycle() {
         if (current.current === next) return;
         if (current.current !== null) leaveFeature(current.current);
         current.current = next;
+        void window.kuraToolkit.voice.setFeature(next);
         void window.kuraToolkit.storage.cleanupWork();
     }, [pathname]);
     return null;

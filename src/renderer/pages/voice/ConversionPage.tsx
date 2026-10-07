@@ -23,11 +23,9 @@ import {
     Typography,
 } from '@mui/material';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
-import RecordVoiceOverIcon from '@mui/icons-material/RecordVoiceOver';
-import TuneIcon from '@mui/icons-material/Tune';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
-import RefreshIcon from '@mui/icons-material/Refresh';
-import QueueMusicIcon from '@mui/icons-material/QueueMusic';
+import SaveAltIcon from '@mui/icons-material/SaveAlt';
+import HeadphonesIcon from '@mui/icons-material/Headphones';
 import { useTranslation } from 'react-i18next';
 import PageContainer from '../../components/common/PageContainer';
 import Panel from '../../components/common/Panel';
@@ -41,6 +39,13 @@ import UserModelIcon from '../../components/voice/UserModelIcon';
 import SeparationWorkbench from '../../components/voice/SeparationWorkbench';
 import SyncPlayer from '../../components/voice/SyncPlayer';
 import SliderField from '../../components/voice/SliderField';
+import {
+    filterSummary,
+    NoiseRemovalFields,
+    resolvedNoiseOption,
+    SilenceFields,
+    useNoiseRemovalModels,
+} from '../../components/voice/AudioFilterFields';
 import MixForm from '../../components/voice/MixForm';
 import PresetBar from '../../components/voice/PresetBar';
 import ExportDialog, { type ExportEntry } from '../../components/voice/ExportDialog';
@@ -61,6 +66,7 @@ import { openVoiceLibrary } from '../../stores/voiceLibraryStore';
 import {
     F0_METHODS,
     type ConversionCandidate,
+    type ConversionParams,
     type F0Method,
     type MediaRef,
     type MixParams,
@@ -91,6 +97,9 @@ export default function ConversionPage() {
     const [voices, setVoices] = React.useState<VoiceModelInfo[]>([]);
     const [vocalsMedia, setVocalsMedia] = React.useState<MediaRef | null>(null);
     const [exportOpen, setExportOpen] = React.useState(false);
+    // 行ごとの保存 (その行の音だけを書き出す)。閉じる途中で中身が変わらないよう、開閉と項目を分けて持つ
+    const [rowExport, setRowExport] = React.useState<ExportEntry | null>(null);
+    const [rowExportOpen, setRowExportOpen] = React.useState(false);
     const [confirmInvalidate, setConfirmInvalidate] = React.useState(false);
     const [resetConfirm, setResetConfirm] = React.useState(false);
     const { job, run, cancel } = useJobRunner();
@@ -124,7 +133,7 @@ export default function ConversionPage() {
         useConversionStore.getState().reset();
     };
 
-    // --- 変換に使うボーカルと伴奏 (どちらも複数の音から成る場合は、使うときに 1 つに重ねる) ---
+    // --- 変換する音 (1 つ) と伴奏 (複数の音から成る場合は、使うときに 1 つに重ねる) ---
     let vocals: string[] = [];
     let accompaniment: string[] = [];
     let sourceMedia: MediaRef | null = null;
@@ -158,20 +167,15 @@ export default function ConversionPage() {
     const vocalsKey = vocals.join(',');
     const inputKey = `${vocalsKey}|${accompaniment.join(',')}`;
 
-    // 元のボーカルの再生用 (複数の音から成る場合は重ねた音を作る)
+    // 変換前のボーカルの再生用
     React.useEffect(() => {
         if (vocals.length === 0) {
             setVocalsMedia(null);
             return;
         }
         let cancelled = false;
-        const request =
-            vocals.length > 1
-                ? window.kuraToolkit.voice.media.mix(crypto.randomUUID(), workKey, vocals, channels)
-                : window.kuraToolkit.voice.media.ref(workKey, vocals[0]);
-        // 重ねた音は同じ組み合わせなら同じファイルで、変換の入力や分離の再生にも使うため、ここでは消さない
-        // (機能の作業を破棄するときに消える)
-        request
+        window.kuraToolkit.voice.media
+            .ref(workKey, vocals[0])
             .then(result => {
                 if (!cancelled) setVocalsMedia(result);
             })
@@ -185,7 +189,23 @@ export default function ConversionPage() {
     }, [vocalsKey]);
 
     const voice = voices.find(item => item.id === conv.voiceId) ?? null;
-    const adopted = conv.candidates.find(item => item.id === conv.adoptedId) ?? null;
+    const noiseModels = useNoiseRemovalModels();
+
+    // 候補のパラメーターの表示 (チェックした加工だけを足す)
+    const paramsSummary = (params: ConversionParams): string => {
+        const parts = [
+            t('voice.conversion.paramsSummary', {
+                pitch: params.pitch,
+                f0: params.f0Method,
+                index: params.indexRate.toFixed(2),
+                envelope: params.volumeEnvelope.toFixed(2),
+                protect: params.protect.toFixed(2),
+            }),
+        ];
+        parts.push(...filterSummary(t, params, noiseModels));
+        return parts.join(' / ');
+    };
+    const selected = conv.candidates.find(item => item.id === conv.selectedId) ?? null;
     const busy = job !== null;
 
     // 複数の音から成る場合は 1 つに重ねたものを使う
@@ -254,7 +274,10 @@ export default function ConversionPage() {
                     vocals: (await singlePath(jobId, vocals)) as string,
                     accompaniment: await singlePath(jobId, accompaniment),
                     voiceId: voice.id,
-                    params: conv.params,
+                    params: {
+                        ...conv.params,
+                        noiseRemoval: resolvedNoiseOption(conv.params.noiseRemoval, noiseModels),
+                    },
                 })
             );
             conv.addCandidate(candidate, inputKey);
@@ -264,20 +287,20 @@ export default function ConversionPage() {
     };
 
     // 入力 (伴奏) が変わった場合も作り直すよう、入力も含める
-    const mixSignature = adopted
-        ? JSON.stringify({ candidate: adopted.id, input: inputKey, params: conv.mixParams })
+    const mixSignature = selected
+        ? JSON.stringify({ candidate: selected.id, input: inputKey, params: conv.mixParams })
         : null;
     const mixStale = conv.mix !== null && conv.mixSignature !== mixSignature;
 
     const renderMix = async (jobId: string): Promise<MediaRef> => {
-        if (!adopted) throw new Error('NO_CANDIDATE');
+        if (!selected) throw new Error('NO_CANDIDATE');
         if (conv.mix && conv.mixSignature === mixSignature) return conv.mix;
         const media = await window.kuraToolkit.voice.conversion.renderMix(jobId, {
             workKey,
-            vocals: adopted.vocals.path,
+            vocals: selected.vocals.path,
             accompaniment: await singlePath(jobId, accompaniment),
-            channels: adopted.channels,
-            pitch: adopted.params.pitch,
+            channels: selected.channels,
+            pitch: selected.params.pitch,
             params: conv.mixParams,
         });
         // 前の合成結果は使わなくなるため消す
@@ -296,8 +319,8 @@ export default function ConversionPage() {
         }
     };
 
-    // 候補の変換後のボーカルと伴奏を、音量を変えずにそのまま重ねた試聴用の音を作る (押したときだけ作る手動の更新。
-    // 作り直したら前のものは消す)
+    // 候補の変換後のボーカルと伴奏を、音量を変えずにそのまま重ねた試聴用の音を作る (ピークが上限を超える場合は
+    // 全体を一律に下げる)。ボタンを押したときだけ作る。伴奏を変えると候補ごと破棄されるため、作り直しは無い
     const createWithAccompaniment = async (candidate: ConversionCandidate) => {
         try {
             const media = await run(t('voice.conversion.withAccompanimentRendering'), async jobId =>
@@ -310,29 +333,48 @@ export default function ConversionPage() {
                     params: null,
                 })
             );
-            const previous = candidate.withAccompaniment;
             conv.setCandidatePreview(candidate.id, media);
-            if (previous && previous.path !== media.path)
-                void window.kuraToolkit.voice.media.discard(workKey, [previous.path]);
         } catch (error) {
             handleError(error);
         }
     };
 
-    // 名前と波形を 1 行に並べる行 (分離の画面と同じ形)
-    const playerRow = (key: string, label: string, url: string | null, action?: React.ReactNode) => (
+    // その音だけを書き出すボタン (書き出しのダイアログを 1 項目で開く。ファイル名は元の名前 + suffix)
+    const saveButton = (key: string, name: string, media: MediaRef, suffix: string) => (
+        <Tooltip title={t('voice.conversion.saveRow')}>
+            <span>
+                <IconButton
+                    size='small'
+                    aria-label={t('voice.conversion.saveRowFor', { name })}
+                    disabled={busy}
+                    onClick={event => {
+                        // 候補のカードを選ぶクリックとして扱わない
+                        event.stopPropagation();
+                        setRowExport({ key, label: name, suffix, resolve: async () => media.path });
+                        setRowExportOpen(true);
+                    }}
+                >
+                    <SaveAltIcon fontSize='small' />
+                </IconButton>
+            </span>
+        </Tooltip>
+    );
+
+    // 名前の下にプレーヤーを置く行。プレーヤーはどの行も同じ幅にして波形の位置をそろえる。
+    // 行の操作 (保存) は名前の行の右端に置く
+    const playerRow = (key: string, label: string, media: MediaRef, action?: React.ReactNode) => (
         <Stack key={key} spacing={0.5} sx={{ minWidth: 0 }}>
-            <Stack direction='row' spacing={1} sx={{ alignItems: 'center', minHeight: 30 }}>
+            <Stack direction='row' sx={{ alignItems: 'center', minHeight: 30 }}>
                 <Typography variant='body2' sx={{ fontWeight: 600, flexGrow: 1, overflowWrap: 'anywhere' }}>
                     {label}
                 </Typography>
                 {action}
             </Stack>
-            {url && <SyncPlayer source={{ key, url }} keepPosition={false} />}
+            <SyncPlayer source={{ key, url: media.url }} keepPosition={false} />
         </Stack>
     );
 
-    const exportEntries: ExportEntry[] = adopted
+    const exportEntries: ExportEntry[] = selected
         ? [
               {
                   key: 'mix',
@@ -344,7 +386,7 @@ export default function ConversionPage() {
                   key: 'vocals',
                   label: t('voice.conversion.exportVocals'),
                   suffix: t('voice.conversion.suffixConvertedVocals'),
-                  resolve: async () => adopted.vocals.path,
+                  resolve: async () => selected.vocals.path,
                   defaultChecked: false,
               },
           ]
@@ -356,7 +398,7 @@ export default function ConversionPage() {
         t('voice.conversion.steps.mix'),
     ];
     // 合成は、候補を作ったときから入力が変わっていない場合だけ開ける (変わった場合は変換の段階で確認する)
-    const stepEnabled = [true, hasVocals, !!adopted && conv.candidatesInput === inputKey];
+    const stepEnabled = [true, hasVocals, !!selected && conv.candidatesInput === inputKey];
 
     return (
         <PageContainer>
@@ -510,21 +552,11 @@ export default function ConversionPage() {
                     {conv.inputMode === 'direct' && sep.source && (
                         <SyncPlayer source={{ key: 'direct', url: sep.source.media.url }} />
                     )}
-                    <Panel sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-                        <Typography variant='body2' sx={{ flexGrow: 1, lineHeight: 1.6 }}>
-                            {hasVocals
-                                ? t('voice.conversion.inputSummary', {
-                                      accompaniment:
-                                          accompaniment.length > 0
-                                              ? t('voice.conversion.withAccompaniment')
-                                              : t('voice.conversion.withoutAccompaniment'),
-                                  })
-                                : t('voice.conversion.inputMissing')}
-                        </Typography>
+                    <Stack direction='row' sx={{ justifyContent: 'flex-end' }}>
                         <Button variant='contained' disabled={!hasVocals || busy} onClick={goToConversion}>
                             {t('voice.common.next')}
                         </Button>
-                    </Panel>
+                    </Stack>
                 </Stack>
             )}
 
@@ -624,9 +656,19 @@ export default function ConversionPage() {
                                 helperText={t('voice.conversion.protectHint')}
                                 onChange={protect => conv.setParams({ ...conv.params, protect })}
                             />
+                            <SilenceFields
+                                mode='mute'
+                                value={conv.params.muteSilence}
+                                disabled={busy}
+                                onChange={muteSilence => conv.setParams({ ...conv.params, muteSilence })}
+                            />
+                            <NoiseRemovalFields
+                                value={conv.params.noiseRemoval}
+                                disabled={busy}
+                                onChange={noiseRemoval => conv.setParams({ ...conv.params, noiseRemoval })}
+                            />
                             <Button
                                 variant='contained'
-                                startIcon={<RecordVoiceOverIcon />}
                                 disabled={
                                     busy || !voice || !hasVocals || !ready || !f0Methods.includes(conv.params.f0Method)
                                 }
@@ -640,14 +682,19 @@ export default function ConversionPage() {
                         {/* 元の音源・変換前のボーカルを上に置き、作った候補を作った順に下へ足していく */}
                         <Panel>
                             <Stack spacing={1.5}>
-                                {sourceMedia &&
-                                    playerRow('source', t('voice.conversion.targets.source'), sourceMedia.url)}
+                                {sourceMedia && playerRow('source', t('voice.conversion.targets.source'), sourceMedia)}
                                 {conv.inputMode === 'separate' &&
                                     vocalsMedia &&
                                     playerRow(
                                         'original-vocals',
                                         t('voice.conversion.targets.originalVocals'),
-                                        vocalsMedia.url
+                                        vocalsMedia,
+                                        saveButton(
+                                            'original-vocals',
+                                            t('voice.conversion.targets.originalVocals'),
+                                            vocalsMedia,
+                                            t('voice.conversion.suffixOriginalVocals')
+                                        )
                                     )}
                             </Stack>
                         </Panel>
@@ -658,46 +705,37 @@ export default function ConversionPage() {
                             </Typography>
                         ) : (
                             conv.candidates.map(candidate => (
-                                <Panel key={candidate.id}>
+                                // 候補のカードをクリックする (再生を含む) と選んだ状態になり、合成ではこの候補を使う
+                                <Panel
+                                    key={candidate.id}
+                                    selected={conv.selectedId === candidate.id}
+                                    onClick={() => conv.selectCandidate(candidate.id)}
+                                >
                                     <Stack spacing={1.5}>
                                         <Stack direction='row' spacing={1} sx={{ alignItems: 'center' }}>
-                                            <FormControlLabel
-                                                sx={{ m: 0 }}
-                                                control={
-                                                    <Radio
-                                                        size='small'
-                                                        checked={conv.adoptedId === candidate.id}
-                                                        onChange={() => conv.setAdopted(candidate.id)}
-                                                        slotProps={{ input: { 'aria-label': candidate.voiceName } }}
-                                                    />
-                                                }
-                                                label={
-                                                    <Typography variant='body2' color='text.secondary'>
-                                                        {t('voice.separation.adopt')}
-                                                    </Typography>
-                                                }
-                                            />
                                             <Box sx={{ flexGrow: 1, minWidth: 0 }}>
                                                 <Typography variant='body2' sx={{ fontWeight: 600 }}>
                                                     {candidate.voiceName}
                                                 </Typography>
                                                 <Typography variant='caption' color='text.secondary'>
-                                                    {t('voice.conversion.paramsSummary', {
-                                                        pitch: candidate.params.pitch,
-                                                        f0: candidate.params.f0Method,
-                                                        index: candidate.params.indexRate.toFixed(2),
-                                                        envelope: candidate.params.volumeEnvelope.toFixed(2),
-                                                        protect: candidate.params.protect.toFixed(2),
-                                                    })}
+                                                    {paramsSummary(candidate.params)}
                                                 </Typography>
                                             </Box>
+                                            {saveButton(
+                                                `${candidate.id}-converted`,
+                                                `${candidate.voiceName} ${t('voice.conversion.targets.converted')}`,
+                                                candidate.vocals,
+                                                `${candidate.voiceName}_${t('voice.conversion.suffixConvertedVocals')}`
+                                            )}
                                             <Tooltip title={t('voice.common.deleteCandidate')}>
                                                 <span>
                                                     <IconButton
                                                         size='small'
                                                         aria-label={t('voice.common.deleteCandidate')}
                                                         disabled={busy}
-                                                        onClick={() => {
+                                                        onClick={event => {
+                                                            // 消す候補を選んだ状態にしない (カードのクリックとして扱わない)
+                                                            event.stopPropagation();
                                                             conv.removeCandidate(candidate.id);
                                                             void window.kuraToolkit.voice.media.discard(
                                                                 workKey,
@@ -713,41 +751,39 @@ export default function ConversionPage() {
                                         {playerRow(
                                             `${candidate.id}-converted`,
                                             t('voice.conversion.targets.converted'),
-                                            candidate.vocals.url
+                                            candidate.vocals
                                         )}
+                                        {/* 伴奏と重ねた音は、ボタンを押したときに作る (変換の実行では作らない) */}
                                         {accompaniment.length > 0 &&
-                                            playerRow(
-                                                `${candidate.id}-with-accompaniment-${candidate.withAccompaniment?.path ?? ''}`,
-                                                t('voice.conversion.targets.withAccompaniment'),
-                                                candidate.withAccompaniment?.url ?? null,
-                                                <Button
-                                                    size='small'
-                                                    variant='outlined'
-                                                    startIcon={
-                                                        candidate.withAccompaniment ? (
-                                                            <RefreshIcon />
-                                                        ) : (
-                                                            <QueueMusicIcon />
-                                                        )
-                                                    }
-                                                    disabled={busy}
-                                                    aria-label={t('voice.conversion.withAccompanimentFor', {
-                                                        name: candidate.voiceName,
-                                                    })}
-                                                    onClick={() => void createWithAccompaniment(candidate)}
-                                                >
-                                                    {candidate.withAccompaniment
-                                                        ? t('voice.conversion.withAccompanimentRecreate')
-                                                        : t('voice.conversion.withAccompanimentCreate')}
-                                                </Button>
-                                            )}
+                                            (candidate.withAccompaniment ? (
+                                                playerRow(
+                                                    `${candidate.id}-with-accompaniment`,
+                                                    t('voice.conversion.targets.withAccompaniment'),
+                                                    candidate.withAccompaniment
+                                                )
+                                            ) : (
+                                                <Box>
+                                                    <Button
+                                                        size='small'
+                                                        variant='outlined'
+                                                        startIcon={<HeadphonesIcon />}
+                                                        disabled={busy}
+                                                        aria-label={t('voice.conversion.withAccompanimentFor', {
+                                                            name: candidate.voiceName,
+                                                        })}
+                                                        onClick={() => void createWithAccompaniment(candidate)}
+                                                    >
+                                                        {t('voice.conversion.withAccompanimentCreate')}
+                                                    </Button>
+                                                </Box>
+                                            ))}
                                     </Stack>
                                 </Panel>
                             ))
                         )}
                         <Stack direction='row' spacing={1} sx={{ justifyContent: 'flex-end' }}>
                             <Button onClick={() => conv.setStep(0)}>{t('voice.common.back')}</Button>
-                            <Button variant='contained' disabled={!adopted} onClick={() => conv.setStep(2)}>
+                            <Button variant='contained' disabled={!selected} onClick={() => conv.setStep(2)}>
                                 {t('voice.common.next')}
                             </Button>
                         </Stack>
@@ -778,40 +814,32 @@ export default function ConversionPage() {
                                 hasAccompaniment={accompaniment.length > 0}
                                 disabled={busy}
                             />
-                            <Button
-                                variant='contained'
-                                startIcon={<TuneIcon />}
-                                disabled={busy || !adopted}
-                                onClick={() => void createMix()}
-                            >
+                            <Button variant='contained' disabled={busy || !selected} onClick={() => void createMix()}>
                                 {t('voice.mix.preview')}
                             </Button>
                         </Stack>
                     </Panel>
                     <Stack spacing={1.5} sx={{ minWidth: 0 }}>
-                        <Typography variant='body2' color='text.secondary' sx={{ lineHeight: 1.6 }}>
-                            {t('voice.mix.hint')}
-                        </Typography>
                         {mixStale && <Alert severity='info'>{t('voice.mix.stale')}</Alert>}
                         <Panel>
                             <Stack spacing={1.5}>
                                 {sourceMedia &&
-                                    playerRow('mix-source', t('voice.conversion.targets.source'), sourceMedia.url)}
-                                {playerRow(
-                                    `mix-${conv.mixSignature ?? ''}`,
-                                    t('voice.conversion.targets.mix'),
-                                    conv.mix?.url ?? null
-                                )}
-                                {!conv.mix && (
-                                    <Typography variant='body2' color='text.secondary' sx={{ lineHeight: 1.6 }}>
-                                        {t('voice.mix.notCreated')}
-                                    </Typography>
-                                )}
+                                    playerRow('mix-source', t('voice.conversion.targets.source'), sourceMedia)}
+                                {conv.mix &&
+                                    playerRow(
+                                        `mix-${conv.mixSignature ?? ''}`,
+                                        t('voice.conversion.targets.mix'),
+                                        conv.mix
+                                    )}
                             </Stack>
                         </Panel>
                         <Stack direction='row' spacing={1} sx={{ justifyContent: 'flex-end' }}>
                             <Button onClick={() => conv.setStep(1)}>{t('voice.common.back')}</Button>
-                            <Button variant='contained' disabled={!adopted || busy} onClick={() => setExportOpen(true)}>
+                            <Button
+                                variant='contained'
+                                disabled={!selected || busy}
+                                onClick={() => setExportOpen(true)}
+                            >
                                 {t('voice.export.open')}
                             </Button>
                         </Stack>
@@ -825,6 +853,14 @@ export default function ConversionPage() {
                 onClose={() => setExportOpen(false)}
                 entries={exportEntries}
                 sourcePath={sourcePath || 'output'}
+            />
+            <ExportDialog
+                workKey={workKey}
+                open={rowExportOpen}
+                onClose={() => setRowExportOpen(false)}
+                entries={rowExport ? [rowExport] : []}
+                sourcePath={sourcePath || 'output'}
+                fixedSelection
             />
 
             <AppDialog open={confirmInvalidate} onClose={() => setConfirmInvalidate(false)} maxWidth='xs' fullWidth>

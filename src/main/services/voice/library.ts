@@ -10,6 +10,7 @@ import {
     isSpecFilePresent,
     sourceOwner,
     type InstallContext,
+    installLeftoversRemoved,
 } from './installer';
 import { readManifest, updateManifest, type LibraryManifest } from './manifest';
 import { requiredItems } from '../../../shared/voice/requirements';
@@ -341,8 +342,10 @@ function planDownload(ids: string[], items: LibraryItem[]): LibraryItem[] {
 // 同じ仮想環境への同時の導入や、導入中の pip のキャッシュの削除が起きないようにする
 let libraryQueue: Promise<unknown> = Promise.resolve();
 
+// 起動時の、前回の導入の残りの削除が終わってから始める (削除と導入が同じファイルを扱わないように)
 function withLibraryLock<T>(task: () => Promise<T>): Promise<T> {
-    const run = libraryQueue.then(task, task);
+    const start = () => installLeftoversRemoved().then(task);
+    const run = libraryQueue.then(start, start);
     libraryQueue = run.catch(() => undefined);
     return run;
 }
@@ -460,9 +463,13 @@ async function runDownload(
         }
     }
     const cancelled = controller.signal.aborted || isCancelled(jobId);
-    // pip のキャッシュ (PyTorch など数 GB) は、全て成功したら消す。失敗・中断した場合は再試行に使うため残す
-    if (!cancelled && failed.size === 0) {
-        await fs.promises.rm(libraryPaths().pipCache, { recursive: true, force: true });
+    // pip のキャッシュ (PyTorch など数 GB) は、全て成功した場合とキャンセルした場合 (取得しなかったことにする) に消す。
+    // 意図しない失敗の場合は、アプリを起動している間の再試行に使うため残す (次の起動時に消す)
+    // (消せなかった場合は、次の起動時に消す。removeInstallLeftovers)
+    if (cancelled || failed.size === 0) {
+        await fs.promises
+            .rm(libraryPaths().pipCache, { recursive: true, force: true, maxRetries: 3, retryDelay: 500 })
+            .catch(error => console.warn('failed to remove the pip cache', error));
     }
     return { results, cancelled };
 }

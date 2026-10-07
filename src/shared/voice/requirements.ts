@@ -42,7 +42,6 @@ export const FEATURE_REQUIREMENTS: Record<VoiceFeatureId, RequirementGroup[]> = 
         {
             kind: 'anyOf',
             titleKey: 'voice.library.requirements.separatorModels',
-            noteKey: 'voice.library.requirements.separatorModelsNote',
             itemPrefix: SEPARATOR_MODEL_PREFIX,
         },
     ],

@@ -18,6 +18,7 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
+import GraphicEqIcon from '@mui/icons-material/GraphicEq';
 import SchoolIcon from '@mui/icons-material/School';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -31,6 +32,7 @@ import VoiceFeatureHeader from '../../components/voice/VoiceFeatureHeader';
 import RecorderControl from '../../components/voice/RecorderControl';
 import SyncPlayer from '../../components/voice/SyncPlayer';
 import TrainingSetBar from '../../components/voice/TrainingSetBar';
+import TrainingFilterDialog from '../../components/voice/TrainingFilterDialog';
 import { useTrainingSets } from '../../components/voice/useTrainingSets';
 import { audioInputFilters } from '../../components/voice/audioInput';
 import { formatDuration } from '../../components/voice/voiceFormat';
@@ -54,6 +56,11 @@ export default function RvcTrainingPage() {
     const [playing, setPlaying] = React.useState<TrainingAudio | null>(null);
     const [name, setName] = React.useState('');
     const [removeConfirm, setRemoveConfirm] = React.useState<RemoveConfirm>({ open: false, item: null });
+    // 学習用の音のフィルター (audio が null のときは学習セットのすべての音)
+    const [filterTarget, setFilterTarget] = React.useState<{ open: boolean; audio: TrainingAudio | null }>({
+        open: false,
+        audio: null,
+    });
     const [created, setCreated] = React.useState<VoiceModelInfo | null>(null);
     const [recording, setRecording] = React.useState(false);
     const { job, run, cancel } = useJobRunner();
@@ -181,9 +188,19 @@ export default function RvcTrainingPage() {
                             </Button>
                         </Stack>
 
-                        <SectionLabel>
-                            {t('voice.training.dataset', { count: items.length, duration: formatDuration(total) })}
-                        </SectionLabel>
+                        <Stack direction='row' spacing={1} sx={{ alignItems: 'center' }}>
+                            <SectionLabel sx={{ flexGrow: 1 }}>
+                                {t('voice.training.dataset', { count: items.length, duration: formatDuration(total) })}
+                            </SectionLabel>
+                            <Button
+                                size='small'
+                                startIcon={<GraphicEqIcon />}
+                                disabled={job !== null || recording || items.length === 0}
+                                onClick={() => setFilterTarget({ open: true, audio: null })}
+                            >
+                                {t('voice.filters.filterAll')}
+                            </Button>
+                        </Stack>
                         <Panel disablePadding sx={{ maxHeight: 360, overflow: 'auto' }}>
                             {items.length === 0 ? (
                                 <Typography variant='body2' color='text.secondary' sx={{ p: 2 }}>
@@ -210,21 +227,40 @@ export default function RvcTrainingPage() {
                                                 <TableCell>{item.name}</TableCell>
                                                 <TableCell align='right'>{formatDuration(item.durationSec)}</TableCell>
                                                 <TableCell padding='checkbox'>
-                                                    <Tooltip title={t('voice.training.deleteAudio')}>
-                                                        <span>
-                                                            <IconButton
-                                                                size='small'
-                                                                aria-label={t('voice.training.deleteAudio')}
-                                                                disabled={job !== null || recording}
-                                                                onClick={event => {
-                                                                    event.stopPropagation();
-                                                                    setRemoveConfirm({ open: true, item });
-                                                                }}
-                                                            >
-                                                                <DeleteOutlineIcon fontSize='small' />
-                                                            </IconButton>
-                                                        </span>
-                                                    </Tooltip>
+                                                    <Stack direction='row'>
+                                                        <Tooltip title={t('voice.filters.filterButton')}>
+                                                            <span>
+                                                                <IconButton
+                                                                    size='small'
+                                                                    aria-label={t('voice.filters.filterFor', {
+                                                                        name: item.name,
+                                                                    })}
+                                                                    disabled={job !== null || recording}
+                                                                    onClick={event => {
+                                                                        event.stopPropagation();
+                                                                        setFilterTarget({ open: true, audio: item });
+                                                                    }}
+                                                                >
+                                                                    <GraphicEqIcon fontSize='small' />
+                                                                </IconButton>
+                                                            </span>
+                                                        </Tooltip>
+                                                        <Tooltip title={t('voice.training.deleteAudio')}>
+                                                            <span>
+                                                                <IconButton
+                                                                    size='small'
+                                                                    aria-label={t('voice.training.deleteAudio')}
+                                                                    disabled={job !== null || recording}
+                                                                    onClick={event => {
+                                                                        event.stopPropagation();
+                                                                        setRemoveConfirm({ open: true, item });
+                                                                    }}
+                                                                >
+                                                                    <DeleteOutlineIcon fontSize='small' />
+                                                                </IconButton>
+                                                            </span>
+                                                        </Tooltip>
+                                                    </Stack>
                                                 </TableCell>
                                             </TableRow>
                                         ))}
@@ -264,6 +300,21 @@ export default function RvcTrainingPage() {
                     </>
                 )}
             </Stack>
+
+            {setId && (
+                <TrainingFilterDialog
+                    key={filterTarget.audio?.id ?? 'set'}
+                    open={filterTarget.open}
+                    feature='converter'
+                    setId={setId}
+                    audio={filterTarget.audio}
+                    onClose={() => setFilterTarget(previous => ({ ...previous, open: false }))}
+                    onChanged={() => {
+                        setPlaying(null);
+                        void refresh();
+                    }}
+                />
+            )}
 
             <ProgressDialog
                 open={job !== null}

@@ -8,7 +8,7 @@ import { getWorker } from './python-worker';
 import { componentSpec, SEPARATOR_MODEL_DIR, separatorItemId, type SpecFile } from './spec';
 import type { SeparationArch, SeparationCategory } from '../../../shared/voice/types';
 
-// 分離モデルの一覧。audio-separator が提供する一覧から取得し、ライブラリ内に保存して使う。
+// 分離モデルの一覧。audio-separator が提供する一覧から取得し、キャッシュディレクトリに保存して使う。
 // 一覧の取得にはパッケージ一式 (audio-separator) が必要なため、導入後に作成する。
 // 一覧はファイルごとに取得元の候補 (UVR の配布場所と audio-separator の配布場所) を持ち、ファイルは候補のうち
 // 1 か所にだけある。ファイルが実際にある URL をファイルごとに一度だけ調べて大きさと一緒に保存し、
@@ -58,12 +58,12 @@ let cachedList: ModelListCache | null = null;
 let sourceCache: Record<string, FileSource | undefined> | null = null;
 // 取得元の候補のどこにも無かったファイル。アプリを起動している間だけ覚え、次に起動したときに調べ直す
 const notFound = new Set<string>();
-// 保存した一覧と取得元を読み直させた回数。裏で調べている間にパッケージ一式の削除やライブラリの移動があった場合に、
+// 保存した一覧と取得元を読み直させた回数。裏で調べている間にパッケージ一式の削除やライブラリ・キャッシュの移動があった場合に、
 // 調べた結果を保存しない (消した場所にフォルダを作り直したり、古い場所の結果を書き込んだりしないため)
 let generation = 0;
 
 // 一覧の作り方 (分離の種類の判定など) を変えたら上げる。版が違う一覧は作り直す
-const LIST_FORMAT = 5;
+const LIST_FORMAT = 7;
 
 function listCacheVersion(): string {
     return `${componentSpec('separator').version}+list${LIST_FORMAT}`;
@@ -82,7 +82,7 @@ export function readSeparatorModelList(): ModelListCache | null {
     }
 }
 
-// 保存した一覧と取得元を読み直させる (パッケージ一式の導入・削除と、ライブラリの移動の後)
+// 保存した一覧と取得元を読み直させる (パッケージ一式の導入・削除と、ライブラリ・キャッシュの移動の後)
 export function forgetSeparatorModelList(): void {
     cachedList = null;
     pendingList = null;
@@ -110,7 +110,7 @@ export function ensureSeparatorModelList(): Promise<ModelListCache> {
 }
 
 // パッケージ一式の Python から一覧を取得して保存する。取得している間に一覧を読み直させた場合
-// (パッケージ一式の削除・導入、ライブラリの移動) は、古い結果を保存も記録もしない
+// (パッケージ一式の削除・導入、ライブラリ・キャッシュの移動) は、古い結果を保存も記録もしない
 async function refreshSeparatorModelList(): Promise<ModelListCache> {
     const started = generation;
     const worker = getWorker('separator');

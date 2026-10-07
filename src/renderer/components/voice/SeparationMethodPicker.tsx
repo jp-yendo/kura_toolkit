@@ -27,14 +27,18 @@ import {
     type SeparationCategory,
     type SeparationMethod,
     type SeparationMethodChoice,
+    type SeparationOtherChoice,
     type SeparationModel,
     type SeparationModelList,
 } from '@shared/voice/types';
+import { NOISE_REMOVAL_MODELS, noiseRemovalOption, silenceOption } from '@shared/voice/audio-filters';
+import { NoiseRemovalFields, resolvedNoiseOption, SilenceFields } from './AudioFilterFields';
 
-// 分離の方式の選択。選び方は 2 つ (タブで切り替える):
+// 分離の方式の選択。選び方は 3 つ (タブで切り替える):
 // - おすすめ: 目的別のおすすめ (ダウンロード画面と同じ。配布元が検証した組み合わせと、目的に合うモデル) から 1 つを選ぶ
 // - モデル: 取得済みのモデルを、ダウンロード画面と同じまとまり (分離の種類) の見出しと並びの一覧から選ぶ (絞り込める)。
 //   まとまりをまたいで複数選べ、2 つ以上選ぶと各モデルの結果から「結果の決め方」で 1 つの結果を決める
+// - その他: 分離はせず、無音部分の雑音を消す・ノイズを除去するで音を加工した 1 つの出力を作る
 
 export type MethodSelection = SeparationMethodChoice;
 
@@ -51,7 +55,7 @@ export function separatorDisplayName(name: string): string {
     return name.replace(/^(?:[^:]*\bModel\b[^:]*|Demucs[^:]*):\s*/, '') || name;
 }
 
-type PickMode = 'recommended' | 'model';
+type PickMode = 'recommended' | 'model' | 'other';
 
 // おすすめの項目
 type RecommendedOption = {
@@ -69,11 +73,10 @@ type RecommendedOption = {
 
 type RecommendedGroup = { purposeId: string; options: RecommendedOption[] };
 
-// 選んだ方式と、パラメーターを示す方式 (アーキテクチャ)・品質の表示に使うモデル
+// 選んだ方式と、詳細な設定を示す方式 (アーキテクチャ)
 export type ResolvedMethod = {
     method: SeparationMethod | null;
     archs: SeparationArch[];
-    model: SeparationModel | null;
 };
 
 function installedModels(list: SeparationModelList | null): SeparationModel[] {
@@ -131,11 +134,11 @@ function findRecommended(
 }
 
 // 選べる選び方 (おすすめは取得済みのものが無ければ出さない)。モデルのタブは、取得済みのモデルが無くても
-// まとまりと取得の案内を示すため常に出す
+// まとまりと取得の案内を示すため常に出す。その他のタブもモデルを使わないため常に出す
 function availableModes(list: SeparationModelList | null): PickMode[] {
     const modes: PickMode[] = [];
     if (buildRecommended(list).length > 0) modes.push('recommended');
-    modes.push('model');
+    modes.push('model', 'other');
     return modes;
 }
 
@@ -162,8 +165,20 @@ function selectedModels(selection: MethodSelection, list: SeparationModelList | 
 
 // 選んだ方式を求める
 export function resolveMethod(selection: MethodSelection, list: SeparationModelList | null): ResolvedMethod {
-    const none: ResolvedMethod = { method: null, archs: [], model: null };
+    const none: ResolvedMethod = { method: null, archs: [] };
     const mode = activeMode(selection, availableModes(list));
+    if (mode === 'other') {
+        const other = otherChoice(selection);
+        if (!other.muteSilence.enabled && !other.noiseRemoval.enabled) return none;
+        return {
+            method: {
+                kind: 'process',
+                muteSilence: other.muteSilence,
+                noiseRemoval: resolvedNoiseOption(other.noiseRemoval, installedNoiseModels(list)),
+            },
+            archs: [],
+        };
+    }
     if (mode === 'recommended') {
         const option = findRecommended(buildRecommended(list), selection.recommended)?.option;
         if (!option) return none;
@@ -171,13 +186,11 @@ export function resolveMethod(selection: MethodSelection, list: SeparationModelL
             return {
                 method: { kind: 'model', filename: option.model.filename },
                 archs: [option.model.arch],
-                model: option.model,
             };
         }
         return {
             method: { kind: 'verifiedEnsemble', ensembleId: option.key.slice('verified:'.length) },
             archs: archsOf(list, option.members),
-            model: null,
         };
     }
     const models = selectedModels(selection, list);
@@ -186,19 +199,34 @@ export function resolveMethod(selection: MethodSelection, list: SeparationModelL
         return {
             method: { kind: 'model', filename: models[0].filename },
             archs: [models[0].arch],
-            model: models[0],
         };
     }
     const filenames = models.map(model => model.filename);
     return {
         method: { kind: 'ensemble', filenames, algorithm: selection.algorithm },
         archs: archsOf(list, filenames),
-        model: null,
     };
+}
+
+// 「その他」の加工 (選んでいなければ初期値。無音部分の雑音を消すはチェックあり、ノイズ除去はチェックなし)
+function otherChoice(selection: MethodSelection): SeparationOtherChoice {
+    return selection.other ?? { muteSilence: silenceOption(true), noiseRemoval: noiseRemovalOption(false) };
+}
+
+// 取得済みのノイズ除去のおすすめのモデル (おすすめの順)
+function installedNoiseModels(list: SeparationModelList | null): { filename: string; name: string }[] {
+    return NOISE_REMOVAL_MODELS.flatMap(item => {
+        const model = list?.models.find(entry => entry.filename === item.filename && entry.installed);
+        return model ? [{ filename: model.filename, name: model.name }] : [];
+    });
 }
 
 // 方式の選択のうち、取得していないものがあるか (プリセットの呼び出しで使う)
 export function hasUnavailableChoice(selection: MethodSelection, list: SeparationModelList | null): boolean {
+    if (selection.mode === 'other') {
+        const noise = otherChoice(selection).noiseRemoval;
+        return noise.enabled && noise.method === 'model' && installedNoiseModels(list).length === 0;
+    }
     if (selection.mode === 'recommended') {
         return !!selection.recommended && !findRecommended(buildRecommended(list), selection.recommended);
     }
@@ -279,6 +307,7 @@ export default function SeparationMethodPicker({ models, value, onChange, disabl
     const chosen = React.useMemo(() => selectedModels(value, models), [value, models]);
     const mode = activeMode(value, modes);
     const resolved = resolveMethod(value, models);
+    const noiseModels = React.useMemo(() => installedNoiseModels(models), [models]);
     const update = (patch: Partial<MethodSelection>) => onChange({ ...value, mode, ...patch });
 
     // モデルの一覧のまとまり (ダウンロード画面と同じ名前・順。取得済みのモデルが無いまとまりも示す)
@@ -384,6 +413,23 @@ export default function SeparationMethodPicker({ models, value, onChange, disabl
                         ])}
                     </Select>
                 </FormControl>
+            )}
+
+            {mode === 'other' && (
+                <Stack spacing={1}>
+                    <SilenceFields
+                        mode='mute'
+                        value={otherChoice(value).muteSilence}
+                        disabled={disabled}
+                        onChange={muteSilence => update({ other: { ...otherChoice(value), muteSilence } })}
+                    />
+                    <NoiseRemovalFields
+                        models={noiseModels}
+                        value={otherChoice(value).noiseRemoval}
+                        disabled={disabled}
+                        onChange={noiseRemoval => update({ other: { ...otherChoice(value), noiseRemoval } })}
+                    />
+                </Stack>
             )}
 
             {mode === 'model' && (

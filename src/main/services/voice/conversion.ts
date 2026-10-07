@@ -10,6 +10,8 @@ import { getWorker } from './python-worker';
 import { RVC_EMBEDDER_ITEMS } from './spec';
 import { withGpu } from './gpu-lock';
 import { ffmpegPhase, voicePhase, workerEvents } from './job-progress';
+import { removeNoise } from './audio-filters';
+import { sanitizeNoiseRemovalOption, sanitizeSilenceOption } from '../../../shared/voice/audio-filters';
 import { rvcModelFiles } from './voice-models';
 import { discardLater, isInsideWork, newId, produceShared, sessionDir, withJobTemp } from '../work-dir';
 import type {
@@ -64,9 +66,18 @@ async function removeOtherShifts(keep: string): Promise<void> {
     }
 }
 
-export async function runConversion(jobId: string, request: ConversionRunRequest): Promise<ConversionCandidate> {
+export async function runConversion(jobId: string, received: ConversionRunRequest): Promise<ConversionCandidate> {
     startJob(jobId);
     try {
+        // 画面から受け取った加工の設定を確かめる
+        const request: ConversionRunRequest = {
+            ...received,
+            params: {
+                ...received.params,
+                muteSilence: sanitizeSilenceOption(received.params.muteSilence),
+                noiseRemoval: sanitizeNoiseRemovalOption(received.params.noiseRemoval),
+            },
+        };
         if (!isInsideWork(request.workKey, request.vocals)) throw new Error('INVALID_PATH');
         if (request.accompaniment && !isInsideWork(request.workKey, request.accompaniment)) {
             throw new Error('INVALID_PATH');
@@ -133,23 +144,30 @@ async function convertInto(
                     volumeEnvelope: request.params.volumeEnvelope,
                     protect: request.params.protect,
                     embedder: rvc.embedder,
+                    muteSilence: request.params.muteSilence,
                 },
                 { jobId, onEvent: workerEvents(jobId, 0, 80) }
             )
         );
+        // ノイズを除去する場合は、変換後の声から除去してから音量をそろえる
+        let cleaned = converted;
+        if (request.params.noiseRemoval.enabled) {
+            cleaned = path.join(temp, 'denoised.wav');
+            await removeNoise(jobId, converted, cleaned, request.params.noiseRemoval, temp);
+        }
         // 変換後の声を、元の声と同じ大きさ (統合ラウドネス) にそろえる。どちらかが無音で測れない場合はそろえない
         // 段階の進み具合: 変換前の測定 0-0.4、変換後の測定 0.4-0.8、音量の調整 0.8-1
         const loudness = (from: number, span: number) => (percent: number) =>
             voicePhase(jobId, 'loudness', { fraction: from + (span * percent) / 100 });
         voicePhase(jobId, 'loudness', { fraction: 0 });
         const originalLoudness = await measureLoudness(monoInput, jobId, loudness(0, 0.4));
-        const convertedLoudness = await measureLoudness(converted, jobId, loudness(0.4, 0.4));
+        const convertedLoudness = await measureLoudness(cleaned, jobId, loudness(0.4, 0.4));
         const gainDb =
             originalLoudness !== null && convertedLoudness !== null ? originalLoudness - convertedLoudness : 0;
         // 変換結果はモデルのサンプリング周波数のモノラルのまま残す (伴奏の周波数やチャンネル数には、重ねる処理で合わせる。
         // ここで合わせると、書き出しのときにもう一度周波数を変えることになるため)
         if (gainDb === 0) {
-            fs.renameSync(converted, vocalsOut);
+            fs.renameSync(cleaned, vocalsOut);
         } else {
             await runFfmpeg(
                 [
@@ -157,14 +175,14 @@ async function convertInto(
                     '-nostdin',
                     '-y',
                     '-i',
-                    converted,
+                    cleaned,
                     '-af',
                     `volume=${gainDb.toFixed(2)}dB`,
                     '-c:a',
                     'pcm_f32le',
                     vocalsOut,
                 ],
-                { jobId, totalSec: (await probeAudio(converted, jobId)).durationSec, onProgress: loudness(0.8, 0.2) }
+                { jobId, totalSec: (await probeAudio(cleaned, jobId)).durationSec, onProgress: loudness(0.8, 0.2) }
             );
         }
     });

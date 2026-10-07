@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { emitJobEvent, finishJob, startJob } from '../job-manager';
 import { resolveFfmpegPath } from '../ffmpeg/ffmpeg';
-import { convertChannels, decodeToWav, mixFiles, padEnd, probeAudio } from './audio-tools';
+import { convertChannels, decodeToWav, mixFiles, padEnd, probeAudio, SEPARATION_PAD_SECONDS } from './audio-tools';
 import { isComponentCurrent, isItemInstalled } from './library';
 import { forgetMedia, forgetMediaUnder } from '../media-protocol';
 import { mediaRef } from './media';
@@ -12,9 +12,12 @@ import { getWorker } from './python-worker';
 import { ensureSeparatorModelList, readSeparatorModelList, separatorModelInstalled } from './separator-models';
 import { separatorItemId } from './spec';
 import { withGpu } from './gpu-lock';
+import { editSilence, removeNoise } from './audio-filters';
+import { sanitizeNoiseRemovalOption, sanitizeSilenceOption } from '../../../shared/voice/audio-filters';
 import { ffmpegPhase, voicePhase, workerEvents } from './job-progress';
 import { discardLater, isInsideWork, newId, produceShared, removeSession, sessionDir, sessionPath } from '../work-dir';
 import type {
+    SeparationMethod,
     VerifiedEnsemble,
     MediaRef,
     PreparedInput,
@@ -26,7 +29,7 @@ import type {
     SeparationStem,
 } from '../../../shared/voice/types';
 
-// 音声分離。結果は作業ディレクトリに候補として残し、プレビューと採用に使う。
+// 音声分離。結果は作業ディレクトリに候補として残し、プレビュー・続けての分離・書き出し・変換の入力に使う。
 // 分離した各出力は、元の音源のチャンネル構成 (モノラルならモノラル) に戻す。
 
 // 入力の音声を内部処理用の WAV にする (作業ごとの置き場所に置く)
@@ -103,6 +106,8 @@ function requiredModels(request: SeparationRunRequest): string[] {
 
 function methodLabel(request: SeparationRunRequest): string {
     const method = request.method;
+    // 「その他」の名前は画面で付ける
+    if (method.kind === 'process') return '';
     const list = readSeparatorModelList();
     if (method.kind === 'model')
         return list?.models.find(model => model.filename === method.filename)?.name ?? method.filename;
@@ -128,9 +133,6 @@ function usedParams(request: SeparationRunRequest): Partial<SeparationParams> {
     return result;
 }
 
-// 分離の入力の末尾に足す無音 (秒)
-const SEPARATION_PAD_SECONDS = 1;
-
 export async function runSeparation(jobId: string, request: SeparationRunRequest): Promise<SeparationCandidate> {
     startJob(jobId);
     try {
@@ -138,7 +140,20 @@ export async function runSeparation(jobId: string, request: SeparationRunRequest
         const id = newId();
         const dir = sessionDir(request.workKey, 'candidates', id);
         try {
-            return await separateInto(jobId, request, id, dir);
+            return request.method.kind === 'process'
+                ? await processInto(
+                      jobId,
+                      request,
+                      {
+                          kind: 'process',
+                          // 画面から受け取った設定を確かめる
+                          muteSilence: sanitizeSilenceOption(request.method.muteSilence),
+                          noiseRemoval: sanitizeNoiseRemovalOption(request.method.noiseRemoval),
+                      },
+                      id,
+                      dir
+                  )
+                : await separateInto(jobId, request, id, dir);
         } catch (error) {
             // 失敗・キャンセルした場合は作りかけの候補を消す
             discardLater(dir);
@@ -208,6 +223,45 @@ async function separateInto(
         methodLabel: methodLabel(request),
         params: usedParams(request),
         stems: refs,
+        createdAt: Date.now(),
+    };
+}
+
+// 分岐の「その他」: 分離はせず、無音部分の雑音を消す・ノイズを除去するの順に加工した 1 つの出力を作る
+// (長さとチャンネル数は変わらない)
+async function processInto(
+    jobId: string,
+    request: SeparationRunRequest,
+    method: Extract<SeparationMethod, { kind: 'process' }>,
+    id: string,
+    dir: string
+): Promise<SeparationCandidate> {
+    if (!method.muteSilence.enabled && !method.noiseRemoval.enabled) throw new Error('NOTHING_TO_PROCESS');
+    const work = path.join(dir, 'work');
+    fs.mkdirSync(work, { recursive: true });
+    let current = request.input;
+    if (method.muteSilence.enabled) {
+        const next = path.join(work, 'muted.wav');
+        await editSilence(jobId, 'separator', current, next, method.muteSilence, 'mute');
+        current = next;
+    }
+    if (method.noiseRemoval.enabled) {
+        const next = path.join(work, 'denoised.wav');
+        await removeNoise(jobId, current, next, method.noiseRemoval, work);
+        current = next;
+    }
+    const name = request.outputName || 'output';
+    // ファイル名は決まった名前にする (出力の名前は画面の言語で付けるため、ファイル名に使えない文字を含みうる)
+    const target = path.join(dir, 'processed.wav');
+    fs.renameSync(current, target);
+    discardLater(work);
+    emitJobEvent({ jobId, kind: 'progress', percent: 100 });
+    return {
+        id,
+        method: request.method,
+        methodLabel: methodLabel(request),
+        params: {},
+        stems: [{ name, media: await mediaRef(target) }],
         createdAt: Date.now(),
     };
 }

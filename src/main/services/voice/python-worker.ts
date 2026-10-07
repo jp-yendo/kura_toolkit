@@ -65,6 +65,8 @@ class PythonWorker {
     private stderrLines: string[] = [];
     // 要求は 1 件ずつ順番に処理する (Python 側も 1 件ずつしか処理しない)
     private chain: Promise<unknown> = Promise.resolve();
+    // 送った (または順番を待っている) 要求の数。0 になったときに、今の機能で使わない処理役なら止める
+    private inFlight = 0;
 
     constructor(
         private readonly component: VoiceComponentId,
@@ -201,10 +203,18 @@ class PythonWorker {
                 }
                 child.stdin?.write(`${JSON.stringify({ id, method, params })}\n`);
             });
-        const result = this.chain.then(run, run);
+        this.inFlight++;
+        const result = this.chain.then(run, run).finally(() => {
+            this.inFlight--;
+            if (this.inFlight === 0) stopIfUnused(this.component);
+        });
         // 失敗しても後続の要求は処理する
         this.chain = result.catch(() => undefined);
         return result;
+    }
+
+    get idle(): boolean {
+        return this.inFlight === 0;
     }
 
     // プロセスを終了させ、終了させたことのあるプロセスも含めてすべて終了するまで待つ。
@@ -231,6 +241,31 @@ class PythonWorker {
 }
 
 const workers = new Map<VoiceComponentId, PythonWorker>();
+
+// 機能 (画面の経路の先頭 2 つ。renderer の featureOf) ごとに、その機能を開いている間だけ保持する処理役 (その機能で
+// 使いうるもの)。
+// 処理役は最初に使ったときに起動し、その機能を離れたら止める (機能ごとに保持するため、Python を使う機能が
+// 増えても、同時に動く処理役はその機能で使うものだけになる)。ほかの機能から一時的に使った処理役
+// (ダウンロード画面での分離モデルの一覧作りなど) は、使い終わったら止める
+const FEATURE_WORKERS: Record<string, VoiceComponentId[]> = {
+    'audio/separation': ['separator'],
+    'audio/conversion': ['separator', 'converter'],
+    // 読み上げの学習用の音のフィルターで、モデルでノイズを除去する場合は分離の処理役を使う
+    'audio/tts': ['tts', 'separator'],
+};
+
+let keptComponents = new Set<VoiceComponentId>();
+
+function stopIfUnused(component: VoiceComponentId): void {
+    const worker = workers.get(component);
+    if (worker && worker.running && worker.idle && !keptComponents.has(component)) worker.kill(false);
+}
+
+// 開いている機能を切り替える。前の機能でだけ使っていた処理役は、処理中でなければすぐ止め、処理中なら終わったときに止める
+export function setVoiceFeature(feature: string | null): void {
+    keptComponents = new Set(feature ? (FEATURE_WORKERS[feature] ?? []) : []);
+    for (const component of workers.keys()) stopIfUnused(component);
+}
 
 // 常駐プロセスの作業ディレクトリ (Applio は作業ディレクトリを基準に設定やモデルを探すため、ソース一式の場所で動かす)
 function workerCwd(component: VoiceComponentId): string {
@@ -268,11 +303,12 @@ export function stopAllWorkers(): void {
     for (const worker of workers.values()) worker.kill(false);
 }
 
-// 常駐プロセスをすべて止め、終了するまで待つ。仮想環境やモデルのファイルを移動・削除・入れ替える前に使う
-// (Windows では、終了しきっていないプロセスが読み込んだ DLL やモデルのファイルを掴んでいて、移動や削除が失敗するため)。
-// 時間内に終了しないプロセスがあれば PYTHON_STOP_TIMEOUT で失敗する
+// 常駐プロセスの終了を待つ時間
 const WORKER_EXIT_TIMEOUT_MS = 15_000;
 
+// 常駐プロセスをすべて止め、終了するまで待つ。仮想環境やモデルのファイルを移動・削除・入れ替える前と、アプリの終了時に使う
+// (Windows では、終了しきっていないプロセスが読み込んだ DLL やモデルのファイルを掴んでいて、移動や削除が失敗するため)。
+// 時間内に終了しないプロセスがあれば PYTHON_STOP_TIMEOUT で失敗する
 export async function stopAllWorkersAndWait(): Promise<void> {
     await Promise.all([...workers.values()].map(worker => worker.killAndWait(WORKER_EXIT_TIMEOUT_MS)));
 }

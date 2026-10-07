@@ -17,6 +17,8 @@ from typing import Any, Dict, List, Tuple
 
 from kura_voice import runtime
 from kura_voice.protocol import Context, KuraError
+# The silence handling requests are shared by every component (the worker looks up rpc_<method> in this module)
+from kura_voice.silence import rpc_detect_silence, rpc_edit_silence  # noqa: F401
 
 UVR_PUBLIC = "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models"
 AS_REPO = "https://github.com/nomadkaraoke/python-audio-separator/releases/download/model-configs"
@@ -109,16 +111,20 @@ def _categorize(friendly: str, filename: str, stems: List[str]) -> str:
     lower = [stem.lower() for stem in stems if stem]
     if re.search(r"karaoke|\bkara\b|_kara|bve|backing|lead", text):
         return "karaoke"
-    # "noise" alone is not used: "Instrumental Fullness Noisy" is an instrumental model.
-    if re.search(r"reverb|echo|de-?verb|de-?noise|crowd|aspiration|breath|\bdry\b", text) or any(
-        re.search(r"reverb|echo|noise|\bdry\b|crowd", stem) for stem in lower
-    ):
-        return "cleanup"
+    # Breath separation is neither noise removal nor reverb removal
+    if re.search(r"aspiration|breath", text):
+        return "other"
+    # Noise removal (crowd noise included). "noise" alone is not used in the name: "Instrumental Fullness Noisy"
+    # is an instrumental model.
+    if re.search(r"de-?noise|crowd", text) or any(re.search(r"noise|crowd", stem) for stem in lower):
+        return "denoise"
+    if re.search(r"reverb|echo|de-?verb|\bdry\b", text) or any(re.search(r"reverb|echo|\bdry\b", stem) for stem in lower):
+        return "dereverb"
     real_stems = [stem for stem in lower if stem != "unknown"]
     if (
         len(real_stems) >= 3
         or re.search(r"demucs|drumsep|[46]stem|roformer[ _-]sw\b", text)
-        or any(re.search(r"drum|bass|guitar|piano", stem) for stem in real_stems)
+        or any(re.search(r"drum|bass|guitar|piano|wind", stem) for stem in real_stems)
         # "other" / "no other": the instruments other than vocals, drums and bass
         or ("other" in real_stems and "no other" in real_stems)
     ):

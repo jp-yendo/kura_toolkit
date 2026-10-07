@@ -39,6 +39,8 @@ export default {
         finishStems: 'Finishing the separated audio',
         convert: 'Converting the voice',
         loudness: 'Matching the volume',
+        silence: 'Processing the silent parts',
+        noiseRemoval: 'Removing noise',
         pitchShift: 'Changing the key of the accompaniment',
         mix: 'Mixing',
         synthesize: 'Creating the audio',

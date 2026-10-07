@@ -28,6 +28,7 @@ import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import AudioFileOutlinedIcon from '@mui/icons-material/AudioFileOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
+import GraphicEqIcon from '@mui/icons-material/GraphicEq';
 import SchoolIcon from '@mui/icons-material/School';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -40,6 +41,8 @@ import VoiceFeatureHeader from '../../components/voice/VoiceFeatureHeader';
 import RecorderControl from '../../components/voice/RecorderControl';
 import SyncPlayer from '../../components/voice/SyncPlayer';
 import TrainingSetBar from '../../components/voice/TrainingSetBar';
+import TrainingFilterDialog from '../../components/voice/TrainingFilterDialog';
+import { silenceOption } from '@shared/voice/audio-filters';
 import { useTrainingSets } from '../../components/voice/useTrainingSets';
 import { audioInputFilters } from '../../components/voice/audioInput';
 import { formatDuration } from '../../components/voice/voiceFormat';
@@ -79,6 +82,15 @@ export default function TtsTrainingPage() {
         audio: null,
     });
     const [created, setCreated] = React.useState<VoiceModelInfo | null>(null);
+    // 学習用の音のフィルター (audio が null のときは学習セットのすべての音)
+    const [filterTarget, setFilterTarget] = React.useState<{ open: boolean; audio: TrainingAudio | null }>({
+        open: false,
+        audio: null,
+    });
+    // 学習前の確かめで見つかった、長い無音を含む音 (名前と無音の長さ)
+    const [silenceWarning, setSilenceWarning] = React.useState<
+        { audioId: string; name: string; seconds: number }[] | null
+    >(null);
     const [recordingTarget, setRecordingTarget] = React.useState<RecordingTarget | null>(null);
     const recordingActive = recordingTarget !== null;
     const { job, run, cancel } = useJobRunner();
@@ -154,6 +166,38 @@ export default function TtsTrainingPage() {
         await refresh();
     };
 
+    // 学習前の確かめ: 長い無音を含む音があれば知らせ、了解して続行するかを選んでもらう。判断はフィルターの
+    // 「無音部分を除去する」の初期値と同じ
+    const checkBeforeTraining = async () => {
+        if (!setId || !shown) return;
+        try {
+            // 処理役の起動と解析に時間がかかるため、進捗を示して操作を止める (二重に始めないため)
+            const report = await run(t('voice.filters.checking'), () =>
+                window.kuraToolkit.voice.trainingSets.silenceReport('tts', setId, silenceOption(true))
+            );
+            const names = new Map(shown.audios.map(item => [item.id, item.name]));
+            const found = report
+                .filter(item => item.silenceSec > 0)
+                .map(item => ({
+                    audioId: item.audioId,
+                    name: names.get(item.audioId) ?? item.audioId,
+                    seconds: item.silenceSec,
+                }));
+            if (found.length > 0) {
+                setSilenceWarning(found);
+                return;
+            }
+        } catch (error) {
+            if (isCancelledError(error)) {
+                showNotice('warning', t('voice.common.cancelled'));
+                return;
+            }
+            // 確かめられなかった場合も学習は始める (補助の確かめのため)
+            showNotice('warning', t('voice.filters.checkFailed', { error: voiceErrorMessage(t, error) }), 12000);
+        }
+        await startTraining();
+    };
+
     const startTraining = async () => {
         if (!setId) return;
         try {
@@ -211,30 +255,41 @@ export default function TtsTrainingPage() {
                     }}
                 >
                     {/* 左: 文の一覧 (音声のある文に印を付ける。読みたくない文は飛ばしてよい) */}
-                    <Panel disablePadding sx={{ maxHeight: 520, overflow: 'auto' }}>
-                        <List dense disablePadding>
-                            {sentences.map((item, itemIndex) => (
-                                <ListItemButton
-                                    key={item.id}
-                                    selected={itemIndex === index}
-                                    disabled={recordingActive}
-                                    onClick={() => setIndex(itemIndex)}
-                                >
-                                    <ListItemIcon sx={{ minWidth: 32 }}>
-                                        {audioBySentence.has(item.id) ? (
-                                            <CheckCircleIcon fontSize='small' color='success' />
-                                        ) : (
-                                            <RadioButtonUncheckedIcon fontSize='small' color='disabled' />
-                                        )}
-                                    </ListItemIcon>
-                                    <ListItemText
-                                        primary={item.text}
-                                        slotProps={{ primary: { variant: 'body2', noWrap: true } }}
-                                    />
-                                </ListItemButton>
-                            ))}
-                        </List>
-                    </Panel>
+                    <Stack spacing={1}>
+                        <Button
+                            size='small'
+                            startIcon={<GraphicEqIcon />}
+                            disabled={editDisabled || recordingActive || withAudio === 0}
+                            onClick={() => setFilterTarget({ open: true, audio: null })}
+                            sx={{ alignSelf: 'flex-start' }}
+                        >
+                            {t('voice.filters.filterAll')}
+                        </Button>
+                        <Panel disablePadding sx={{ maxHeight: 520, overflow: 'auto' }}>
+                            <List dense disablePadding>
+                                {sentences.map((item, itemIndex) => (
+                                    <ListItemButton
+                                        key={item.id}
+                                        selected={itemIndex === index}
+                                        disabled={recordingActive}
+                                        onClick={() => setIndex(itemIndex)}
+                                    >
+                                        <ListItemIcon sx={{ minWidth: 32 }}>
+                                            {audioBySentence.has(item.id) ? (
+                                                <CheckCircleIcon fontSize='small' color='success' />
+                                            ) : (
+                                                <RadioButtonUncheckedIcon fontSize='small' color='disabled' />
+                                            )}
+                                        </ListItemIcon>
+                                        <ListItemText
+                                            primary={item.text}
+                                            slotProps={{ primary: { variant: 'body2', noWrap: true } }}
+                                        />
+                                    </ListItemButton>
+                                ))}
+                            </List>
+                        </Panel>
+                    </Stack>
 
                     {/* 右: 選んだ文の録音・ファイルの指定・再生 */}
                     <Panel>
@@ -300,6 +355,19 @@ export default function TtsTrainingPage() {
                                     >
                                         {t('voice.training.chooseSentenceFile')}
                                     </Button>
+                                    {audio && (
+                                        <Tooltip title={t('voice.filters.filterButton')}>
+                                            <span>
+                                                <IconButton
+                                                    aria-label={t('voice.filters.filterFor', { name: audio.name })}
+                                                    disabled={editDisabled || recordingActive}
+                                                    onClick={() => setFilterTarget({ open: true, audio })}
+                                                >
+                                                    <GraphicEqIcon />
+                                                </IconButton>
+                                            </span>
+                                        </Tooltip>
+                                    )}
                                     {audio && (
                                         <Tooltip title={t('voice.training.removeSentenceAudio')}>
                                             <span>
@@ -390,7 +458,7 @@ export default function TtsTrainingPage() {
                                 !name.trim() ||
                                 withAudio < minimum
                             }
-                            onClick={() => void startTraining()}
+                            onClick={() => void checkBeforeTraining()}
                         >
                             {t('voice.training.start')}
                         </Button>
@@ -400,6 +468,44 @@ export default function TtsTrainingPage() {
                     </Typography>
                 </Panel>
             )}
+
+            {setId && (
+                <TrainingFilterDialog
+                    key={filterTarget.audio?.id ?? 'set'}
+                    open={filterTarget.open}
+                    feature='tts'
+                    setId={setId}
+                    audio={filterTarget.audio}
+                    onClose={() => setFilterTarget(previous => ({ ...previous, open: false }))}
+                    onChanged={() => void refresh()}
+                />
+            )}
+
+            <AppDialog open={silenceWarning !== null} onClose={() => setSilenceWarning(null)} maxWidth='sm' fullWidth>
+                <DialogTitle>{t('voice.filters.silenceCheckTitle')}</DialogTitle>
+                <DialogContent dividers>
+                    <Typography variant='body2' sx={{ mb: 1, lineHeight: 1.6 }}>
+                        {t('voice.filters.silenceCheckMessage')}
+                    </Typography>
+                    {silenceWarning?.map(item => (
+                        <Typography key={item.audioId} variant='body2' color='text.secondary'>
+                            {t('voice.filters.silenceCheckItem', { name: item.name, seconds: item.seconds.toFixed(1) })}
+                        </Typography>
+                    ))}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setSilenceWarning(null)}>{t('common.cancel')}</Button>
+                    <Button
+                        variant='contained'
+                        onClick={() => {
+                            setSilenceWarning(null);
+                            void startTraining();
+                        }}
+                    >
+                        {t('voice.filters.continueAnyway')}
+                    </Button>
+                </DialogActions>
+            </AppDialog>
 
             <ProgressDialog
                 open={job !== null}

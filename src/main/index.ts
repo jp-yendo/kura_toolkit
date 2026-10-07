@@ -5,14 +5,15 @@ import { registerIpcHandlers } from './ipc/index';
 import { IPC_CHANNELS } from '../shared/constants';
 import { initializeUpdater, scheduleStartupCheck, isInstallingUpdate } from './services/updater';
 import { applySavedTheme, getSettings, initializeSearchThreads, updateSettings } from './services/settings';
-import { cancelAllJobs, setJobWindow } from './services/job-manager';
+import { cancelAllJobs, setJobWindow, waitForJobsToFinish } from './services/job-manager';
 import { registerMediaProtocol, registerMediaSchemePrivileges } from './services/media-protocol';
 import { removeLeftoverWorkFiles } from './services/work-dir';
 import { removeExpiredCache } from './services/cache-dir';
 import { removeVoiceStagingLeftovers } from './services/voice/voice-models';
 import { removeTrainingSetLeftovers } from './services/voice/training-sets';
+import { removeInstallLeftovers } from './services/voice/installer';
 import { setGpuSwitchHandler } from './services/voice/gpu-lock';
-import { stopAllWorkers, unloadOtherWorkers } from './services/voice/python-worker';
+import { stopAllWorkers, stopAllWorkersAndWait, unloadOtherWorkers } from './services/voice/python-worker';
 
 let mainWindow: BrowserWindow | null = null;
 // 画面が閉じてよいと返したか (保存していない入力の確認を済ませたか)
@@ -111,10 +112,12 @@ app.whenReady().then(async () => {
     // 初回起動時だけ、探索のスレッド数の既定値を決めて保存する
     initializeSearchThreads();
 
-    // 前回の起動が残した一時ファイルと、作りかけのまま残った声のモデル・学習セットの音声を裏で消す (起動は待たせない)
+    // 前回の起動が残した一時ファイルと、作りかけのまま残った声のモデル・学習セットの音声・導入の残りを裏で消す
+    // (起動は待たせない。導入は、導入の残りを消し終えてから始める)
     removeLeftoverWorkFiles();
     removeVoiceStagingLeftovers();
     removeTrainingSetLeftovers();
+    removeInstallLeftovers();
     // 保持期間を過ぎたキャッシュを裏で消す (起動は待たせない)
     void removeExpiredCache();
     // 音声機能: プレビュー再生用のスキームを登録する
@@ -178,7 +181,58 @@ app.whenReady().then(async () => {
     createWindow();
 });
 
-// 終了時は Python の常駐プロセスを止める。作業ディレクトリに残ったものは、終了を待たせないよう次の起動時に消す
+// アプリの終了は、実行中の処理のキャンセルとして扱う。ウィンドウがあるうちは先にウィンドウを閉じ、閉じる前の確認
+// (保存していない入力) を通す (確認で取り消した場合は何もしない)。ウィンドウが閉じた後に、処理をすべてキャンセルし、
+// 外部プロセスの終了と、各処理の後片付け (作りかけのものを片付けの一覧に積む) が終わるのを待ってから終える。
+// 待つのは QUIT_WAIT_MS まで (終わらない場合も終える)。片付けの一覧のものと、強制終了などで片付けられなかったものは、
+// 次の起動時に消す
+const QUIT_WAIT_MS = 10_000;
+let quitPrepared = false;
+let quitPreparing = false;
+
+async function prepareQuit(): Promise<void> {
+    cancelAllJobs();
+    await Promise.race([
+        (async () => {
+            await waitForJobsToFinish(QUIT_WAIT_MS);
+            await stopAllWorkersAndWait().catch(error => console.warn('failed to stop the Python workers', error));
+        })(),
+        new Promise(resolve => setTimeout(resolve, QUIT_WAIT_MS)),
+    ]);
+}
+
+app.on('before-quit', event => {
+    // 更新のインストールでの終了は、更新器に任せる
+    if (quitPrepared || isInstallingUpdate()) return;
+    event.preventDefault();
+    // ウィンドウがあれば閉じる確認を通す。閉じたら window-all-closed から app.quit() が呼ばれ、ここへ戻る
+    if (mainWindow && !quitPreparing) {
+        mainWindow.close();
+        return;
+    }
+    if (quitPreparing) return;
+    quitPreparing = true;
+    void prepareQuit().finally(() => {
+        quitPrepared = true;
+        app.quit();
+    });
+});
+
+// 終了の信号 (ターミナルからの Ctrl+C など) も、アプリの終了として扱う。閉じる前の確認は出さない (応答できないため)。
+// 終了の途中でもう一度受けたら、待たずに終える
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+    process.on(signal, () => {
+        if (quitPreparing) {
+            app.exit(0);
+            return;
+        }
+        closeConfirmed = true;
+        app.quit();
+    });
+}
+
+// 待ちきれずに終えた場合も、Python の常駐プロセスは止める。作業ディレクトリに残ったものは、終了を待たせないよう
+// 次の起動時に消す
 app.on('will-quit', () => {
     stopAllWorkers();
 });

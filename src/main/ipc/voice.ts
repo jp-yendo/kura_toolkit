@@ -13,6 +13,13 @@ import {
     removeItems,
 } from '../services/voice/library';
 import { getPlatformInfo } from '../services/voice/platform';
+import { setVoiceFeature } from '../services/voice/python-worker';
+import {
+    sanitizeSilenceOption,
+    sanitizeTrainingFilterOptions,
+    type SilenceOption,
+    type TrainingFilterOptions,
+} from '../../shared/voice/audio-filters';
 import { listPresets, removePreset, renamePreset, savePreset, type PresetParams } from '../services/voice/presets';
 import { ensureSeparatorModelList, probeSeparatorSizes } from '../services/voice/separator-models';
 import {
@@ -36,6 +43,10 @@ import {
     getTrainingSet,
     listTrainingSets,
     removeTrainingAudio,
+    filterTrainingAudio,
+    replaceTrainingAudio,
+    filterTrainingSet,
+    trainingSilenceReport,
     removeTrainingSet,
     renameTrainingSet,
 } from '../services/voice/training-sets';
@@ -116,6 +127,9 @@ export function registerVoiceIpcHandlers() {
     ipcMain.handle(IPC_CHANNELS.VOICE_LIBRARY_PENDING_UPDATES, () => getPendingUpdates());
     ipcMain.handle(IPC_CHANNELS.VOICE_LIBRARY_MARK_PROMPTED, () => markUpdatePrompted());
     ipcMain.handle(IPC_CHANNELS.VOICE_OPEN_EXTERNAL, (_e, url: string) => openHttps(url));
+    ipcMain.handle(IPC_CHANNELS.VOICE_SET_FEATURE, (_e, feature: string | null) =>
+        setVoiceFeature(typeof feature === 'string' ? feature : null)
+    );
     ipcMain.handle(IPC_CHANNELS.VOICE_RECORDING_BEGIN, (_e, sampleRate: number) => beginRecording(sampleRate));
     ipcMain.handle(IPC_CHANNELS.VOICE_RECORDING_APPEND, (_e, id: string, pcm: Uint8Array) => appendRecording(id, pcm));
     ipcMain.handle(IPC_CHANNELS.VOICE_RECORDING_FINISH, (_e, id: string) => finishRecording(id));
@@ -249,6 +263,41 @@ export function registerVoiceIpcHandlers() {
     );
     ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_SETS_REMOVE_AUDIO, (_e, feature: unknown, id: string, audioId: string) =>
         removeTrainingAudio(checkFeatureId(feature), id, audioId)
+    );
+    ipcMain.handle(
+        IPC_CHANNELS.VOICE_TRAINING_SETS_FILTER_AUDIO,
+        (
+            _e,
+            jobId: string,
+            feature: unknown,
+            id: string,
+            audioId: string,
+            workKey: string,
+            options: TrainingFilterOptions
+        ) =>
+            filterTrainingAudio(
+                jobId,
+                checkFeatureId(feature),
+                id,
+                audioId,
+                workKey,
+                sanitizeTrainingFilterOptions(options)
+            )
+    );
+    ipcMain.handle(
+        IPC_CHANNELS.VOICE_TRAINING_SETS_REPLACE_AUDIO,
+        (_e, feature: unknown, id: string, audioId: string, workKey: string, result: string) =>
+            replaceTrainingAudio(checkFeatureId(feature), id, audioId, workKey, result)
+    );
+    ipcMain.handle(
+        IPC_CHANNELS.VOICE_TRAINING_SETS_FILTER_ALL,
+        (_e, jobId: string, feature: unknown, id: string, options: TrainingFilterOptions) =>
+            filterTrainingSet(jobId, checkFeatureId(feature), id, sanitizeTrainingFilterOptions(options))
+    );
+    ipcMain.handle(
+        IPC_CHANNELS.VOICE_TRAINING_SETS_SILENCE,
+        (_e, feature: unknown, id: string, option: SilenceOption) =>
+            trainingSilenceReport(checkFeatureId(feature), id, sanitizeSilenceOption(option))
     );
 
     // --- 学習 ---

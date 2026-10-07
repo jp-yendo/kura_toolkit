@@ -17,7 +17,6 @@ import {
 import CallSplitIcon from '@mui/icons-material/CallSplit';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
-import TuneIcon from '@mui/icons-material/Tune';
 import { useTranslation } from 'react-i18next';
 import AppDialog from '../common/AppDialog';
 import Panel from '../common/Panel';
@@ -25,6 +24,7 @@ import ProgressDialog from '../common/ProgressDialog';
 import SeparationDialog from './SeparationDialog';
 import { EMPTY_METHOD_SELECTION, separatorDisplayName, type MethodSelection } from './SeparationMethodPicker';
 import SyncPlayer from './SyncPlayer';
+import { filterSummary } from './AudioFilterFields';
 import {
     childrenOf,
     descendantsOf,
@@ -76,7 +76,7 @@ type DialogTarget =
 type RemoveConfirm = { kind: 'remove' | 'redo'; node: SepNode; outputs: string[]; open: boolean };
 
 // 分離の操作部。音声分離の画面と、音声変換の画面 (入力と分離) で共用する。
-// 元の音源を根にした木の形で、分離した結果をその音の下に字下げして並べる。どの音からも「ここから分離」で
+// 元の音源を根にした木の形で、分離した結果をその音の下に字下げして並べる。どの音からも「分岐」で
 // 何度でも分離でき (同じ音から分離した結果どうしを聞き比べられる)、結果は「パラメーターを変えて作成」で作り直せる
 export default function SeparationWorkbench({ store, disabled, saveColumn }: Props) {
     const { t } = useTranslation();
@@ -147,6 +147,7 @@ export default function SeparationWorkbench({ store, disabled, saveColumn }: Pro
         if (method.kind === 'ensemble') {
             return `${method.filenames.map(modelName).join(' + ')} (${t(`voice.separation.algorithms.${method.algorithm}`)})`;
         }
+        if (method.kind === 'process') return t('voice.separation.pickModes.other');
         return result.methodLabel;
     };
 
@@ -160,6 +161,11 @@ export default function SeparationWorkbench({ store, disabled, saveColumn }: Pro
         (Object.keys(ARCH_KEYS) as SeparationArch[]).find(arch => ARCH_KEYS[arch] === key) ?? key;
     // 結果に添えるパラメーター。既定から変えた値だけを示す (結果どうしの違いを読み取りやすくするため)
     const paramsSummary = (result: SeparationCandidate) => {
+        // 「その他」は、チェックした加工を示す
+        if (result.method.kind === 'process') {
+            const noiseModels = (models?.models ?? []).map(model => ({ filename: model.filename, name: model.name }));
+            return filterSummary(t, result.method, noiseModels).join(' / ');
+        }
         const parts = Object.entries(result.params).flatMap(([key, values]) => {
             const defaults = DEFAULT_SEPARATION_PARAMS[key as keyof SeparationParams] as unknown as Record<
                 string,
@@ -209,6 +215,7 @@ export default function SeparationWorkbench({ store, disabled, saveColumn }: Pro
                     channels: source.channels,
                     method,
                     params: nextParams,
+                    outputName: t('voice.separation.otherOutput'),
                 })
             );
             if (target.kind === 'redo') {
@@ -269,7 +276,7 @@ export default function SeparationWorkbench({ store, disabled, saveColumn }: Pro
         setRenaming(null);
     };
 
-    // 1 行の並び: 字下げした名前・プレーヤー・ここから分離 | 保存対象
+    // 1 行の並び: 字下げした名前・プレーヤー・分岐 | 保存対象
     const rowSx = {
         display: 'grid',
         gridTemplateColumns: saveColumn ? `minmax(0, 1fr) ${SAVE_COLUMN_WIDTH}px` : 'minmax(0, 1fr)',
@@ -327,7 +334,6 @@ export default function SeparationWorkbench({ store, disabled, saveColumn }: Pro
                             </Box>
                             <Button
                                 size='small'
-                                startIcon={<TuneIcon />}
                                 disabled={busy}
                                 onClick={() => askRedo(node)}
                                 sx={{ whiteSpace: 'nowrap' }}

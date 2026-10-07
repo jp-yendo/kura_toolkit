@@ -31,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Closing the app while Audio Normalizer or Chapter Cut is working now cancels the task and waits for it
+  to clean up, so no temporary files are left next to the output files.
 - Audio Normalizer no longer changes the balance between quiet and loud parts of a song. It now
   raises or lowers the whole file by one amount to get close to the target LUFS. Files whose peaks would
   go over the limit are raised only as far as the limit allows and are listed in the result. Files that

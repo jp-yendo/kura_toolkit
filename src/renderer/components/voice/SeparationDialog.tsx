@@ -24,15 +24,14 @@ import type {
 } from '@shared/voice/types';
 import type { VoicePresetParams } from '@shared/ipc';
 
-// 分離のプリセット (方式の選び方と詳細な設定)。以前の形式 (アーキテクチャごとの値) のもの、今は無い選び方
-// (中央定位の打ち消し) のものは使えないため示さない
+// 分離のプリセット (方式の選び方と詳細な設定を持ち、選び方がおすすめ・モデル・その他のもの) だけを示す
 function isSeparationPreset(params: VoicePresetParams): params is SeparationPresetParams {
     return (
         typeof params === 'object' &&
         params !== null &&
         'method' in params &&
         'params' in params &&
-        (params.method.mode === 'recommended' || params.method.mode === 'model')
+        (params.method.mode === 'recommended' || params.method.mode === 'model' || params.method.mode === 'other')
     );
 }
 
@@ -50,8 +49,8 @@ type Props = {
     disabled?: boolean;
 };
 
-// 分離のダイアログ。分離する音の「ここから分離」と、結果の「パラメーターを変えて作成」から開く。
-// 方式 (おすすめ・モデル・その他)・モデルのタブのプリセット・詳細な設定を選んで分離する
+// 分離のダイアログ。分離する音の「分岐」と、結果の「パラメーターを変えて作成」から開く。
+// プリセット (どのタブでも共通)・方式 (おすすめ・モデル・その他)・詳細な設定を選んで分離する
 export default function SeparationDialog({
     open,
     inputLabel,
@@ -80,7 +79,7 @@ export default function SeparationDialog({
     const resolved = resolveMethod(selection, models);
     const busy = disabled || running;
 
-    // プリセットの呼び出し: 方式の選び方 (おすすめ・モデル) と詳細な設定をまとめて戻す
+    // プリセットの呼び出し: 方式の選び方 (おすすめ・モデル・その他) と詳細な設定をまとめて戻す
     // (取得していないものを含む場合は知らせる)
     const applyPreset = (preset: SeparationPresetParams) => {
         setSelection({ ...EMPTY_METHOD_SELECTION, ...preset.method });
@@ -121,7 +120,7 @@ export default function SeparationDialog({
                 <Stack spacing={2} sx={{ pt: 1 }}>
                     <SeparationMethodPicker
                         models={models}
-                        // プリセットは、方式の選び方 (おすすめ・モデル) から詳細な設定までの条件一式を保存・呼び出しする
+                        // プリセットは、方式の選び方 (おすすめ・モデル・その他) から詳細な設定までの条件一式を保存・呼び出しする
                         presets={
                             <PresetBar<SeparationPresetParams>
                                 kind='separation'

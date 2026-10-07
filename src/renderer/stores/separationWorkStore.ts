@@ -1,26 +1,14 @@
 import { create } from 'zustand';
 import { newWorkKey } from '../components/voice/voiceFormat';
 import { descendantsOf, outputKey, type SepNode } from '../components/voice/separationTree';
+import { DEFAULT_SEPARATION_PARAMS } from '@shared/voice/separation-defaults';
 import type { PreparedInput, SeparationParams } from '@shared/voice/types';
 
 // 分離の作業 (元の音源と、分離の結果の木)。音声分離の画面と、音声変換の画面の「入力と分離」で別々に持つ。
 // 作業の結果は作業ディレクトリにあり、アプリを終了すると消える (作業をまたいで使うときは書き出したファイルを読む)。
 
-// パラメーターの既定値 (結果の一覧では、既定から変えた値だけを示す)
-export const DEFAULT_SEPARATION_PARAMS: SeparationParams = {
-    mdx: { segmentSize: 256, overlap: 0.25, batchSize: 1, hopLength: 1024, enableDenoise: false },
-    vr: {
-        windowSize: 512,
-        aggression: 5,
-        enableTta: false,
-        enablePostProcess: false,
-        postProcessThreshold: 0.2,
-        highEndProcess: false,
-        batchSize: 1,
-    },
-    demucs: { segmentSize: null, shifts: 2, overlap: 0.25, segmentsEnabled: true },
-    mdxc: { segmentSize: 256, overrideModelSegmentSize: false, batchSize: null, overlap: null, pitchShift: 0 },
-};
+// パラメーターの既定値は main と共有する (結果の一覧では、既定から変えた値だけを示す)
+export { DEFAULT_SEPARATION_PARAMS };
 
 type SeparationWorkState = {
     workKey: string;

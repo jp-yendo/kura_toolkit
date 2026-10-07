@@ -161,6 +161,9 @@ export async function extractSamples(
 
 // 末尾に無音を足す (分離の入力。モデルによっては末尾の数ミリ秒を処理せずに短く返すため、
 // 無音を足した入力で分離し、結果を元の長さに切りそろえる)
+// 分離の入力の末尾に足す無音 (秒)。末尾を短く返すモデルがあるため、足して分離し、元の長さに切りそろえる
+export const SEPARATION_PAD_SECONDS = 1;
+
 export async function padEnd(
     input: string,
     output: string,
@@ -209,8 +212,7 @@ export async function measureLoudness(
     return Number.isFinite(loudness) && loudness > -70 ? loudness : null;
 }
 
-// rubberband (伴奏の移調・読み上げの話速) は、処理の方式上、音の位置が設定ごとに一定量ずれる
-// (実測: 移調 +3 半音で約 4.5ms 早く、-5 半音で約 7.4ms 遅く、話速 1.25 倍で約 5.8ms 遅くなる。Rubber Band 本体でも同じ)。
+// rubberband (伴奏の移調・読み上げの話速) は、処理の方式上、音の位置が設定とサンプリング周波数ごとに一定量 (数 ms) ずれる。
 // 同じ設定・同じサンプリング周波数で短いクリック音を処理してずれを測り、そのぶん結果を前後に動かして打ち消す。
 // 測った値は設定ごとに覚える
 const CALIBRATION_CLICKS = 16;
@@ -332,13 +334,12 @@ export async function timeStretch(input: string, output: string, tempo: number, 
 // ffmpeg の rubberband フィルタの tempo の上限
 const RUBBERBAND_MAX_TEMPO = 100;
 
-// 複数の音声を重ねる (分離結果の重ね合わせ再生や、変換結果と伴奏の簡易合成のプレビュー)。
-// 音量の自動調整は行わず、そのままの大きさで足し合わせる。
-// サンプリング周波数の違う音声を重ねる場合は sampleRate を指定し、すべてをその周波数にそろえる
+// 複数の音声を重ねる (分離した音を重ねて再生・変換の入力にする)。
+// 音量の自動調整は行わず、そのままの大きさで足し合わせる
 export async function mixFiles(
     inputs: string[],
     output: string,
-    format: { channels: number; sampleRate?: number },
+    format: { channels: number },
     jobId?: string,
     onProgress?: ProgressHandler
 ): Promise<void> {
@@ -351,11 +352,8 @@ export async function mixFiles(
     for (let index = 0; index < inputs.length; index++) {
         const info = await probeAudio(inputs[index], jobId);
         longest = Math.max(longest, info.durationSec);
-        const steps = [
-            channelFilter(info.channels, format.channels),
-            format.sampleRate && format.sampleRate !== info.sampleRate ? `aresample=${format.sampleRate}` : null,
-        ].filter(Boolean);
-        filters.push(`[${index}:a]${steps.length > 0 ? steps.join(',') : 'anull'}[a${index}]`);
+        const filter = channelFilter(info.channels, format.channels);
+        filters.push(`[${index}:a]${filter ?? 'anull'}[a${index}]`);
         labels.push(`[a${index}]`);
     }
     if (inputs.length === 1) {

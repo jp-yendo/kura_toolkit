@@ -39,6 +39,8 @@ export default {
         finishStems: '分離した音声を仕上げています',
         convert: '声を変換しています',
         loudness: '音量をそろえています',
+        silence: '無音部分を処理しています',
+        noiseRemoval: 'ノイズを除去しています',
         pitchShift: '伴奏の音程を変えています',
         mix: '合成しています',
         synthesize: '音声を作成しています',
