@@ -359,7 +359,8 @@ const api: IpcApi = {
                 invoke(IPC_CHANNELS.VOICE_TRAINING_SETS_SILENCE, feature, id, option),
         },
         training: {
-            rvcStart: (jobId, setId, name) => invoke(IPC_CHANNELS.VOICE_TRAINING_RVC_START, jobId, setId, name),
+            rvcStart: (jobId, setId, name, epochs) =>
+                invoke(IPC_CHANNELS.VOICE_TRAINING_RVC_START, jobId, setId, name, epochs),
             ttsStart: (jobId, options) => invoke(IPC_CHANNELS.VOICE_TRAINING_TTS_START, jobId, options),
         },
         export: {

@@ -342,6 +342,18 @@ export type SeparationRunRequest = {
 export type F0Method = 'rmvpe' | 'fcpe' | 'crepe' | 'crepe-tiny';
 export const F0_METHODS: F0Method[] = ['rmvpe', 'fcpe', 'crepe', 'crepe-tiny'];
 
+// 音声変換 (RVC) の学習回数 (エポック数)。初期値は Applio の初期値と同じ
+export const RVC_TRAINING_EPOCHS = { default: 200, min: 100, max: 1000 };
+
+export function isValidRvcEpochs(value: unknown): value is number {
+    return (
+        typeof value === 'number' &&
+        Number.isInteger(value) &&
+        value >= RVC_TRAINING_EPOCHS.min &&
+        value <= RVC_TRAINING_EPOCHS.max
+    );
+}
+
 export type ConversionParams = {
     // キーの変更量 (半音)
     pitch: number;

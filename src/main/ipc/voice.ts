@@ -301,8 +301,9 @@ export function registerVoiceIpcHandlers() {
     );
 
     // --- 学習 ---
-    ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_RVC_START, (_e, jobId: string, setId: string, name: string) =>
-        startRvcTraining(jobId, setId, name)
+    ipcMain.handle(
+        IPC_CHANNELS.VOICE_TRAINING_RVC_START,
+        (_e, jobId: string, setId: string, name: string, epochs: number) => startRvcTraining(jobId, setId, name, epochs)
     );
     ipcMain.handle(
         IPC_CHANNELS.VOICE_TRAINING_TTS_START,

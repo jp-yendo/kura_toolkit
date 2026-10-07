@@ -26,7 +26,7 @@ import {
     type TtsModelType,
     type VoiceLanguage,
 } from '../../../shared/voice/languages';
-import type { TrainingStage, VoiceModelInfo } from '../../../shared/voice/types';
+import { isValidRvcEpochs, type TrainingStage, type VoiceModelInfo } from '../../../shared/voice/types';
 import { voicePhase } from './job-progress';
 
 // 声のモデルの学習。学習用の音声は学習セット (training-sets.ts) から読む。
@@ -122,16 +122,28 @@ function internalModelName(): string {
     return `kura_${crypto.randomBytes(5).toString('hex')}`;
 }
 
-export async function startRvcTraining(jobId: string, setId: string, name: string): Promise<VoiceModelInfo> {
+export async function startRvcTraining(
+    jobId: string,
+    setId: string,
+    name: string,
+    epochs: number
+): Promise<VoiceModelInfo> {
     startJob(jobId);
     try {
-        return await withTrainingSet('converter', setId, set => trainRvc(jobId, set.audios, name));
+        // 学習回数は画面で指定する (範囲外は受け付けない)
+        if (!isValidRvcEpochs(epochs)) throw new Error('INVALID_EPOCHS');
+        return await withTrainingSet('converter', setId, set => trainRvc(jobId, set.audios, name, epochs));
     } finally {
         finishJob(jobId);
     }
 }
 
-async function trainRvc(jobId: string, audios: TrainingSetAudio[], name: string): Promise<VoiceModelInfo> {
+async function trainRvc(
+    jobId: string,
+    audios: TrainingSetAudio[],
+    name: string,
+    epochs: number
+): Promise<VoiceModelInfo> {
     const trimmed = name.trim();
     if (!trimmed) throw new Error('VOICE_NAME_EMPTY');
     const readiness = await checkFeature('conversionTraining');
@@ -140,8 +152,6 @@ async function trainRvc(jobId: string, audios: TrainingSetAudio[], name: string)
     if (totalSeconds < 10) throw new Error('TRAINING_DATA_TOO_SHORT');
     const platform = await getPlatformInfo();
     const cuda = platform.gpu.kind === 'cuda' && !!platform.gpu.cudaFlavor;
-    // データが少ないほど多めに学習する (Applio の画面の既定は 200)
-    const epochs = totalSeconds < 300 ? 250 : totalSeconds < 900 ? 200 : totalSeconds < 1800 ? 150 : 100;
     const modelName = internalModelName();
     const applio = libraryPaths().source('converter');
     const pretrained = `${CONVERTER_MODEL_DIR}/pretraineds/hifi-gan`;

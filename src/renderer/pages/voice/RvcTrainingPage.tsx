@@ -38,7 +38,13 @@ import { useJobRunner } from '../../hooks/useJobRunner';
 import { useRemainingTime } from '../../hooks/useRemainingTime';
 import { useInView } from '../../hooks/useInView';
 import { showNotice } from '../../stores/noticeStore';
-import type { TrainingAudio, TrainingSetDetail, VoiceModelInfo } from '@shared/voice/types';
+import {
+    isValidRvcEpochs,
+    RVC_TRAINING_EPOCHS,
+    type TrainingAudio,
+    type TrainingSetDetail,
+    type VoiceModelInfo,
+} from '@shared/voice/types';
 
 // 削除する音声の確認。閉じる間も表示が変わらないよう、開閉とは別に持つ
 type RemoveConfirm = { open: boolean; item: TrainingAudio | null };
@@ -110,6 +116,10 @@ export default function RvcTrainingPage() {
     const setId = sets.selected?.id ?? null;
     const [detail, setDetail] = React.useState<TrainingSetDetail | null>(null);
     const [name, setName] = React.useState('');
+    // 学習回数 (入力中の文字のまま持ち、整数で範囲内のときだけ学習を始められる)
+    const [epochsText, setEpochsText] = React.useState(String(RVC_TRAINING_EPOCHS.default));
+    const epochs = /^\d+$/.test(epochsText) ? Number(epochsText) : NaN;
+    const epochsValid = isValidRvcEpochs(epochs);
     const [removeConfirm, setRemoveConfirm] = React.useState<RemoveConfirm>({ open: false, item: null });
     // 学習用の音のフィルター (audio が null のときは学習セットのすべての音)
     const [filterTarget, setFilterTarget] = React.useState<{ open: boolean; audio: TrainingAudio | null }>({
@@ -190,7 +200,7 @@ export default function RvcTrainingPage() {
         if (!setId) return;
         try {
             const info = await run(t('voice.training.running'), jobId =>
-                window.kuraToolkit.voice.training.rvcStart(jobId, setId, name)
+                window.kuraToolkit.voice.training.rvcStart(jobId, setId, name, epochs)
             );
             setCreated(info);
             setName('');
@@ -291,7 +301,9 @@ export default function RvcTrainingPage() {
 
                         <Panel>
                             <Stack direction='row' spacing={1.5} sx={{ alignItems: 'center' }}>
-                                <Typography variant='body2' sx={{ flexShrink: 0, mr: 2.5 }}>
+                                {/* 件数・長さと入力欄の間は 3 文字分ほど空ける (並びの間隔 12px + 右の余白 30px。body2 は 14px)。
+                                    Stack は子の margin を 0 にするため、padding で空ける */}
+                                <Typography variant='body2' sx={{ flexShrink: 0, pr: 3.75 }}>
                                     {t('voice.training.datasetSummary', {
                                         count: items.length,
                                         duration: formatDuration(total),
@@ -299,15 +311,31 @@ export default function RvcTrainingPage() {
                                 </Typography>
                                 <TextField
                                     size='small'
+                                    label={t('voice.training.epochs')}
+                                    value={epochsText}
+                                    error={!epochsValid}
+                                    onChange={event => setEpochsText(event.target.value.trim())}
+                                    slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+                                    sx={{ width: 120, flexShrink: 0 }}
+                                />
+                                <TextField
+                                    size='small'
                                     label={t('voice.training.modelName')}
                                     value={name}
                                     onChange={event => setName(event.target.value)}
-                                    sx={{ flexGrow: 1 }}
+                                    sx={{ flexGrow: 1, minWidth: 200 }}
                                 />
                                 <Button
                                     variant='contained'
                                     startIcon={<SchoolIcon />}
-                                    disabled={!ready || job !== null || recording || !name.trim() || items.length === 0}
+                                    disabled={
+                                        !ready ||
+                                        job !== null ||
+                                        recording ||
+                                        !name.trim() ||
+                                        !epochsValid ||
+                                        items.length === 0
+                                    }
                                     onClick={() => void startTraining()}
                                 >
                                     {t('voice.training.start')}

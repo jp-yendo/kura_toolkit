@@ -1166,9 +1166,9 @@ export default {
         recordingName: 'Recording {{date}}',
         rvcShort: 'With less than 10 minutes of audio, the voice characteristics may not be learned well.',
         modelName: 'Model name',
+        epochs: 'Epochs',
         start: 'Start Training',
-        rvcNote:
-            'The app chooses the training parameters. Depending on the GPU and the amount of audio, training can take several hours.',
+        rvcNote: 'Depending on the GPU and the amount of audio, training can take several hours.',
         doneTitle: 'Training finished',
         doneMessage: 'The voice model "{{name}}" was created.',
         openModels: 'Open Voice Models',
