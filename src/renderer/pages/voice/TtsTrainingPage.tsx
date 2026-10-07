@@ -54,10 +54,6 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { LANGUAGE_DEFINITIONS, ttsTrainingItems, type TtsModelType } from '@shared/voice/languages';
 import type { TrainingAudio, TrainingSetDetail, VoiceModelInfo } from '@shared/voice/types';
 
-// 学習に向く 1 文の長さ (秒)。Style-Bert-VITS2 の学習には 2〜14 秒程度の音声が必要
-const MIN_CLIP_SEC = 2;
-const MAX_CLIP_SEC = 14;
-
 // 録音中の保存先。録音を止めた時点の表示に関わらず、録音を始めた時点の学習セットと文に保存する
 type RecordingTarget = { setId: string; sentenceId: string };
 
@@ -211,9 +207,6 @@ export default function TtsTrainingPage() {
             else showNotice('error', voiceErrorMessage(t, error), 15000);
         }
     };
-
-    const duration = audio?.durationSec ?? 0;
-    const lengthWarning = audio && (duration < MIN_CLIP_SEC || duration > MAX_CLIP_SEC);
 
     return (
         <PageContainer>
@@ -382,15 +375,6 @@ export default function TtsTrainingPage() {
                                         </Tooltip>
                                     )}
                                 </Stack>
-                                {lengthWarning && (
-                                    <Alert severity='warning'>
-                                        {t('voice.training.clipLength', {
-                                            duration: duration.toFixed(1),
-                                            min: MIN_CLIP_SEC,
-                                            max: MAX_CLIP_SEC,
-                                        })}
-                                    </Alert>
-                                )}
                                 <SyncPlayer
                                     source={audio ? { key: audio.id + audio.media.url, url: audio.media.url } : null}
                                 />

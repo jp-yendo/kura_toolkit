@@ -207,6 +207,11 @@ def rpc_convert(params: dict, context: Context) -> dict:
         context_samples = _CHUNK_CONTEXT_SECONDS * vc.sample_rate
         chunks = _chunk_bounds(audio, vc.sample_rate, vc.window)
         crossfade = max(1, round(_CHUNK_CROSSFADE_SECONDS * vc.tgt_sr))
+        # The length of the input at the model's sampling rate. The input is read at 16 kHz, which rounds its length up
+        # to whole 16 kHz samples, so the result can run past the end of the input; that part is not written
+        source = soundfile.info(params["input"])
+        total = round(source.frames * vc.tgt_sr / source.samplerate)
+        written = 0
         # The previous chunk's result just after its end (overlaps the start of the next chunk)
         carry = None
         context.phase("convert", 0.0)
@@ -233,7 +238,9 @@ def rpc_convert(params: dict, context: Context) -> dict:
                     from kura_voice.silence import block_gain
 
                     kept = kept * block_gain(round(start * ratio), len(kept), mute_runs, mute_fade)
+                kept = kept[: max(0, total - written)]
                 out.write(kept)
+                written += len(kept)
                 context.progress(0.05 + 0.95 * (number + 1) / len(chunks), "convert")
                 context.phase("convert", (number + 1) / len(chunks))
 

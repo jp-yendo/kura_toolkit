@@ -169,6 +169,12 @@ export function NoiseRemovalFields({
                     control={<Radio size='small' />}
                     label={t('voice.filters.noiseSimple')}
                 />
+                <FormControlLabel
+                    value='wavelet'
+                    disabled={disabled}
+                    control={<Radio size='small' />}
+                    label={t('voice.filters.noiseWavelet')}
+                />
                 <Tooltip title={modelAvailable ? '' : t('voice.filters.noiseModelMissing')}>
                     <Box component='span' sx={{ alignSelf: 'flex-start' }}>
                         <FormControlLabel
@@ -180,7 +186,7 @@ export function NoiseRemovalFields({
                     </Box>
                 </Tooltip>
             </RadioGroup>
-            {method === 'simple' ? (
+            {method === 'simple' && (
                 <>
                     <SliderField
                         label={t('voice.filters.noiseFloor')}
@@ -203,24 +209,47 @@ export function NoiseRemovalFields({
                         onChange={reductionDb => onChange({ ...value, reductionDb })}
                     />
                 </>
-            ) : (
-                model && (
-                    <FormControl size='small' disabled={disabled}>
-                        <InputLabel id='noise-removal-model'>{t('voice.filters.noiseModelSelect')}</InputLabel>
-                        <Select
-                            labelId='noise-removal-model'
-                            label={t('voice.filters.noiseModelSelect')}
-                            value={model.filename}
-                            onChange={event => onChange({ ...value, model: String(event.target.value) })}
-                        >
-                            {models.map(item => (
-                                <MenuItem key={item.filename} value={item.filename}>
-                                    {item.name}
-                                </MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
-                )
+            )}
+            {method === 'wavelet' && (
+                <>
+                    <SliderField
+                        label={t('voice.filters.waveletNoise')}
+                        value={value.waveletNoiseDb}
+                        min={NOISE_REMOVAL_RANGE.waveletNoiseDb.min}
+                        max={NOISE_REMOVAL_RANGE.waveletNoiseDb.max}
+                        step={1}
+                        format={db}
+                        disabled={disabled}
+                        onChange={waveletNoiseDb => onChange({ ...value, waveletNoiseDb })}
+                    />
+                    <SliderField
+                        label={t('voice.filters.waveletPercent')}
+                        value={value.waveletPercent}
+                        min={NOISE_REMOVAL_RANGE.waveletPercent.min}
+                        max={NOISE_REMOVAL_RANGE.waveletPercent.max}
+                        step={1}
+                        format={value => `${value}%`}
+                        disabled={disabled}
+                        onChange={waveletPercent => onChange({ ...value, waveletPercent })}
+                    />
+                </>
+            )}
+            {method === 'model' && model && (
+                <FormControl size='small' disabled={disabled}>
+                    <InputLabel id='noise-removal-model'>{t('voice.filters.noiseModelSelect')}</InputLabel>
+                    <Select
+                        labelId='noise-removal-model'
+                        label={t('voice.filters.noiseModelSelect')}
+                        value={model.filename}
+                        onChange={event => onChange({ ...value, model: String(event.target.value) })}
+                    >
+                        {models.map(item => (
+                            <MenuItem key={item.filename} value={item.filename}>
+                                {item.name}
+                            </MenuItem>
+                        ))}
+                    </Select>
+                </FormControl>
             )}
         </OptionBlock>
     );
@@ -294,10 +323,15 @@ export function filterSummary(
                       model:
                           models.find(item => item.filename === noiseRemoval.model)?.name ?? noiseRemoval.model ?? '',
                   })
-                : t('voice.filters.summaryNoiseSimple', {
-                      floor: noiseRemoval.floorDb,
-                      reduction: noiseRemoval.reductionDb,
-                  })
+                : noiseRemoval.method === 'wavelet'
+                  ? t('voice.filters.summaryNoiseWavelet', {
+                        noise: noiseRemoval.waveletNoiseDb,
+                        percent: noiseRemoval.waveletPercent,
+                    })
+                  : t('voice.filters.summaryNoiseSimple', {
+                        floor: noiseRemoval.floorDb,
+                        reduction: noiseRemoval.reductionDb,
+                    })
         );
     }
     if (loudness?.enabled) parts.push(t('voice.filters.summaryLoudness', { lufs: loudness.targetLufs }));

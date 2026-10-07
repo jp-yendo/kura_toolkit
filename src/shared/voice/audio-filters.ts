@@ -5,9 +5,10 @@
 // 変換と分岐では無音部分の音量を 0 にし (時間は変わらない)、学習用の音のフィルターでは無音部分を除去して詰める
 export type SilenceOption = { enabled: boolean; thresholdDb: number; minSeconds: number };
 
-// ノイズ除去の方式。simple: ffmpeg の afftdn (雑音とみなす大きさ以下の成分を、下げる量だけ下げる)。
+// ノイズ除去の方式。simple: ffmpeg の afftdn (FFT。雑音とみなす大きさ以下の成分を、下げる量だけ下げる)。
+// wavelet: ffmpeg の afwtdn (ウェーブレット。雑音の大きさ以下の成分を、除去の強さの割合だけ除く)。
 // model: ノイズ除去のおすすめのモデル (NOISE_REMOVAL_MODELS) で分離し、ノイズを除いた方の出力を使う
-export type NoiseRemovalMethod = 'simple' | 'model';
+export type NoiseRemovalMethod = 'simple' | 'wavelet' | 'model';
 
 export type NoiseRemovalOption = {
     enabled: boolean;
@@ -16,6 +17,10 @@ export type NoiseRemovalOption = {
     floorDb: number;
     // 雑音を下げる量 (dB。afftdn の noise_reduction)
     reductionDb: number;
+    // 雑音の大きさ (dB。afwtdn の sigma (振幅) を dB で表したもの)
+    waveletNoiseDb: number;
+    // 除去の強さ (%。afwtdn の percent)
+    waveletPercent: number;
     // モデルで除去する場合のモデル (ファイル名。null は、取得済みのおすすめのうち先頭)
     model: string | null;
 };
@@ -24,11 +29,17 @@ export type NoiseRemovalOption = {
 export type LoudnessOption = { enabled: boolean; targetLufs: number };
 
 // 初期値とスライダーの範囲。無音の大きさの初期値は、なるべく消さない値。長さは Applio が学習の前に無音を切る長さ。
-// ノイズ除去の 2 つの値は ffmpeg の afftdn の初期値。音量は話し声の配信でよく使われる値
+// afftdn の 2 つの値は ffmpeg の初期値。afwtdn の除去の強さは ffmpeg の初期値で、雑音の大きさは ffmpeg の初期値 (0) では
+// 何も除かないため、afftdn の雑音とみなす大きさと同じ値にする。音量は話し声の配信でよく使われる値
 export const SILENCE_DEFAULTS = { thresholdDb: -60, minSeconds: 0.4 };
 export const SILENCE_RANGE = { thresholdDb: { min: -90, max: -20 }, minSeconds: { min: 0.1, max: 5 } };
-export const NOISE_REMOVAL_DEFAULTS = { floorDb: -50, reductionDb: 12 };
-export const NOISE_REMOVAL_RANGE = { floorDb: { min: -80, max: -20 }, reductionDb: { min: 1, max: 60 } };
+export const NOISE_REMOVAL_DEFAULTS = { floorDb: -50, reductionDb: 12, waveletNoiseDb: -50, waveletPercent: 85 };
+export const NOISE_REMOVAL_RANGE = {
+    floorDb: { min: -80, max: -20 },
+    reductionDb: { min: 1, max: 60 },
+    waveletNoiseDb: { min: -80, max: -20 },
+    waveletPercent: { min: 0, max: 100 },
+};
 export const LOUDNESS_DEFAULT_LUFS = -16;
 export const LOUDNESS_RANGE = { min: -30, max: -10 };
 
@@ -98,9 +109,19 @@ export function sanitizeNoiseRemovalOption(value: unknown): NoiseRemovalOption {
     const item = record(value);
     return {
         enabled: item.enabled === true,
-        method: item.method === 'model' ? 'model' : 'simple',
+        method: item.method === 'model' || item.method === 'wavelet' ? item.method : 'simple',
         floorDb: clampNumber(item.floorDb, NOISE_REMOVAL_RANGE.floorDb, NOISE_REMOVAL_DEFAULTS.floorDb),
         reductionDb: clampNumber(item.reductionDb, NOISE_REMOVAL_RANGE.reductionDb, NOISE_REMOVAL_DEFAULTS.reductionDb),
+        waveletNoiseDb: clampNumber(
+            item.waveletNoiseDb,
+            NOISE_REMOVAL_RANGE.waveletNoiseDb,
+            NOISE_REMOVAL_DEFAULTS.waveletNoiseDb
+        ),
+        waveletPercent: clampNumber(
+            item.waveletPercent,
+            NOISE_REMOVAL_RANGE.waveletPercent,
+            NOISE_REMOVAL_DEFAULTS.waveletPercent
+        ),
         model: typeof item.model === 'string' ? item.model : null,
     };
 }

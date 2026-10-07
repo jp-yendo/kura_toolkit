@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { runFfmpeg } from '../ffmpeg/ffmpeg';
 import { measureLoudness, TRUE_PEAK_LIMIT } from '../audio-normalizer';
-import { padEnd, probeAudio, SEPARATION_PAD_SECONDS } from './audio-tools';
+import { padEnd, probeAudio, runAlignedFilter, SEPARATION_PAD_SECONDS } from './audio-tools';
 import { isItemInstalled } from './library';
 import { getWorker } from './python-worker';
 import { separatorItemId } from './spec';
@@ -50,8 +50,9 @@ export function noiseRemovalModel(requested: string | null): (typeof NOISE_REMOV
     return installed.find(model => model.filename === requested) ?? installed[0] ?? null;
 }
 
-// ノイズを除去する。簡易的に除去する場合は ffmpeg の afftdn、モデルで除去する場合はノイズ除去のモデルで分離して、
-// ノイズを除いた方の出力を使う (途中のファイルは tempDir に作る)
+// ノイズを除去する。FFT の場合は ffmpeg の afftdn (音の位置がずれるため、ずれを打ち消して使う)、ウェーブレットの場合は
+// ffmpeg の afwtdn (音の位置はずれない)、モデルの場合はノイズ除去のモデルで分離して、ノイズを除いた方の出力を使う
+// (途中のファイルは tempDir に作る)
 export async function removeNoise(
     jobId: string,
     input: string,
@@ -66,21 +67,34 @@ export async function removeNoise(
         await separateOneStem(jobId, input, model.filename, model.cleanStem, output, path.join(tempDir, 'noise-model'));
         return;
     }
-    const { durationSec } = await probeAudio(input, jobId);
-    await runFfmpeg(
-        [
-            '-hide_banner',
-            '-nostdin',
-            '-y',
-            '-i',
-            input,
-            '-af',
-            `afftdn=nf=${option.floorDb}:nr=${option.reductionDb}`,
-            '-c:a',
-            'pcm_f32le',
-            output,
-        ],
-        { jobId, totalSec: durationSec, onProgress: ffmpegPhase(jobId, 'noiseRemoval') }
+    if (option.method === 'wavelet') {
+        // afwtdn の sigma は雑音の大きさを振幅 (0-1) で指定する
+        const sigma = Math.pow(10, option.waveletNoiseDb / 20);
+        const { durationSec } = await probeAudio(input, jobId);
+        await runFfmpeg(
+            [
+                '-hide_banner',
+                '-nostdin',
+                '-y',
+                '-i',
+                input,
+                '-af',
+                `afwtdn=sigma=${sigma.toPrecision(6)}:percent=${option.waveletPercent}`,
+                '-c:a',
+                'pcm_f32le',
+                output,
+            ],
+            { jobId, totalSec: durationSec, onProgress: ffmpegPhase(jobId, 'noiseRemoval') }
+        );
+        return;
+    }
+    await runAlignedFilter(
+        input,
+        output,
+        `afftdn=nf=${option.floorDb}:nr=${option.reductionDb}`,
+        1,
+        jobId,
+        ffmpegPhase(jobId, 'noiseRemoval')
     );
 }
 
@@ -163,7 +177,8 @@ async function separateOneStem(
         const stem = result.stems.find(item => item.name.toLowerCase() === stemName.toLowerCase());
         if (!stem) throw new Error(`STEM_NOT_FOUND: ${stemName}`);
         // 分離の出力は決まったサンプリング周波数のため、入力のサンプリング周波数とチャンネル数に戻す
-        // (変換結果はモデルの周波数のまま持つなど、呼び出し側が周波数を前提にしているため)
+        // (変換結果はモデルの周波数のまま持つなど、呼び出し側が周波数を前提にしているため)。チャンネル数を減らすときは
+        // 左右の平均にする (rematrix_maxval=1。ffmpeg の既定では左右を 0.707 倍ずつ足すため、左右が同じ音は +3dB になる)
         await runFfmpeg(
             [
                 '-hide_banner',
@@ -171,6 +186,8 @@ async function separateOneStem(
                 '-y',
                 '-i',
                 stem.path,
+                '-af',
+                'aresample=rematrix_maxval=1',
                 '-ac',
                 String(Math.min(2, info.channels)),
                 '-ar',

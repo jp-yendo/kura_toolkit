@@ -159,8 +159,6 @@ export async function extractSamples(
     );
 }
 
-// 末尾に無音を足す (分離の入力。モデルによっては末尾の数ミリ秒を処理せずに短く返すため、
-// 無音を足した入力で分離し、結果を元の長さに切りそろえる)
 // 分離の入力の末尾に足す無音 (秒)。末尾を短く返すモデルがあるため、足して分離し、元の長さに切りそろえる
 export const SEPARATION_PAD_SECONDS = 1;
 
@@ -212,19 +210,23 @@ export async function measureLoudness(
     return Number.isFinite(loudness) && loudness > -70 ? loudness : null;
 }
 
-// rubberband (伴奏の移調・読み上げの話速) は、処理の方式上、音の位置が設定とサンプリング周波数ごとに一定量 (数 ms) ずれる。
-// 同じ設定・同じサンプリング周波数で短いクリック音を処理してずれを測り、そのぶん結果を前後に動かして打ち消す。
-// 測った値は設定ごとに覚える
+// 音の位置がずれる ffmpeg のフィルタ (rubberband・afftdn) を、ずれを打ち消して使う。どちらのフィルタにも、ずれを
+// 補正するオプションは無い。どちらも、出力が設定とサンプリング周波数ごとに一定量ずれ (出力のタイムスタンプには
+// 表れない)、出力の長さは入力と同じのため、遅れた分の入力の末尾の音は、フィルタの中に残ったまま出力されない。
+// 同じ設定・同じサンプリング周波数で短いクリック音を処理してずれを測り (測った値は ffmpeg・設定・周波数ごとに
+// 覚える)、入力の前後に無音を足して元の音を最初から最後まで処理させ、ずれのぶん動かした位置から切り出して打ち消す
 const CALIBRATION_CLICKS = 16;
 const CALIBRATION_INTERVAL_SEC = 0.37;
 const CALIBRATION_LEAD_SEC = 0.5;
 const CALIBRATION_SEARCH_SEC = 0.05;
-const rubberbandOffsets = new Map<string, number>();
+// 入力の前後に足す無音 (秒)。フィルタの中に残る音 (ずれの量) より十分に長くする。足した分は最後に切って除く
+const ALIGN_PAD_SECONDS = 1;
+const filterOffsets = new Map<string, number>();
 
 // ずれ (出力のサンプル数。正の値は遅れ) を返す
-async function rubberbandOffset(filter: string, sampleRate: number, tempo: number, jobId?: string): Promise<number> {
+async function filterOffset(filter: string, sampleRate: number, tempo: number, jobId?: string): Promise<number> {
     const key = `${resolveFfmpegPath()}|${filter}|${sampleRate}`;
-    const cached = rubberbandOffsets.get(key);
+    const cached = filterOffsets.get(key);
     if (cached !== undefined) return cached;
     const length = Math.round((CALIBRATION_LEAD_SEC * 2 + CALIBRATION_CLICKS * CALIBRATION_INTERVAL_SEC) * sampleRate);
     const signal = new Float32Array(length);
@@ -262,9 +264,9 @@ async function rubberbandOffset(filter: string, sampleRate: number, tempo: numbe
             })
             .filter((value): value is number => value !== null)
             .sort((a, b) => a - b);
-        if (offsets.length === 0) throw new Error('RUBBERBAND_CALIBRATION_FAILED');
+        if (offsets.length === 0) throw new Error('FILTER_CALIBRATION_FAILED');
         const offset = offsets[Math.floor(offsets.length / 2)];
-        rubberbandOffsets.set(key, offset);
+        filterOffsets.set(key, offset);
         return offset;
     } finally {
         discardLater(dir);
@@ -277,7 +279,39 @@ function peakIndex(samples: Float32Array, from: number, to: number): number {
     return best - from;
 }
 
-// rubberband で処理し、ずれを打ち消して、長さを「元の長さ ÷ tempo」にそろえる
+// 音の位置がずれるフィルタで処理し、ずれを打ち消して、長さを「元の長さ ÷ tempo」にそろえる
+export async function runAlignedFilter(
+    input: string,
+    output: string,
+    filter: string,
+    tempo: number,
+    jobId?: string,
+    onProgress?: ProgressHandler
+): Promise<void> {
+    const info = await probeAudio(input, jobId);
+    const offset = await filterOffset(filter, info.sampleRate, tempo, jobId);
+    const length = Math.round((info.durationSec * info.sampleRate) / tempo);
+    const pad = Math.round(ALIGN_PAD_SECONDS * info.sampleRate);
+    // 入力の前後に無音を足してから処理し、出力から元の音の範囲 (足した無音の後ろから、ずれの分を動かした位置) を
+    // 長さの分だけ切り出す。先頭にも足すのは、フィルタが処理を始めた直後の音を正しく処理しないため
+    // (afftdn は前の区間が無いと弱め、rubberband は失う)。足りない分は無音で埋める
+    const start = Math.round(pad / tempo) + offset;
+    const chain = [
+        `adelay=delays=${pad}S:all=1`,
+        `apad=pad_len=${pad}`,
+        filter,
+        `atrim=start_sample=${start},asetpts=PTS-STARTPTS`,
+        `apad=whole_len=${length}`,
+        `atrim=end_sample=${length}`,
+    ].join(',');
+    await runFfmpeg(['-hide_banner', '-nostdin', '-y', '-i', input, '-af', chain, '-c:a', 'pcm_f32le', output], {
+        jobId,
+        totalSec: (info.durationSec + 2 * ALIGN_PAD_SECONDS) / tempo,
+        onProgress,
+    });
+}
+
+// rubberband で処理する (ずれを打ち消す)
 async function runRubberband(
     input: string,
     output: string,
@@ -287,22 +321,7 @@ async function runRubberband(
     onProgress?: ProgressHandler
 ) {
     await requireRubberband();
-    const info = await probeAudio(input, jobId);
-    const offset = await rubberbandOffset(filter, info.sampleRate, tempo, jobId);
-    const length = Math.round((info.durationSec * info.sampleRate) / tempo);
-    // 遅れる場合は先頭を切り詰め、早まる場合は先頭に無音を足す。末尾は無音で埋めてから長さで切る
-    const shift =
-        offset > 0
-            ? `atrim=start_sample=${offset},asetpts=PTS-STARTPTS`
-            : offset < 0
-              ? `adelay=delays=${-offset}S:all=1`
-              : null;
-    const chain = [filter, shift, `apad=whole_len=${length}`, `atrim=end_sample=${length}`].filter(Boolean).join(',');
-    await runFfmpeg(['-hide_banner', '-nostdin', '-y', '-i', input, '-af', chain, '-c:a', 'pcm_f32le', output], {
-        jobId,
-        totalSec: info.durationSec / tempo,
-        onProgress,
-    });
+    await runAlignedFilter(input, output, filter, tempo, jobId, onProgress);
 }
 
 // 音程を半音単位で変える (伴奏の移調)。長さと音の位置は変えない
