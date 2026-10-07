@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-08
+
 ### Added
 
 - Audio Separation, Voice Conversion and Text to Speech (Japanese, English and Chinese), with voice model
