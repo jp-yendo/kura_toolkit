@@ -1306,6 +1306,8 @@ export default {
         TRAINING_SET_NAME_EMPTY: '学習セットの名前を入力してください。',
         TRAINING_SET_LANGUAGE_MISMATCH: '学習セットの言語の指定が正しくありません。',
         TRAINING_SET_MODE_MISMATCH: '学習セットのモードの指定が正しくありません。',
+        INVALID_EPOCHS: '学習回数の指定が正しくありません。',
+        INVALID_TEXT: '本文の指定が正しくありません。',
         TRAINING_GROUPS_EMPTY: '音声と本文の両方があるグループがありません。',
         TRAINING_GROUP_TEXT_INVALID:
             '次のグループの本文を読みに変換できませんでした: グループ {{detail}}。読み方の分からない語や記号、長すぎる文が含まれていないか確認してください。',

@@ -1305,6 +1305,8 @@ export default {
         TRAINING_SET_NAME_EMPTY: 'Enter a name for the training set.',
         TRAINING_SET_LANGUAGE_MISMATCH: 'The language of the training set is not valid.',
         TRAINING_SET_MODE_MISMATCH: 'The mode of the training set is not valid.',
+        INVALID_EPOCHS: 'The number of epochs is not valid.',
+        INVALID_TEXT: 'The text is not valid.',
         TRAINING_GROUPS_EMPTY: 'There are no groups with both audio and text.',
         TRAINING_GROUP_TEXT_INVALID:
             'The text of these groups could not be converted to readings: group {{detail}}. Check for words or symbols without a known reading, or sentences that are too long.',

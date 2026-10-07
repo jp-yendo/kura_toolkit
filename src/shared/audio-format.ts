@@ -144,8 +144,23 @@ function losslessBitsArgs(bits: LosslessBits, planar: boolean): string[] {
 
 const WAV_ENCODERS: Record<WavSampleFormat, string> = { s16: 'pcm_s16le', s24: 'pcm_s24le', f32: 'pcm_f32le' };
 
-// 書き出しの ffmpeg の引数 (サンプリング周波数とエンコーダーとその指定)。設定は確かめた (sanitize した) ものを渡す
-export function audioEncodeArgs(format: AudioFormat, settings: AudioEncodeSettings): string[] {
+// 出力の形式 (ffmpeg の -f。拡張子に頼らず、形式どおりの中身にするため)
+export const AUDIO_FORMAT_MUXERS: Record<AudioFormat, string> = {
+    mp3: 'mp3',
+    flac: 'flac',
+    vorbis: 'ogg',
+    opus: 'opus',
+    aac: 'ipod',
+    wav: 'wav',
+    alac: 'ipod',
+};
+
+// Opus のビットレートの上限 (1 チャンネルあたり。libopus がこれより大きい値を受け付けないため)
+const OPUS_MAX_KBPS_PER_CHANNEL = 256;
+
+// 書き出しの ffmpeg の引数 (サンプリング周波数とエンコーダーとその指定)。設定は確かめた (sanitize した) ものを渡す。
+// channels は出力のチャンネル数 (Opus のビットレートを上限に収めるのに使う。分からなければ 1 として扱う)
+export function audioEncodeArgs(format: AudioFormat, settings: AudioEncodeSettings, channels?: number): string[] {
     const rate = ['-ar', String(settings.sampleRate)];
     switch (format) {
         case 'mp3':
@@ -170,7 +185,15 @@ export function audioEncodeArgs(format: AudioFormat, settings: AudioEncodeSettin
             return [...rate, '-c:a', 'libvorbis', '-q:a', String(settings.vorbisQuality)];
         case 'opus':
             // Opus は 48000 Hz で符号化する (仕様上の内部の周波数。ほかの周波数を渡すと libopus が受け付けないことがある)
-            return ['-ar', '48000', '-c:a', 'libopus', '-b:a', `${settings.opusBitrate}k`];
+            // ビットレートは、チャンネル数に応じた上限に収める (上限を超える指定は上限で書く)
+            return [
+                '-ar',
+                '48000',
+                '-c:a',
+                'libopus',
+                '-b:a',
+                `${Math.min(settings.opusBitrate, OPUS_MAX_KBPS_PER_CHANNEL * Math.max(1, channels ?? 1))}k`,
+            ];
         case 'aac':
             return [...rate, '-c:a', 'aac', '-b:a', `${settings.aacBitrate}k`];
         case 'wav':

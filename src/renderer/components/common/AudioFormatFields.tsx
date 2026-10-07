@@ -1,6 +1,7 @@
 import React from 'react';
 import { FormControl, InputLabel, MenuItem, Select } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { useSettingsStore } from '../../stores/settingsStore';
 import {
     AAC_BITRATES,
     AUDIO_ENCODE_DEFAULTS,
@@ -17,25 +18,35 @@ import {
     type AudioFormat,
 } from '@shared/audio-format';
 
-// 使っている ffmpeg で書き出せる形式 (アプリの起動中は 1 回だけ問い合わせる。分からないうちはすべての形式を出す)
-let formatsRequest: Promise<AudioFormat[]> | null = null;
+// 使っている ffmpeg で書き出せる形式。アプリの設定の ffmpeg のパスごとに 1 回だけ問い合わせる (パスを変えたら問い合わせ
+// 直す)。分からないうちはすべての形式を出す。エンコーダーを調べられなかった結果は覚えない (ffmpeg を入れ直した後に
+// 正しい一覧を出すため)
+const formatsRequests = new Map<string, Promise<AudioFormat[]>>();
 
 function useAudioFormats(): AudioFormat[] {
+    const ffmpegPath = useSettingsStore(state => state.settings?.ffmpeg.ffmpegPath ?? '');
     const [formats, setFormats] = React.useState<AudioFormat[]>(AUDIO_FORMATS);
     React.useEffect(() => {
         let cancelled = false;
-        formatsRequest ??= window.kuraToolkit.audio.formats();
-        formatsRequest
+        let request = formatsRequests.get(ffmpegPath);
+        if (!request) {
+            request = window.kuraToolkit.audio.formats().then(result => {
+                if (!result.known) formatsRequests.delete(ffmpegPath);
+                return result.formats;
+            });
+            formatsRequests.set(ffmpegPath, request);
+        }
+        request
             .then(result => {
                 if (!cancelled) setFormats(result);
             })
             .catch(() => {
-                formatsRequest = null;
+                formatsRequests.delete(ffmpegPath);
             });
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [ffmpegPath]);
     return formats;
 }
 

@@ -75,37 +75,60 @@ type RecordingTarget = { setId: string; sentenceId: string };
 // グループの削除の確認の対象。閉じる間も表示が変わらないよう、開閉とは別に持つ
 type RemoveGroupConfirm = { open: boolean; setId: string; group: TrainingSentence | null; index: number };
 
+// 学習に使える本文か (学習と同じ判断: 「|」と改行を空白にして、空白だけでないもの)
+function usableText(text: string): boolean {
+    return text.replace(/[|\r\n]/g, ' ').trim() !== '';
+}
+
 // 本文を保存するまでの待ち時間 (入力が止まってから保存する。入力のたびに学習セットの記録を書き直さないため)
 const TEXT_SAVE_DELAY_MS = 800;
 
 // 任意の文で作成する学習セットのグループの本文。入力中の本文は手元に持って表示し、入力が止まったとき・欄を離れたときに
-// 保存する。保存した後も手元の本文を表示に使う (読み直すまで、学習セットの内容は保存前の本文のため)
+// 保存する。保存した後も手元の本文を表示に使う (読み直すまで、学習セットの内容は保存前の本文のため)。保存に失敗した
+// 本文は保存を待っているものに戻し、次の保存 (flush) でもう一度保存する
 function useGroupTexts(onError: (error: unknown) => void) {
     const [drafts, setDrafts] = React.useState<Record<string, string>>({});
     const draftsRef = React.useRef(drafts);
     draftsRef.current = drafts;
-    // 保存を待っている本文 (学習セットとグループごと)
+    // 保存を待っている本文 (学習セットとグループごと。timer は入力が止まるのを待つタイマー。失敗したものは null)
     const pending = React.useRef(
-        new Map<string, { setId: string; groupId: string; timer: ReturnType<typeof setTimeout> }>()
+        new Map<string, { setId: string; groupId: string; timer: ReturnType<typeof setTimeout> | null }>()
     );
+    // 保存している途中の本文 (結果は保存できたか)
+    const saving = React.useRef(new Map<string, Promise<boolean>>());
     const onErrorRef = React.useRef(onError);
     onErrorRef.current = onError;
     const keyOf = (setId: string, groupId: string) => `${setId}:${groupId}`;
 
-    const save = React.useCallback(async (key: string) => {
+    const save = React.useCallback(async (key: string): Promise<boolean> => {
         const entry = pending.current.get(key);
-        if (!entry) return;
-        clearTimeout(entry.timer);
+        if (!entry) return true;
+        if (entry.timer) clearTimeout(entry.timer);
         pending.current.delete(key);
-        try {
-            await window.kuraToolkit.voice.trainingSets.setGroupText(
-                entry.setId,
-                entry.groupId,
-                draftsRef.current[key] ?? ''
-            );
-        } catch (error) {
-            onErrorRef.current(error);
-        }
+        const text = draftsRef.current[key] ?? '';
+        // この保存 (失敗したときに、後から始まった保存が無いかを確かめるため)
+        const self: { task?: Promise<boolean> } = {};
+        const task = (async () => {
+            // 同じグループの前の保存が終わってから保存する (後から入力した本文を、前の本文で上書きしないため)
+            await saving.current.get(key);
+            try {
+                await window.kuraToolkit.voice.trainingSets.setGroupText(entry.setId, entry.groupId, text);
+                return true;
+            } catch (error) {
+                // 失敗した本文は、その後に入力も保存もされていなければ、保存を待っているものに戻す (後の本文を、
+                // 古い本文で書き直さないため)
+                if (!pending.current.has(key) && saving.current.get(key) === self.task) {
+                    pending.current.set(key, { ...entry, timer: null });
+                }
+                onErrorRef.current(error);
+                return false;
+            }
+        })();
+        self.task = task;
+        saving.current.set(key, task);
+        const ok = await task;
+        if (saving.current.get(key) === task) saving.current.delete(key);
+        return ok;
     }, []);
 
     const change = (setId: string, groupId: string, text: string) => {
@@ -114,26 +137,70 @@ function useGroupTexts(onError: (error: unknown) => void) {
         draftsRef.current = { ...draftsRef.current, [key]: text };
         setDrafts(draftsRef.current);
         const previous = pending.current.get(key);
-        if (previous) clearTimeout(previous.timer);
+        if (previous?.timer) clearTimeout(previous.timer);
         pending.current.set(key, { setId, groupId, timer: setTimeout(() => void save(key), TEXT_SAVE_DELAY_MS) });
     };
 
-    // 保存を待っている本文をすぐに保存する (欄を離れたとき・学習を始める前)
-    const flush = React.useCallback(
-        (setId?: string, groupId?: string) =>
-            Promise.all(
-                [...pending.current.keys()]
-                    .filter(key => setId === undefined || groupId === undefined || key === keyOf(setId, groupId))
-                    .map(key => save(key))
-            ).then(() => undefined),
+    // 1 つのグループの本文を保存し終えるまで待つ。保存を待っているものは保存し、保存している途中のものは終わるのを待つ。
+    // その間に新しく始まった保存も待つ。失敗した保存は 1 回だけ保存し直し、それでも失敗したら false
+    const settle = React.useCallback(
+        async (key: string): Promise<boolean> => {
+            let retried = false;
+            for (;;) {
+                if (pending.current.has(key)) {
+                    if (await save(key)) continue;
+                    if (retried) return false;
+                    retried = true;
+                    continue;
+                }
+                const inFlight = saving.current.get(key);
+                if (!inFlight) return true;
+                const ok = await inFlight;
+                if (saving.current.get(key) === inFlight) saving.current.delete(key);
+                if (!ok) {
+                    if (retried) return false;
+                    retried = true;
+                }
+            }
+        },
         [save]
     );
+
+    // 保存を待っている本文をすぐに保存し、保存している途中のものも終わるのを待つ (欄を離れたとき・学習を始める前)。
+    // setId だけを渡すとその学習セットの本文、groupId も渡すとそのグループの本文、どちらも無ければすべて。すべて保存できたら
+    // true
+    const flush = React.useCallback(
+        async (setId?: string, groupId?: string): Promise<boolean> => {
+            const matches = (key: string) =>
+                setId === undefined
+                    ? true
+                    : groupId === undefined
+                      ? key.startsWith(`${setId}:`)
+                      : key === keyOf(setId, groupId);
+            const keys = [...new Set([...pending.current.keys(), ...saving.current.keys()])].filter(matches);
+            const results = await Promise.all(keys.map(key => settle(key)));
+            return results.every(Boolean);
+        },
+        [settle]
+    );
+
+    // 削除したグループの本文を忘れる (保存を待っているものも保存しない)
+    const forget = (setId: string, groupId: string) => {
+        const key = keyOf(setId, groupId);
+        const entry = pending.current.get(key);
+        if (entry?.timer) clearTimeout(entry.timer);
+        pending.current.delete(key);
+        const rest = { ...draftsRef.current };
+        delete rest[key];
+        draftsRef.current = rest;
+        setDrafts(rest);
+    };
 
     // 画面を離れるときも、待っている本文を保存する
     React.useEffect(() => () => void flush(), [flush]);
 
     const textOf = (setId: string, group: TrainingSentence) => drafts[keyOf(setId, group.id)] ?? group.text;
-    return { change, flush, textOf };
+    return { change, flush, forget, textOf };
 }
 
 // 読み上げのモデルの学習。学習セット (言語を 1 つ持つ) を選び、左の一覧から文を選んで、
@@ -231,7 +298,8 @@ export default function TtsTrainingPage() {
     // 任意の文で作成する学習セットで、音声と本文 (空白だけでないもの) がそろったグループの数 (学習に使うもの)
     const readyGroups =
         custom && setId
-            ? sentences.filter(item => audioBySentence.has(item.id) && groupTexts.textOf(setId, item).trim()).length
+            ? sentences.filter(item => audioBySentence.has(item.id) && usableText(groupTexts.textOf(setId, item)))
+                  .length
             : 0;
     const { minimum, recommended } = LANGUAGE_DEFINITIONS[language].trainingSentences;
     const editDisabled = job !== null || !shown;
@@ -299,6 +367,7 @@ export default function TtsTrainingPage() {
     const removeGroup = async (targetSetId: string, group: TrainingSentence) => {
         try {
             await window.kuraToolkit.voice.trainingSets.removeGroup(targetSetId, group.id);
+            groupTexts.forget(targetSetId, group.id);
         } catch (error) {
             showNotice('error', voiceErrorMessage(t, error));
         }
@@ -337,8 +406,20 @@ export default function TtsTrainingPage() {
     // 「無音部分を除去する」の初期値と同じ
     const checkBeforeTraining = async () => {
         if (!setId || !shown) return;
-        // 入力したばかりの本文を、学習が読む前に保存する
-        await groupTexts.flush();
+        // 入力したばかりの本文を、学習が読む前に保存する (保存できなければ始めない。理由は保存の失敗として示している)
+        if (!(await groupTexts.flush(setId))) return;
+        // 学習に使う音声 (任意の文で作成する学習セットでは、音声と本文のあるグループのもの)。無音の確かめはこれに限る
+        const used = new Set(
+            shown.audios
+                .filter(
+                    item =>
+                        !custom ||
+                        sentences.some(
+                            group => group.id === item.sentenceId && usableText(groupTexts.textOf(setId, group))
+                        )
+                )
+                .map(item => item.id)
+        );
         try {
             // 処理役の起動と解析に時間がかかるため、進捗を示して操作を止める (二重に始めないため)
             const report = await run(t('voice.filters.checking'), () =>
@@ -346,7 +427,7 @@ export default function TtsTrainingPage() {
             );
             const names = new Map(shown.audios.map(item => [item.id, item.name]));
             const found = report
-                .filter(item => item.silenceSec > 0)
+                .filter(item => item.silenceSec > 0 && used.has(item.audioId))
                 .map(item => ({
                     audioId: item.audioId,
                     name: names.get(item.audioId) ?? item.audioId,
@@ -693,7 +774,7 @@ export default function TtsTrainingPage() {
                                 <span>
                                     <IconButton
                                         aria-label={t('voice.training.epochsFromSteps')}
-                                        disabled={job !== null}
+                                        disabled={job !== null || (custom ? readyGroups : withAudio) === 0}
                                         onClick={() => setStepsDialogOpen(true)}
                                     >
                                         <CalculateOutlinedIcon />

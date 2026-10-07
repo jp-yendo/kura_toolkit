@@ -98,12 +98,19 @@ function checkLanguages(values: unknown): VoiceLanguage[] {
     return values.map(value => checkLanguage(value));
 }
 
-// renderer から渡された声のモデルの機能を確かめる (保存先のフォルダ名に使うため、決まった値に限る)
+// renderer から渡された読み上げの学習セットの作り方を確かめる (決まった値に限る)
 function checkTrainingSetMode(value: unknown): TrainingSetMode {
     if (!TRAINING_SET_MODES.includes(value as TrainingSetMode)) throw new Error('TRAINING_SET_MODE_MISMATCH');
     return value as TrainingSetMode;
 }
 
+// renderer から渡された文字列を確かめる (文字列以外を空として扱って、保存されている内容を消さないため)
+function checkText(value: unknown): string {
+    if (typeof value !== 'string') throw new Error('INVALID_TEXT');
+    return value;
+}
+
+// renderer から渡された声のモデルの機能を確かめる (保存先のフォルダ名に使うため、決まった値に限る)
 function checkFeatureId(value: unknown): VoiceModelFeature {
     if (value !== 'converter' && value !== 'tts') throw new Error(`INVALID_FEATURE: ${String(value)}`);
     return value;
@@ -283,7 +290,7 @@ export function registerVoiceIpcHandlers() {
     );
     ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_SETS_ADD_GROUP, (_e, id: string) => addTrainingGroup(id));
     ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_SETS_SET_GROUP_TEXT, (_e, id: string, groupId: string, text: unknown) =>
-        setTrainingGroupText(id, groupId, typeof text === 'string' ? text : '')
+        setTrainingGroupText(id, groupId, checkText(text))
     );
     ipcMain.handle(IPC_CHANNELS.VOICE_TRAINING_SETS_REMOVE_GROUP, (_e, id: string, groupId: string) =>
         removeTrainingGroup(id, groupId)

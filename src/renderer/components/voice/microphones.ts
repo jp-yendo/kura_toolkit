@@ -67,7 +67,9 @@ export async function openMicrophone(): Promise<MediaStream> {
         channelCount: 1,
     };
     const configured = useSettingsStore.getState().settings?.voice.microphoneId ?? DEFAULT_MICROPHONE;
-    const deviceId = configured ? resolveMicrophone(configured, await listMicrophones()) : DEFAULT_MICROPHONE;
+    // マイクの一覧を得られない場合は、OS の既定のマイクで録音する
+    const microphones = configured ? await listMicrophones().catch(() => []) : [];
+    const deviceId = configured ? resolveMicrophone(configured, microphones) : DEFAULT_MICROPHONE;
     if (!deviceId) return navigator.mediaDevices.getUserMedia({ audio: base });
     try {
         return await navigator.mediaDevices.getUserMedia({ audio: { ...base, deviceId: { exact: deviceId } } });
@@ -107,6 +109,8 @@ export function useMicrophoneTest(active: boolean, microphoneId: string, gainDb:
     React.useEffect(() => {
         if (!active) {
             setLevel(0);
+            // 止めたら前のエラーを消す (表示の言語を変えたときなどに、同じエラーをもう一度知らせないため)
+            setError(null);
             return;
         }
         let stopped = false;

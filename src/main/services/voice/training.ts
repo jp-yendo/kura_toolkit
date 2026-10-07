@@ -239,7 +239,8 @@ function ttsClips(
     if (mode === 'custom') {
         const clips = sentences.flatMap((group, index) => {
             const filePath = byId.get(group.id);
-            return filePath && group.text.trim()
+            // 学習の駆動スクリプトが学習の一覧に書くときと同じ整え方 (「|」と改行を空白にする) で、空かどうかを判断する
+            return filePath && group.text.replace(/[|\r\n]/g, ' ').trim()
                 ? [{ id: group.id, text: group.text, path: filePath, label: String(index + 1) }]
                 : [];
         });

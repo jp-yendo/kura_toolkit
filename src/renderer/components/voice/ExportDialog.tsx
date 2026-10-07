@@ -80,6 +80,8 @@ export default function ExportDialog({
     const [outputDir, setOutputDir] = React.useState('');
     const [states, setStates] = React.useState<Record<string, EntryState>>({});
     const [overwrite, setOverwrite] = React.useState<string[] | null>(null);
+    // 上書きの確認で続ける場合に書き出すもの (保存先を 1 つ選んだ場合。無ければ一覧で選んだもの)
+    const overwriteTargets = React.useRef<{ entry: ExportEntry; dest: string }[] | undefined>(undefined);
     const { job, run, cancel } = useJobRunner();
     const ext = AUDIO_FORMAT_EXTENSIONS[exportSettings.format] ?? 'mp3';
     const base = sanitizeFileName(baseFileName || baseName(sourcePath) || 'output');
@@ -128,9 +130,10 @@ export default function ExportDialog({
             showNotice('error', t('voice.export.duplicate'), 10000);
             return;
         }
-        if (!confirmed && !targets) {
+        if (!confirmed) {
             const existing = await window.kuraToolkit.voice.export.existing(destinations);
             if (existing.length > 0) {
+                overwriteTargets.current = targets;
                 setOverwrite(existing);
                 return;
             }
@@ -305,7 +308,12 @@ export default function ExportDialog({
                                 defaultPath: destOf(single),
                                 filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
                             });
-                            if (dest) void start(true, [{ entry: single, dest }]);
+                            // 入力した名前の拡張子が形式と違う場合は、形式の拡張子にする (中身と拡張子を合わせるため)。
+                            // 名前を変えた場合は、保存のダイアログが確かめた名前とは違うため、上書きをもう一度確かめる
+                            if (dest) {
+                                const corrected = `${dest.replace(EXPORT_EXTENSION_PATTERN, '')}.${ext}`;
+                                void start(corrected === dest, [{ entry: single, dest: corrected }]);
+                            }
                         }}
                     >
                         {t('voice.export.run')}
@@ -332,7 +340,7 @@ export default function ExportDialog({
                         color='warning'
                         onClick={() => {
                             setOverwrite(null);
-                            void start(true);
+                            void start(true, overwriteTargets.current);
                         }}
                     >
                         {t('voice.export.overwriteRun')}

@@ -1,24 +1,39 @@
 import { resolveFfmpegPath, runTool } from './ffmpeg/ffmpeg';
 import { AUDIO_FORMAT_ENCODERS, AUDIO_FORMATS, type AudioFormat } from '../../shared/audio-format';
 
-// 使っている ffmpeg で書き出せる形式 (要るエンコーダーが ffmpeg のビルドに含まれるもの)。ffmpeg のパスごとに覚える。
-// ffmpeg が見つからない場合はすべての形式を返す (書き出しの時点で ffmpeg が無いことを知らせるため)
-const formatsCache = new Map<string, AudioFormat[]>();
+// 使っている ffmpeg のエンコーダーの一覧。ffmpeg のパスごとに覚える。調べられない場合 (ffmpeg が無い・一覧を得られない) は
+// null を返し、覚えない (ffmpeg を直したり設定し直したりした後に、もう一度調べるため)
+const encodersCache = new Map<string, Set<string>>();
 
-export async function availableAudioFormats(): Promise<AudioFormat[]> {
+export async function availableEncoders(): Promise<Set<string> | null> {
     const ffmpegPath = resolveFfmpegPath();
-    if (!ffmpegPath) return AUDIO_FORMATS;
-    const cached = formatsCache.get(ffmpegPath);
+    if (!ffmpegPath) return null;
+    const cached = encodersCache.get(ffmpegPath);
     if (cached) return cached;
-    const result = await runTool(ffmpegPath, ['-hide_banner', '-encoders']);
+    let stdout: string;
+    try {
+        const result = await runTool(ffmpegPath, ['-hide_banner', '-encoders']);
+        if (result.code !== 0) return null;
+        stdout = result.stdout;
+    } catch {
+        return null;
+    }
     // 一覧の各行は「 A....D libmp3lame  説明」の形
     const encoders = new Set(
-        result.stdout
+        stdout
             .split(/\r?\n/)
             .map(line => /^\s*[A-Z.]{6}\s+(\S+)/.exec(line)?.[1])
             .filter((name): name is string => !!name)
     );
-    const formats = AUDIO_FORMATS.filter(format => encoders.has(AUDIO_FORMAT_ENCODERS[format]));
-    formatsCache.set(ffmpegPath, formats);
-    return formats;
+    if (encoders.size === 0) return null;
+    encodersCache.set(ffmpegPath, encoders);
+    return encoders;
+}
+
+// 使っている ffmpeg で書き出せる形式 (要るエンコーダーが ffmpeg のビルドに含まれるもの)。エンコーダーを調べられない場合は
+// すべての形式を返す (書き出しの時点で ffmpeg の問題を知らせるため)
+export async function availableAudioFormats(): Promise<AudioFormat[]> {
+    const encoders = await availableEncoders();
+    if (!encoders) return AUDIO_FORMATS;
+    return AUDIO_FORMATS.filter(format => encoders.has(AUDIO_FORMAT_ENCODERS[format]));
 }

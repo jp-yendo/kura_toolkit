@@ -1,3 +1,4 @@
+import React from 'react';
 import { Button, IconButton, Stack, Tooltip, Typography } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
@@ -25,8 +26,12 @@ export default function RecorderControl({ onRecorded, onActiveChange, disabled, 
     // 書き込みに失敗して録音が途中で終わった場合も、録音中の扱いを解く
     const recorder = useRecorder({ onAbort: () => onActiveChange?.(false) });
     const recording = recorder.state === 'recording';
+    // 録音の開始・停止の途中 (ボタンの表示が変わる前に、もう一度押されても受け付けないため)
+    const busy = React.useRef(false);
 
     const start = async () => {
+        if (busy.current) return;
+        busy.current = true;
         onActiveChange?.(true);
         let started = false;
         try {
@@ -38,15 +43,19 @@ export default function RecorderControl({ onRecorded, onActiveChange, disabled, 
             }
             started = await recorder.start();
         } finally {
+            busy.current = false;
             if (!started) onActiveChange?.(false);
         }
     };
 
     const stop = async () => {
+        if (busy.current) return;
+        busy.current = true;
         try {
             const audio = await recorder.stop();
             if (audio) onRecorded(audio);
         } finally {
+            busy.current = false;
             onActiveChange?.(false);
         }
     };

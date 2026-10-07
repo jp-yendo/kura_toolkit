@@ -432,9 +432,11 @@ async function registerAudio(
             channels: info.channels,
             addedAt: Date.now(),
         };
-        // 調べている間に削除が始まっていないかを確かめ、変わっていないよう記録は直前に読み直す
+        // 調べている間に削除が始まっていないかを確かめ、変わっていないよう記録は直前に読み直す。読み上げの学習セットでは、
+        // 加える先の文 (グループ) がその間に削除されていないかも確かめる (記録に、どの文にも結び付かない音声を残さないため)
         checkNotInUse(data.feature, data.id);
         current = readSet(data.feature, data.id);
+        checkSentence(current, sentenceId);
     } catch (error) {
         fs.rmSync(file, { force: true });
         throw error;
@@ -622,15 +624,17 @@ export async function filterTrainingAudio(
 
 // 加工した結果のファイルを、学習セットの音のファイルとして置く (元の音のファイルは消え、置き換わる)。
 // 同じドライブなら名前の変更で済ませ、別のドライブなら学習セットの中へ写してから置き換える。
-// 再生のために開いている元の音のファイルは、先に閉じる (開いたままだと Windows では置き換えられないため)
+// 再生のために開いている元の音のファイルは、名前を変える直前に閉じる (開いたままだと Windows では置き換えられないため。
+// 写している間に読み込みが始まっても置き換えられるよう、写した後に閉じる)
 async function moveIntoSet(result: string, file: string): Promise<void> {
-    await releaseMedia(file);
     try {
+        await releaseMedia(file);
         await fs.promises.rename(result, file);
     } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'EXDEV') throw error;
         const staging = `${file}.kura-tmp`;
         await fs.promises.copyFile(result, staging);
+        await releaseMedia(file);
         await fs.promises.rename(staging, file);
         await fs.promises.rm(result, { force: true });
     }

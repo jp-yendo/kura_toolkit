@@ -3,6 +3,8 @@ import path from 'path';
 import { probeJson } from './ffmpeg/ffprobe';
 import { isCancelledError, runFfmpeg } from './ffmpeg/ffmpeg';
 import { emitJobEvent, finishJob, isCancelled, startJob } from './job-manager';
+import { availableEncoders } from './audio-formats';
+import { discardLater, newTempDir } from './work-dir';
 import type {
     AudioProbeItem,
     AudioNormalizeInput,
@@ -31,13 +33,27 @@ type FfprobeStream = {
     channels?: number;
     bit_rate?: string;
     bits_per_raw_sample?: string;
+    sample_fmt?: string;
+    width?: number;
+    height?: number;
+    tags?: Record<string, string>;
     disposition?: { attached_pic?: number };
 };
 
 type FfprobeStreamsResult = {
     streams?: FfprobeStream[];
-    format?: { duration?: string; bit_rate?: string };
+    format?: { duration?: string; bit_rate?: string; format_name?: string };
 };
+
+// Ogg のファイル (Ogg Vorbis・Opus・Ogg FLAC など)。タグ (Vorbis コメント) は音声のストリームに付き、アルバムアートは
+// METADATA_BLOCK_PICTURE のタグとして入る (ffmpeg は読むときに、アルバムアートを画像のストリームとして見せる)
+function isOgg(probe: FfprobeStreamsResult): boolean {
+    return (probe.format?.format_name ?? '').split(',').includes('ogg');
+}
+
+function isAttachedPicture(stream: FfprobeStream): boolean {
+    return stream.codec_type === 'video' && stream.disposition?.attached_pic === 1;
+}
 
 // loudnorm が stderr 末尾に出力する JSON ブロックを抽出する
 function extractLoudnormJson(stderr: string): Record<string, string> | null {
@@ -203,9 +219,22 @@ const KEEP_ENCODERS: Record<string, string> = {
     alac: 'alac',
 };
 
-function keepEncoder(codec: string): string | null {
-    if (codec.startsWith('pcm_')) return codec;
+// PCM は同じ名前のエンコーダーで書く。読めても書けない PCM (pcm_dvd・pcm_bluray など) は、使っている ffmpeg に
+// エンコーダーがあるものに限る (エンコーダーを調べられない場合は試す)
+function keepEncoder(codec: string, encoders: Set<string> | null): string | null {
+    if (codec.startsWith('pcm_')) return !encoders || encoders.has(codec) ? codec : null;
     return KEEP_ENCODERS[codec] ?? null;
+}
+
+// ロスレス (FLAC・ALAC) のビット数。ビット数の情報が無い (0 を含む) 場合だけ、サンプルの形式から決める (16bit の整数なら
+// 16、32bit の整数は 24bit の値を入れたもの)。16・24 以外のビット数 (32bit など) は指定しない
+function losslessBits(stream: FfprobeStream): number | null {
+    const bits = Number(stream.bits_per_raw_sample);
+    if (bits === 16 || bits === 24) return bits;
+    if (Number.isFinite(bits) && bits > 0) return null;
+    if (stream.sample_fmt === 's16' || stream.sample_fmt === 's16p') return 16;
+    if (stream.sample_fmt === 's32' || stream.sample_fmt === 's32p') return 24;
+    return null;
 }
 
 // 元の形式のまま書き出すときの指定。選択肢は使わず、元のファイルの値を引き継ぐ: サンプリング周波数とチャンネル数は
@@ -215,7 +244,7 @@ function keepEncodeArgs(encoder: string, stream: FfprobeStream, probe: FfprobeSt
     const args = ['-c:a', encoder];
     if (encoder === 'flac' || encoder === 'alac') {
         const planar = encoder === 'alac' ? 'p' : '';
-        const bits = Number(stream.bits_per_raw_sample);
+        const bits = losslessBits(stream);
         if (bits === 16) args.push('-sample_fmt', `s16${planar}`);
         else if (bits === 24) args.push('-sample_fmt', `s32${planar}`, '-bits_per_raw_sample', '24');
         return args;
@@ -225,6 +254,100 @@ function keepEncodeArgs(encoder: string, stream: FfprobeStream, probe: FfprobeSt
     const bitrate = Number(stream.bit_rate ?? (hasVideo ? undefined : probe.format?.bit_rate));
     if (Number.isFinite(bitrate) && bitrate > 0) args.push('-b:a', String(Math.round(bitrate)));
     return args;
+}
+
+// アルバムアートの画像の形式 (ffmpeg のコーデック名 -> MIME タイプ)
+const PICTURE_MIME_TYPES: Record<string, string> = {
+    png: 'image/png',
+    mjpeg: 'image/jpeg',
+    gif: 'image/gif',
+    bmp: 'image/bmp',
+    webp: 'image/webp',
+};
+
+// ffmetadata の値の書き方 (「=」「;」「#」「\」と改行 (CR・LF) は「\」を前に付ける。NUL は書けないため除く)
+function escapeFfmetadata(value: string): string {
+    return value.replace(/\0/g, '').replace(/[=;#\\\r\n]/g, char => `\\${char}`);
+}
+
+// Ogg のアルバムアートを元の形式のまま写すためのメタデータのファイル (音声のストリームのタグと、アルバムアートを
+// METADATA_BLOCK_PICTURE (FLAC の PICTURE ブロックを base64 にしたもの) にしたもの)。アルバムアートが無ければ null
+async function oggPictureMetadata(
+    filePath: string,
+    probe: FfprobeStreamsResult,
+    audioStream: FfprobeStream,
+    jobId: string
+): Promise<{ dir: string; file: string } | null> {
+    const picture = (probe.streams ?? []).find(isAttachedPicture);
+    if (!picture || picture.index === undefined) return null;
+    const dir = newTempDir();
+    try {
+        return await writePictureMetadata(dir, filePath, picture, audioStream, jobId);
+    } catch (error) {
+        // 取り出せなかった場合も、一時ファイルを残さない
+        discardLater(dir);
+        throw error;
+    }
+}
+
+async function writePictureMetadata(
+    dir: string,
+    filePath: string,
+    picture: FfprobeStream,
+    audioStream: FfprobeStream,
+    jobId: string
+): Promise<{ dir: string; file: string }> {
+    const imagePath = path.join(dir, 'picture.bin');
+    await runFfmpeg(
+        [
+            '-hide_banner',
+            '-loglevel',
+            'error',
+            '-y',
+            '-i',
+            filePath,
+            '-map',
+            `0:${picture.index}`,
+            '-c',
+            'copy',
+            '-frames:v',
+            '1',
+            '-f',
+            'image2',
+            imagePath,
+        ],
+        { jobId }
+    );
+    const image = fs.readFileSync(imagePath);
+    const mime = Buffer.from(PICTURE_MIME_TYPES[picture.codec_name ?? ''] ?? `image/${picture.codec_name ?? ''}`);
+    const uint32 = (value: number) => {
+        const buffer = Buffer.alloc(4);
+        buffer.writeUInt32BE(value >>> 0);
+        return buffer;
+    };
+    // 種類 3 (表紙)・MIME タイプ・説明 (空)・幅・高さ・色の深さ (24)・パレットの色数 (0)・画像
+    const block = Buffer.concat([
+        uint32(3),
+        uint32(mime.length),
+        mime,
+        uint32(0),
+        uint32(picture.width ?? 0),
+        uint32(picture.height ?? 0),
+        uint32(24),
+        uint32(0),
+        uint32(image.length),
+        image,
+    ]);
+    const lines = [';FFMETADATA1', '[STREAM]'];
+    for (const [key, value] of Object.entries(audioStream.tags ?? {})) {
+        // エンコーダーの名前は書き出すときに付け直され、アルバムアートは下で付ける
+        if (/^(encoder|metadata_block_picture)$/i.test(key)) continue;
+        lines.push(`${escapeFfmetadata(key)}=${escapeFfmetadata(value)}`);
+    }
+    lines.push(`METADATA_BLOCK_PICTURE=${block.toString('base64')}`);
+    const file = path.join(dir, 'metadata.txt');
+    fs.writeFileSync(file, lines.join('\n') + '\n', 'utf-8');
+    return { dir, file };
 }
 
 // 出力パスの決め方。元の形式のままなら入力と同じ名前、ほかは入力と同じ名前で拡張子を出力形式のものにする。出力先が
@@ -299,6 +422,8 @@ export async function normalizeFiles(
     startJob(jobId);
     const items: AudioNormalizeItem[] = [];
     let cancelled = false;
+    // Ogg のアルバムアートを写すための一時ファイルの置き場 (終わったら消す)
+    const tempDirs: string[] = [];
     try {
         // 測る必要があるファイルは、測る分 (読み込み 1 回分) を足して配分する
         const needsMeasure = inputs.map(input => input.lufs === null || input.truePeak === null);
@@ -338,7 +463,7 @@ export async function normalizeFiles(
                     continue;
                 }
                 const codec = audioStream.codec_name ?? '';
-                const encoder = outputFormat === 'keep' ? keepEncoder(codec) : null;
+                const encoder = outputFormat === 'keep' ? keepEncoder(codec, await availableEncoders()) : null;
                 if (outputFormat === 'keep' && !encoder) {
                     // 元の形式のままでは、同じ形式で書けないコーデックはスキップする
                     item.skipped = true;
@@ -381,26 +506,41 @@ export async function normalizeFiles(
                 }
                 const encodeOffset = needsMeasure[i] ? 50 : 0;
                 const encodeShare = needsMeasure[i] ? 0.5 : 1;
-                // 映像: 元の形式のままなら、すべて写す (動画の映像・アルバムアート)。ほかの形式では、アルバムアート
-                // (attached_pic) を入れられる形式に限って、それだけを写す (どの形式も動画の映像は入れられないため、
-                // 動画ファイルは音声だけになる)
+                // 映像: 元の形式のままなら、すべて写す (動画の映像・アルバムアート)。ただし Ogg のアルバムアートは
+                // 画像のストリームとしては書けないため、タグに戻して写す (oggPictureMetadata)。ほかの形式では、
+                // アルバムアート (attached_pic) を入れられる形式に限って、それだけを写す (どの形式も動画の映像は
+                // 入れられないため、動画ファイルは音声だけになる)
+                const ogg = isOgg(probe);
+                const streamMaps = (keep: (stream: FfprobeStream) => boolean) =>
+                    (probe.streams ?? [])
+                        .filter(stream => stream.codec_type === 'video' && stream.index !== undefined && keep(stream))
+                        .flatMap(stream => ['-map', `0:${stream.index}`]);
                 const videoMaps =
                     outputFormat === 'keep'
-                        ? ['-map', '0:v?']
+                        ? ogg
+                            ? streamMaps(stream => !isAttachedPicture(stream))
+                            : ['-map', '0:v?']
                         : AUDIO_FORMATS_WITH_PICTURES.includes(outputFormat)
-                          ? (probe.streams ?? [])
-                                .filter(
-                                    stream =>
-                                        stream.codec_type === 'video' &&
-                                        stream.disposition?.attached_pic === 1 &&
-                                        stream.index !== undefined
-                                )
-                                .flatMap(stream => ['-map', `0:${stream.index}`])
+                          ? streamMaps(isAttachedPicture)
                           : [];
+                // タグ: ファイル全体のタグを写す。Ogg を別の形式にする場合は、音声のストリームのタグ (Vorbis コメント)
+                // をファイル全体のタグとして写す (MP3・FLAC・M4A はファイル全体のタグだけを書くため)。Ogg のまま
+                // アルバムアートを写す場合は、音声のストリームのタグとアルバムアートをメタデータのファイルで渡す
+                const pictureMetadata =
+                    outputFormat === 'keep' && ogg
+                        ? await oggPictureMetadata(filePath, probe, audioStream, jobId)
+                        : null;
+                if (pictureMetadata) tempDirs.push(pictureMetadata.dir);
+                const metadataArgs = [
+                    '-map_metadata',
+                    '0',
+                    ...(outputFormat !== 'keep' && ogg ? ['-map_metadata:g', '0:s:a:0'] : []),
+                    ...(pictureMetadata ? ['-map_metadata:s:a:0', '1:s:0'] : []),
+                ];
                 const encodeArgs =
                     outputFormat === 'keep'
                         ? keepEncodeArgs(encoder as string, audioStream, probe)
-                        : audioEncodeArgs(outputFormat, encodeSettings);
+                        : audioEncodeArgs(outputFormat, encodeSettings, audioStream.channels);
                 const args = [
                     '-hide_banner',
                     '-loglevel',
@@ -408,10 +548,10 @@ export async function normalizeFiles(
                     '-y',
                     '-i',
                     filePath,
+                    ...(pictureMetadata ? ['-f', 'ffmetadata', '-i', pictureMetadata.file] : []),
                     '-af',
                     `volume=${gain.toFixed(2)}dB`,
-                    '-map_metadata',
-                    '0',
+                    ...metadataArgs,
                     '-map',
                     '0:a:0',
                     ...videoMaps,
@@ -445,6 +585,7 @@ export async function normalizeFiles(
             items.push(item);
         }
     } finally {
+        for (const dir of tempDirs) discardLater(dir);
         finishJob(jobId);
     }
     return { items, cancelled: cancelled || isCancelled(jobId) };

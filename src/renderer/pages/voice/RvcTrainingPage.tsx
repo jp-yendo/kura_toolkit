@@ -305,9 +305,14 @@ export default function RvcTrainingPage() {
                         {total > 0 && total < 600 && <Alert severity='warning'>{t('voice.training.rvcShort')}</Alert>}
 
                         <Panel>
-                            <Stack direction='row' spacing={1.5} sx={{ alignItems: 'center' }}>
-                                {/* 件数・長さと入力欄の間は 3 文字分ほど空ける (並びの間隔 12px + 右の余白 30px。body2 は 14px)。
-                                    Stack は子の margin を 0 にするため、padding で空ける */}
+                            {/* 狭いときは折り返す (折り返した行の先頭が字下げされないよう、間隔は gap で取る) */}
+                            <Stack
+                                direction='row'
+                                spacing={1.5}
+                                useFlexGap
+                                sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                            >
+                                {/* 件数・長さと入力欄の間は 3 文字分ほど空ける (並びの間隔 12px + 右の余白 30px。body2 は 14px) */}
                                 <Typography variant='body2' sx={{ flexShrink: 0, pr: 3.75 }}>
                                     {t('voice.training.datasetSummary', {
                                         count: items.length,

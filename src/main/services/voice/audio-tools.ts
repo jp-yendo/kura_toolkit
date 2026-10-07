@@ -4,7 +4,12 @@ import { probeJson } from '../ffmpeg/ffprobe';
 import { resolveFfmpegPath, runFfmpeg, runTool } from '../ffmpeg/ffmpeg';
 import { discardLater, newTempDir, produceFile } from '../work-dir';
 import type { AudioExportSettings } from '../../../shared/voice/types';
-import { audioEncodeArgs, isAudioFormat, sanitizeAudioEncodeSettings } from '../../../shared/audio-format';
+import {
+    AUDIO_FORMAT_MUXERS,
+    audioEncodeArgs,
+    isAudioFormat,
+    sanitizeAudioEncodeSettings,
+} from '../../../shared/audio-format';
 
 // 音声機能で使う ffmpeg の処理。中間ファイルは 32bit 浮動小数の WAV とする
 // (段階を重ねる処理で音が割れたり精度が落ちたりしないようにするため)。
@@ -404,7 +409,10 @@ export async function encodeExport(
         input,
         '-map',
         '0:a:0',
-        ...audioEncodeArgs(format, sanitizeAudioEncodeSettings(settings)),
+        ...audioEncodeArgs(format, sanitizeAudioEncodeSettings(settings), info.channels),
+        // 出力の形式は拡張子ではなく選んだ形式で決める (保存先の名前の拡張子が形式と違っても、形式どおりの中身にする)
+        '-f',
+        AUDIO_FORMAT_MUXERS[format],
     ];
     // 別の名前に書いてから、名前の変更で既存のファイルを置き換える (失敗しても既存のファイルは残る)
     await produceFile(output, target =>

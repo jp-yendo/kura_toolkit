@@ -71,6 +71,7 @@ export function useRecorder(options: RecorderOptions = {}) {
     const [elapsed, setElapsed] = React.useState(0);
     const [error, setError] = React.useState<string | null>(null);
     const session = React.useRef<Session | null>(null);
+    const starting = React.useRef(false);
     const onAbort = React.useRef(options.onAbort);
     onAbort.current = options.onAbort;
 
@@ -128,9 +129,8 @@ export function useRecorder(options: RecorderOptions = {}) {
         };
     }, [abandon]);
 
-    // 録音を始める。始められたら true
-    const start = React.useCallback(async (): Promise<boolean> => {
-        if (session.current) return false;
+    // 録音を始める (start から呼ぶ)
+    const startSession = React.useCallback(async (): Promise<boolean> => {
         setError(null);
         setState('starting');
         let stream: MediaStream | null = null;
@@ -225,6 +225,17 @@ export function useRecorder(options: RecorderOptions = {}) {
             return false;
         }
     }, [abandon, flush]);
+
+    // 録音を始める。始められたら true。始めている途中 (マイクを開くまで) にもう一度呼ばれても、2 つ目を始めない
+    const start = React.useCallback(async (): Promise<boolean> => {
+        if (session.current || starting.current) return false;
+        starting.current = true;
+        try {
+            return await startSession();
+        } finally {
+            starting.current = false;
+        }
+    }, [startSession]);
 
     // 録音を終え、main が書き終えた録音を返す。録音していない・何も録れていなければ null。
     // 書き込みに失敗した場合は失敗を返す

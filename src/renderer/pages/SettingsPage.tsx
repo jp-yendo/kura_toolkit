@@ -42,6 +42,16 @@ export default function SettingsPage() {
         const timer = window.setTimeout(() => void update({ voice: { inputGainDb: gainDb } }), 500);
         return () => window.clearTimeout(timer);
     }, [gainDb, savedGainDb, update]);
+    // 保存を待っている間に画面を離れた場合も保存する
+    const pendingGain = React.useRef({ gainDb, savedGainDb, update });
+    pendingGain.current = { gainDb, savedGainDb, update };
+    React.useEffect(
+        () => () => {
+            const pending = pendingGain.current;
+            if (pending.gainDb !== pending.savedGainDb) void pending.update({ voice: { inputGainDb: pending.gainDb } });
+        },
+        []
+    );
     const [micTesting, setMicTesting] = React.useState(false);
     const micTest = useMicrophoneTest(micTesting, settings?.voice.microphoneId ?? DEFAULT_MICROPHONE, gainDb);
     React.useEffect(() => {

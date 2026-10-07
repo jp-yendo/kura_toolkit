@@ -316,7 +316,8 @@ export type IpcApi = {
         // 実行前の出力先チェック (上書きになるファイルと、出力パスの重複)
         checkOutputs(files: string[], outputDir: string, format: AudioOutputFormat): Promise<AudioOutputCheck>;
         // 使っている ffmpeg で書き出せる形式 (オーディオ正規化と音声機能の書き出しで使う)
-        formats(): Promise<AudioFormat[]>;
+        // known: 使っている ffmpeg のエンコーダーを調べられたか (調べられなければ、すべての形式)
+        formats(): Promise<{ formats: AudioFormat[]; known: boolean }>;
     };
     // チャプターカット
     chapter: {
