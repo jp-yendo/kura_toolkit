@@ -10,7 +10,7 @@ import type { SilenceOption, TrainingFilterOptions } from '../../../shared/voice
 import { getWorker } from './python-worker';
 import { corpusSentences } from './corpus';
 import { readJsonFile, writeJsonFile } from './json-file';
-import { forgetMedia, forgetMediaUnder, mediaUrl } from '../media-protocol';
+import { forgetMedia, forgetMediaUnder, mediaUrl, releaseMedia } from '../media-protocol';
 import { modelPaths } from './paths';
 import { discardRecording, moveRecordingTo } from './recording';
 import { moveToTrash } from '../../utils/trash';
@@ -541,8 +541,10 @@ export async function filterTrainingAudio(
 }
 
 // 加工した結果のファイルを、学習セットの音のファイルとして置く (元の音のファイルは消え、置き換わる)。
-// 同じドライブなら名前の変更で済ませ、別のドライブなら学習セットの中へ写してから置き換える
+// 同じドライブなら名前の変更で済ませ、別のドライブなら学習セットの中へ写してから置き換える。
+// 再生のために開いている元の音のファイルは、先に閉じる (開いたままだと Windows では置き換えられないため)
 async function moveIntoSet(result: string, file: string): Promise<void> {
+    await releaseMedia(file);
     try {
         await fs.promises.rename(result, file);
     } catch (error) {
@@ -552,7 +554,6 @@ async function moveIntoSet(result: string, file: string): Promise<void> {
         await fs.promises.rename(staging, file);
         await fs.promises.rm(result, { force: true });
     }
-    forgetMedia(file);
 }
 
 // 置き換えた音の長さなどを記録に反映する

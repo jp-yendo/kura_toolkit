@@ -1160,7 +1160,7 @@ export default {
         deleteAudio: '音声を削除',
         datasetNote:
             '録音した音声と指定した音声ファイルは、学習セットの中に保存します (元のファイルは、追加した後に移動・削除して構いません)。学習セットは学習が終わっても残ります。',
-        dataset: '学習用の音声 ({{count}} 件 / 合計 {{duration}})',
+        datasetSummary: '{{count}} 件 / 合計 {{duration}}',
         datasetEmpty: '録音するか、音声ファイルを追加してください。',
         duplicateSkipped: '同じ名前のファイルがすでに追加されているため、次のファイルは追加しませんでした: {{names}}',
         dropUnsupported: 'この形式のファイルは追加できません。',

@@ -14,6 +14,9 @@ const MEDIA_SCHEME = 'kura-media';
 
 const tokenToPath = new Map<string, string>();
 const pathToToken = new Map<string, string>();
+// 応答のために開いているファイルの読み込み (<audio> は先読みの途中で読むのを止めることがあり、その間はファイルが開いた
+// ままになる。Windows では開いているファイルへの上書き (名前の変更) が EPERM で失敗するため、置き換える前に閉じる)
+const openStreams = new Map<string, Set<fs.ReadStream>>();
 
 // 公開するファイルの形式 (音声: 処理の結果と、学習用に追加・録音した音声。画像: SVG 変換の元画像と変換結果)
 const CONTENT_TYPES: Record<string, string> = {
@@ -77,6 +80,44 @@ export function forgetMedia(filePath: string): void {
     tokenToPath.delete(token);
 }
 
+// ファイルを置き換える前に呼ぶ: 公開をやめ (新しい読み込みを受け付けない)、開いている読み込みを閉じ終えるまで待つ。
+// 読み込みを止められた <audio> は、置き換えた後の新しい URL で読み直す
+export async function releaseMedia(filePath: string): Promise<void> {
+    const resolved = path.resolve(filePath);
+    forgetMedia(resolved);
+    const streams = openStreams.get(resolved);
+    if (!streams) return;
+    await Promise.all(
+        [...streams].map(
+            stream =>
+                new Promise<void>(resolve => {
+                    if (stream.closed) {
+                        resolve();
+                        return;
+                    }
+                    stream.once('close', () => resolve());
+                    stream.destroy();
+                })
+        )
+    );
+}
+
+function openStream(filePath: string, range?: { start: number; end: number }): fs.ReadStream {
+    const stream = fs.createReadStream(filePath, range);
+    let streams = openStreams.get(filePath);
+    if (!streams) {
+        streams = new Set();
+        openStreams.set(filePath, streams);
+    }
+    streams.add(stream);
+    stream.once('close', () => {
+        const current = openStreams.get(filePath);
+        current?.delete(stream);
+        if (current?.size === 0) openStreams.delete(filePath);
+    });
+    return stream;
+}
+
 // 公開している URL のファイルのパス (公開していない URL は null)
 export function mediaPathOf(url: string): string | null {
     let parsed: URL;
@@ -124,7 +165,7 @@ function handleRequest(request: Request): Response {
         if (start >= size || start > end) {
             return new Response(null, { status: 416, headers: { ...headers, 'Content-Range': `bytes */${size}` } });
         }
-        const stream = fs.createReadStream(filePath, { start, end });
+        const stream = openStream(filePath, { start, end });
         return new Response(Readable.toWeb(stream) as ReadableStream, {
             status: 206,
             headers: {
@@ -134,7 +175,7 @@ function handleRequest(request: Request): Response {
             },
         });
     }
-    const stream = fs.createReadStream(filePath);
+    const stream = openStream(filePath);
     return new Response(Readable.toWeb(stream) as ReadableStream, {
         status: 200,
         headers: { ...headers, 'Content-Length': String(size) },

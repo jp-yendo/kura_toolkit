@@ -1158,7 +1158,7 @@ export default {
         deleteAudio: 'Delete Audio',
         datasetNote:
             'Recordings and chosen audio files are saved in the training set (you can move or delete the original files after adding them). Training sets remain after training.',
-        dataset: 'Training audio ({{count}} items / {{duration}} in total)',
+        datasetSummary: '{{count}} items / {{duration}} in total',
         datasetEmpty: 'Record your voice or add audio files.',
         duplicateSkipped:
             'These files were not added because files with the same names have already been added: {{names}}',

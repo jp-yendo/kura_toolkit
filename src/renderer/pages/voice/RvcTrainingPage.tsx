@@ -291,8 +291,8 @@ export default function RvcTrainingPage() {
 
                         <Panel>
                             <Stack direction='row' spacing={1.5} sx={{ alignItems: 'center' }}>
-                                <Typography variant='body2' sx={{ flexShrink: 0 }}>
-                                    {t('voice.training.dataset', {
+                                <Typography variant='body2' sx={{ flexShrink: 0, mr: 2.5 }}>
+                                    {t('voice.training.datasetSummary', {
                                         count: items.length,
                                         duration: formatDuration(total),
                                     })}
