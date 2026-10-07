@@ -578,7 +578,6 @@ export default {
         separateFrom: 'Branch',
         separateFromFor: 'Branch from {{name}}',
         dialogTitle: 'Separate: {{input}}',
-        otherOutput: 'Processed',
         noResults: 'Use "Branch" on a sound to choose a method and separate it.',
         recreate: 'Recreate with Other Settings',
         recreateMessage:
@@ -600,6 +599,8 @@ export default {
         },
         verifiedEnsemble: 'Combination verified by the distributor ({{count}} models)',
         categoryEmpty: 'No models in this group have been downloaded. You can get them from "Downloads".',
+        selectedTitle: 'Selection',
+        selectedNone: 'Nothing is selected yet.',
         quality: 'Separation quality: {{values}}',
         algorithm: 'How to decide the result',
         algorithmNotes: {
@@ -754,6 +755,9 @@ export default {
         silenceThreshold: 'Silence level (below the peak)',
         silenceLength: 'Only silences longer than',
         secondsValue: '{{value}} s',
+        removeReverb: 'Remove reverb and echo (slow)',
+        dereverbModelMissing: 'Download a model from the "Reverb and echo removal" recommendations to use this.',
+        dereverbModelSelect: 'Model',
         removeNoise: 'Remove noise',
         noiseSimple: 'Simple removal (FFT, fast)',
         noiseWavelet: 'Simple removal (wavelet, fast)',
@@ -770,6 +774,7 @@ export default {
         summaryNoiseSimple: 'noise removal (FFT) {{floor}} dB, {{reduction}} dB',
         summaryNoiseWavelet: 'noise removal (wavelet) {{noise}} dB, {{percent}}%',
         summaryNoiseModel: 'noise removal ({{model}})',
+        summaryDereverb: 'reverb and echo removal ({{model}})',
         summaryRemoveSilence: 'silence removal {{db}} dB, {{seconds}} s',
         summaryLoudness: 'volume {{lufs}} LUFS',
         filterTitle: 'Filter: {{name}}',
@@ -1266,6 +1271,8 @@ export default {
             'Some audio files of the training set could not be found. Delete that audio, then record it again or choose the file again. ({{detail}})',
         TRAINING_SET_NOT_FOUND: 'The training set could not be found.',
         TRAINING_SET_IN_USE: 'This training set cannot be changed or deleted while it is used for training.',
+        DEREVERB_MODEL_REQUIRED:
+            'No reverb and echo removal model is available. Download a model from the "Reverb and echo removal" recommendations.',
         NOISE_REMOVAL_MODEL_REQUIRED:
             'No noise removal model is available. Download a model from the "Noise removal" recommendations.',
         NOTHING_TO_PROCESS: 'Check at least one kind of processing.',

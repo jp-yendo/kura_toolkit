@@ -10,8 +10,12 @@ import { getWorker } from './python-worker';
 import { RVC_EMBEDDER_ITEMS } from './spec';
 import { withGpu } from './gpu-lock';
 import { ffmpegPhase, voicePhase, workerEvents } from './job-progress';
-import { removeNoise } from './audio-filters';
-import { sanitizeNoiseRemovalOption, sanitizeSilenceOption } from '../../../shared/voice/audio-filters';
+import { removeNoise, removeReverb } from './audio-filters';
+import {
+    sanitizeDereverbOption,
+    sanitizeNoiseRemovalOption,
+    sanitizeSilenceOption,
+} from '../../../shared/voice/audio-filters';
 import { rvcModelFiles } from './voice-models';
 import { discardLater, isInsideWork, newId, produceShared, sessionDir, withJobTemp } from '../work-dir';
 import type {
@@ -74,6 +78,7 @@ export async function runConversion(jobId: string, received: ConversionRunReques
             ...received,
             params: {
                 ...received.params,
+                dereverb: sanitizeDereverbOption(received.params.dereverb),
                 muteSilence: sanitizeSilenceOption(received.params.muteSilence),
                 noiseRemoval: sanitizeNoiseRemovalOption(received.params.noiseRemoval),
             },
@@ -127,6 +132,13 @@ async function convertInto(
             channels: 'mono',
             onProgress: ffmpegPhase(jobId, 'decodeInput'),
         });
+        // 残響・エコーを除去する場合は、変換前のボーカルから除去する (変換後の声には残響がほぼ残らないため、変換の後では
+        // 除けない)。変換の入力と、無音部分の判断に使う。変換後の声の大きさは、除去する前のボーカルにそろえる
+        let convertInput = monoInput;
+        if (request.params.dereverb.enabled) {
+            convertInput = path.join(temp, 'dereverbed.wav');
+            await removeReverb(jobId, monoInput, convertInput, request.params.dereverb, temp);
+        }
         voicePhase(jobId, 'prepare');
         const converted = path.join(temp, 'converted.wav');
         const worker = getWorker('converter');
@@ -134,7 +146,7 @@ async function convertInto(
             worker.request(
                 'convert',
                 {
-                    input: monoInput,
+                    input: convertInput,
                     output: converted,
                     model: weights,
                     index: index ?? '',

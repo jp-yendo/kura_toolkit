@@ -24,7 +24,8 @@ import SectionLabel from '../../components/common/SectionLabel';
 import SplitPane from '../../components/common/SplitPane';
 import ZoomableImage, { clampScale } from '../../components/common/ZoomableImage';
 import { showNotice } from '../../stores/noticeStore';
-import { useVectorizerStore } from '../../stores/vectorizerStore';
+import ResetButton from '../../components/common/ResetButton';
+import { DEFAULT_VECTORIZE_PARAMS, useVectorizerStore } from '../../stores/vectorizerStore';
 import type { VectorizerColorMode, VectorizerHierarchical, VectorizerPathMode } from '@shared/types';
 
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'bmp', 'gif', 'tiff'];
@@ -37,18 +38,23 @@ type SliderRowProps = {
     step?: number;
     // 値の表示に用いる小数桁数 (省略時は整数表示)
     decimals?: number;
+    // 初期値 (値の右に初期値に戻すボタンを置く)
+    defaultValue: number;
     onChange(value: number): void;
 };
 
-function SliderRow({ label, value, min, max, step, decimals, onChange }: SliderRowProps) {
+function SliderRow({ label, value, min, max, step, decimals, defaultValue, onChange }: SliderRowProps) {
     return (
         <Box>
-            <Typography variant='body2' color='text.secondary' sx={{ mb: 0.5 }}>
-                {label}:{' '}
-                <Box component='span' sx={{ color: 'text.primary', fontWeight: 600 }}>
-                    {decimals !== undefined ? value.toFixed(decimals) : value}
-                </Box>
-            </Typography>
+            <Stack direction='row' sx={{ alignItems: 'center', mb: 0.5 }}>
+                <Typography variant='body2' color='text.secondary' sx={{ flexGrow: 1 }}>
+                    {label}:{' '}
+                    <Box component='span' sx={{ color: 'text.primary', fontWeight: 600 }}>
+                        {decimals !== undefined ? value.toFixed(decimals) : value}
+                    </Box>
+                </Typography>
+                <ResetButton onClick={() => onChange(defaultValue)} disabled={value === defaultValue} />
+            </Stack>
             <Slider
                 size='small'
                 value={value}
@@ -274,6 +280,7 @@ export default function SvgConverterPage() {
                         </FormControl>
                         <SliderRow
                             label={t('svgPage.filterSpeckle')}
+                            defaultValue={DEFAULT_VECTORIZE_PARAMS.filterSpeckle}
                             value={params.filterSpeckle}
                             min={0}
                             max={128}
@@ -281,6 +288,7 @@ export default function SvgConverterPage() {
                         />
                         <SliderRow
                             label={t('svgPage.colorPrecision')}
+                            defaultValue={DEFAULT_VECTORIZE_PARAMS.colorPrecision}
                             value={params.colorPrecision}
                             min={1}
                             max={8}
@@ -288,6 +296,7 @@ export default function SvgConverterPage() {
                         />
                         <SliderRow
                             label={t('svgPage.gradientStep')}
+                            defaultValue={DEFAULT_VECTORIZE_PARAMS.layerDifference}
                             value={params.layerDifference}
                             min={0}
                             max={128}
@@ -314,6 +323,7 @@ export default function SvgConverterPage() {
                         </FormControl>
                         <SliderRow
                             label={t('svgPage.cornerThreshold')}
+                            defaultValue={DEFAULT_VECTORIZE_PARAMS.cornerThreshold}
                             value={params.cornerThreshold}
                             min={0}
                             max={180}
@@ -321,6 +331,7 @@ export default function SvgConverterPage() {
                         />
                         <SliderRow
                             label={t('svgPage.segmentLength')}
+                            defaultValue={DEFAULT_VECTORIZE_PARAMS.lengthThreshold}
                             value={params.lengthThreshold}
                             min={3.5}
                             max={10}
@@ -330,6 +341,7 @@ export default function SvgConverterPage() {
                         />
                         <SliderRow
                             label={t('svgPage.spliceThreshold')}
+                            defaultValue={DEFAULT_VECTORIZE_PARAMS.spliceThreshold}
                             value={params.spliceThreshold}
                             min={0}
                             max={180}

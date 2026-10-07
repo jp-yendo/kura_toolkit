@@ -3,7 +3,7 @@
 
 import type { SymbolReading, TtsModelType, VoiceLanguage } from './languages';
 import type { TagFix, TagIssue } from './control-tags';
-import type { NoiseRemovalOption, SilenceOption } from './audio-filters';
+import type { DereverbOption, NoiseRemovalOption, SilenceOption } from './audio-filters';
 
 // ---------------------------------------------------------------------------
 // 共通
@@ -302,11 +302,16 @@ export type SeparationMethod =
     | { kind: 'model'; filename: string }
     | { kind: 'verifiedEnsemble'; ensembleId: string }
     | { kind: 'ensemble'; filenames: string[]; algorithm: EnsembleAlgorithm }
-    // 分岐の「その他」: 分離はせず、音を加工した 1 つの出力を作る (長さは変わらない)
-    | { kind: 'process'; muteSilence: SilenceOption; noiseRemoval: NoiseRemovalOption };
+    // 分岐の「その他」: 分離はせず、音を加工した 1 つの出力を作る (長さは変わらない。処理の順は、残響・エコーの除去 →
+    // ノイズ除去 → 無音部分の雑音を消す)
+    | { kind: 'process'; dereverb: DereverbOption; noiseRemoval: NoiseRemovalOption; muteSilence: SilenceOption };
 
 // 分岐の「その他」で指定する加工
-export type SeparationOtherChoice = { muteSilence: SilenceOption; noiseRemoval: NoiseRemovalOption };
+export type SeparationOtherChoice = {
+    dereverb: DereverbOption;
+    noiseRemoval: NoiseRemovalOption;
+    muteSilence: SilenceOption;
+};
 
 export type SeparationStem = {
     // モデルが出力した名前 (Vocals / Instrumental / drums など)
@@ -334,8 +339,6 @@ export type SeparationRunRequest = {
     channels: number;
     method: SeparationMethod;
     params: SeparationParams;
-    // 「その他」の出力の名前 (画面の言語で付ける)
-    outputName?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -355,6 +358,8 @@ export type ConversionParams = {
     volumeEnvelope: number;
     // 子音の保護の強さ (0-0.5)
     protect: number;
+    // 変換前のボーカルの残響・エコーの除去 (変換後の声には残響がほぼ残らないため、変換の前に除く)
+    dereverb: DereverbOption;
     // 無音部分の雑音を消す (変換前のボーカルが無音の部分で、変換後の音量を 0 にする。長さは変わらない)
     muteSilence: SilenceOption;
     // 変換後の声のノイズ除去
@@ -666,6 +671,7 @@ export type VoicePhaseId =
     | 'loudness'
     | 'silence'
     | 'noiseRemoval'
+    | 'dereverb'
     | 'pitchShift'
     | 'mix'
     | 'synthesize'

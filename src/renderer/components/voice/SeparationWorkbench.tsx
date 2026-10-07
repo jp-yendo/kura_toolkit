@@ -22,7 +22,8 @@ import AppDialog from '../common/AppDialog';
 import Panel from '../common/Panel';
 import ProgressDialog from '../common/ProgressDialog';
 import SeparationDialog from './SeparationDialog';
-import { EMPTY_METHOD_SELECTION, separatorDisplayName, type MethodSelection } from './SeparationMethodPicker';
+import { EMPTY_METHOD_SELECTION, type MethodSelection } from './SeparationMethodPicker';
+import { separatorDisplayName } from './separatorModelNotes';
 import SyncPlayer from './SyncPlayer';
 import { filterSummary } from './AudioFilterFields';
 import {
@@ -163,8 +164,8 @@ export default function SeparationWorkbench({ store, disabled, saveColumn }: Pro
     const paramsSummary = (result: SeparationCandidate) => {
         // 「その他」は、チェックした加工を示す
         if (result.method.kind === 'process') {
-            const noiseModels = (models?.models ?? []).map(model => ({ filename: model.filename, name: model.name }));
-            return filterSummary(t, result.method, noiseModels).join(' / ');
+            const names = (models?.models ?? []).map(model => ({ filename: model.filename, name: model.name }));
+            return filterSummary(t, result.method, names).join(' / ');
         }
         const parts = Object.entries(result.params).flatMap(([key, values]) => {
             const defaults = DEFAULT_SEPARATION_PARAMS[key as keyof SeparationParams] as unknown as Record<
@@ -215,7 +216,6 @@ export default function SeparationWorkbench({ store, disabled, saveColumn }: Pro
                     channels: source.channels,
                     method,
                     params: nextParams,
-                    outputName: t('voice.separation.otherOutput'),
                 })
             );
             if (target.kind === 'redo') {

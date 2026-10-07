@@ -585,7 +585,6 @@ export default {
         separateFrom: '分岐',
         separateFromFor: '{{name}}から分岐',
         dialogTitle: '分離: {{input}}',
-        otherOutput: '加工した音',
         noResults: '分離する音の「分岐」で、方式を選んで分離します。',
         recreate: 'パラメーターを変えて作成',
         recreateMessage:
@@ -607,6 +606,8 @@ export default {
         },
         verifiedEnsemble: '配布元が検証した組み合わせ ({{count}} モデル)',
         categoryEmpty: 'このまとまりのモデルは取得していません。「ダウンロード管理」から取得できます。',
+        selectedTitle: '選んだ内容',
+        selectedNone: 'まだ選んでいません。',
         quality: '分離の品質: {{values}}',
         algorithm: '結果の決め方',
         algorithmNotes: {
@@ -760,6 +761,9 @@ export default {
         silenceThreshold: '無音とみなす大きさ (ピークから)',
         silenceLength: 'これより長い無音を対象にする',
         secondsValue: '{{value}} 秒',
+        removeReverb: '残響・エコーを除去する (遅い)',
+        dereverbModelMissing: '目的別のおすすめの「残響・エコーの除去」のモデルをダウンロードすると使えます。',
+        dereverbModelSelect: '使うモデル',
         removeNoise: 'ノイズを除去する',
         noiseSimple: '簡易的に除去する (FFT・速い)',
         noiseWavelet: '簡易的に除去する (ウェーブレット・速い)',
@@ -776,6 +780,7 @@ export default {
         summaryNoiseSimple: 'ノイズ除去 (FFT) {{floor}} dB・{{reduction}} dB',
         summaryNoiseWavelet: 'ノイズ除去 (ウェーブレット) {{noise}} dB・{{percent}}%',
         summaryNoiseModel: 'ノイズ除去 ({{model}})',
+        summaryDereverb: '残響・エコーの除去 ({{model}})',
         summaryRemoveSilence: '無音部分の除去 {{db}} dB・{{seconds}} 秒',
         summaryLoudness: '音量 {{lufs}} LUFS',
         filterTitle: 'フィルター: {{name}}',
@@ -1266,6 +1271,8 @@ export default {
             '学習セットの音声ファイルが見つかりません。その音声を削除してから、録音し直すか指定し直してください。({{detail}})',
         TRAINING_SET_NOT_FOUND: '学習セットが見つかりません。',
         TRAINING_SET_IN_USE: 'この学習セットは学習に使っている間は変更・削除できません。',
+        DEREVERB_MODEL_REQUIRED:
+            '残響・エコーの除去のモデルがありません。目的別のおすすめの「残響・エコーの除去」のモデルをダウンロードしてください。',
         NOISE_REMOVAL_MODEL_REQUIRED:
             'ノイズ除去のモデルがありません。目的別のおすすめの「ノイズ除去」のモデルをダウンロードしてください。',
         NOTHING_TO_PROCESS: '加工の内容を 1 つ以上チェックしてください。',

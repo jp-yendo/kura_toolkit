@@ -8,7 +8,7 @@ import type { TimedLine, TimelineOverflowMode, TtsAudio, TtsInputMode, TtsParams
 // ディスク上のファイルへの反映は利用者が保存したときだけ行う。
 // 入力方法 (通常・タイミング指定) は内容を別々に持ち、切り替えても変換しない。
 
-const DEFAULT_TTS_PARAMS: TtsParams = {
+export const DEFAULT_TTS_PARAMS: TtsParams = {
     // モデルが持つスタイルから選ぶ (選ぶまでは、そのモデルの最初のスタイル)
     style: '',
     styleWeight: 1,

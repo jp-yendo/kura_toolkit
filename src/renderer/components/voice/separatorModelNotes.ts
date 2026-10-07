@@ -241,6 +241,34 @@ export const SEPARATOR_ARCH_LABELS: Record<SeparationArch, string> = {
     MDXC: 'MDXC (Roformer)',
 };
 
+// 画面に示すモデル名。audio-separator の名前の先頭の方式の前置き (「Roformer Model: 」「VR Arch Single Model v5: 」
+// 「Demucs v4: 」など) を除く (方式は説明の行に別に示すため。長い名前が欄に入りきらず途切れないようにする)
+export function separatorDisplayName(name: string): string {
+    return name.replace(/^(?:[^:]*\bModel\b[^:]*|Demucs[^:]*):\s*/, '') || name;
+}
+
+// 名前・ファイル名・概要・出力に、空白で区切った語がすべて含まれるものに絞り込む (分離のモデルのタブと、加工の使うモデルの欄)
+export function filterSeparatorModels<T extends { filename: string; name: string; stems: string[] }>(
+    t: (key: string) => string,
+    models: T[],
+    input: string
+): T[] {
+    const terms = input.toLowerCase().split(/\s+/).filter(Boolean);
+    if (terms.length === 0) return models;
+    return models.filter(model => {
+        const note = separatorFileNoteKey(model.filename);
+        const text = [
+            model.name,
+            model.filename,
+            note ? t(note) : '',
+            separatorFileOutputs(model.filename, model.stems).join(' '),
+        ]
+            .join('\n')
+            .toLowerCase();
+        return terms.every(term => text.includes(term));
+    });
+}
+
 export function separatorFilename(item: LibraryItem): string {
     return item.id.slice(SEPARATOR_MODEL_PREFIX.length);
 }

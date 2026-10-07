@@ -12,7 +12,7 @@ import VoiceFeatureHeader from '../../components/voice/VoiceFeatureHeader';
 import SeparationWorkbench from '../../components/voice/SeparationWorkbench';
 import ExportDialog, { type ExportEntry } from '../../components/voice/ExportDialog';
 import { treeOutputs } from '../../components/voice/separationTree';
-import { formatDuration } from '../../components/voice/voiceFormat';
+import { baseName, formatDuration } from '../../components/voice/voiceFormat';
 import { isCancelledError, voiceErrorMessage } from '../../components/voice/voiceErrors';
 import { AUDIO_INPUT_EXTENSIONS, audioInputFilters } from '../../components/voice/audioInput';
 import { useJobRunner } from '../../hooks/useJobRunner';
@@ -53,12 +53,12 @@ export default function SeparationPage() {
         setConfirmReset(false);
     };
 
-    // ファイル名は、上の階層からの名前 (書き出す時点の名前) を「_」でつないだもの
+    // ファイル名は、元のファイル名 (拡張子なし) と、上の階層からの名前 (書き出す時点の名前) を「_」でつないだもの
     const exportEntries: ExportEntry[] = targets.map(output => ({
         key: output.key,
         label: output.path,
         suffix: '',
-        fileName: output.path,
+        fileName: source ? `${baseName(source.sourcePath)}_${output.path}` : output.path,
         resolve: async () => output.mediaPath,
     }));
 

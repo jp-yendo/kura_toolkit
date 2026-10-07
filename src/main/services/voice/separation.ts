@@ -12,8 +12,12 @@ import { getWorker } from './python-worker';
 import { ensureSeparatorModelList, readSeparatorModelList, separatorModelInstalled } from './separator-models';
 import { separatorItemId } from './spec';
 import { withGpu } from './gpu-lock';
-import { editSilence, removeNoise } from './audio-filters';
-import { sanitizeNoiseRemovalOption, sanitizeSilenceOption } from '../../../shared/voice/audio-filters';
+import { editSilence, removeNoise, removeReverb } from './audio-filters';
+import {
+    sanitizeDereverbOption,
+    sanitizeNoiseRemovalOption,
+    sanitizeSilenceOption,
+} from '../../../shared/voice/audio-filters';
 import { ffmpegPhase, voicePhase, workerEvents } from './job-progress';
 import { discardLater, isInsideWork, newId, produceShared, removeSession, sessionDir, sessionPath } from '../work-dir';
 import type {
@@ -147,8 +151,9 @@ export async function runSeparation(jobId: string, request: SeparationRunRequest
                       {
                           kind: 'process',
                           // 画面から受け取った設定を確かめる
-                          muteSilence: sanitizeSilenceOption(request.method.muteSilence),
+                          dereverb: sanitizeDereverbOption(request.method.dereverb),
                           noiseRemoval: sanitizeNoiseRemovalOption(request.method.noiseRemoval),
+                          muteSilence: sanitizeSilenceOption(request.method.muteSilence),
                       },
                       id,
                       dir
@@ -227,7 +232,7 @@ async function separateInto(
     };
 }
 
-// 分岐の「その他」: 分離はせず、無音部分の雑音を消す・ノイズを除去するの順に加工した 1 つの出力を作る
+// 分岐の「その他」: 分離はせず、残響・エコーを除去する・ノイズを除去する・無音部分の雑音を消すで加工した 1 つの出力を作る
 // (長さとチャンネル数は変わらない)
 async function processInto(
     jobId: string,
@@ -236,13 +241,17 @@ async function processInto(
     id: string,
     dir: string
 ): Promise<SeparationCandidate> {
-    if (!method.muteSilence.enabled && !method.noiseRemoval.enabled) throw new Error('NOTHING_TO_PROCESS');
+    if (!method.dereverb.enabled && !method.noiseRemoval.enabled && !method.muteSilence.enabled) {
+        throw new Error('NOTHING_TO_PROCESS');
+    }
     const work = path.join(dir, 'work');
     fs.mkdirSync(work, { recursive: true });
+    // 残響・エコーの除去 → ノイズ除去 → 無音部分の雑音を消すの順に行う (残響の尾や雑音を除いてから無音を判断すると、
+    // 無音として消せる部分が増えるため)
     let current = request.input;
-    if (method.muteSilence.enabled) {
-        const next = path.join(work, 'muted.wav');
-        await editSilence(jobId, 'separator', current, next, method.muteSilence, 'mute');
+    if (method.dereverb.enabled) {
+        const next = path.join(work, 'dereverbed.wav');
+        await removeReverb(jobId, current, next, method.dereverb, work);
         current = next;
     }
     if (method.noiseRemoval.enabled) {
@@ -250,9 +259,14 @@ async function processInto(
         await removeNoise(jobId, current, next, method.noiseRemoval, work);
         current = next;
     }
-    const name = request.outputName || 'output';
-    // ファイル名は決まった名前にする (出力の名前は画面の言語で付けるため、ファイル名に使えない文字を含みうる)
-    const target = path.join(dir, 'processed.wav');
+    if (method.muteSilence.enabled) {
+        const next = path.join(work, 'muted.wav');
+        await editSilence(jobId, 'separator', current, next, method.muteSilence, 'mute');
+        current = next;
+    }
+    // 出力の名前は、モデルの出力名と同じく言語によらない英語の固定名 (フィルターをかけた音)
+    const name = OTHER_OUTPUT_NAME;
+    const target = path.join(dir, `${name}.wav`);
     fs.renameSync(current, target);
     discardLater(work);
     emitJobEvent({ jobId, kind: 'progress', percent: 100 });
@@ -265,6 +279,9 @@ async function processInto(
         createdAt: Date.now(),
     };
 }
+
+// 分岐の「その他」の出力の名前
+const OTHER_OUTPUT_NAME = 'Filtered';
 
 function sanitizeStem(name: string): string {
     return name.replace(/[^A-Za-z0-9 _-]/g, '_').trim() || 'stem';

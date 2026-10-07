@@ -40,10 +40,13 @@ import SeparationWorkbench from '../../components/voice/SeparationWorkbench';
 import SyncPlayer from '../../components/voice/SyncPlayer';
 import SliderField from '../../components/voice/SliderField';
 import {
+    DereverbFields,
     filterSummary,
     NoiseRemovalFields,
+    resolvedDereverbOption,
     resolvedNoiseOption,
     SilenceFields,
+    useDereverbModels,
     useNoiseRemovalModels,
 } from '../../components/voice/AudioFilterFields';
 import MixForm from '../../components/voice/MixForm';
@@ -61,7 +64,7 @@ import { isCancelledError, missingItemsFromError, voiceErrorMessage } from '../.
 import { useJobRunner } from '../../hooks/useJobRunner';
 import { showNotice } from '../../stores/noticeStore';
 import { useConversionSeparationStore } from '../../stores/separationWorkStore';
-import { useConversionStore, type ConversionInputMode } from '../../stores/conversionStore';
+import { DEFAULT_CONVERSION_PARAMS, useConversionStore, type ConversionInputMode } from '../../stores/conversionStore';
 import { openVoiceLibrary } from '../../stores/voiceLibraryStore';
 import {
     F0_METHODS,
@@ -72,6 +75,7 @@ import {
     type MixParams,
     type VoiceModelInfo,
 } from '@shared/voice/types';
+import { wrapMenuItemSx, wrapSelectSx } from '../../components/common/selectStyles';
 
 // ピッチ抽出の方式ごとに必要なモデル (CREPE は Applio のパッケージに含まれる)
 const F0_ITEMS: Record<F0Method, string | null> = {
@@ -190,6 +194,7 @@ export default function ConversionPage() {
 
     const voice = voices.find(item => item.id === conv.voiceId) ?? null;
     const noiseModels = useNoiseRemovalModels();
+    const dereverbModels = useDereverbModels();
 
     // 候補のパラメーターの表示 (チェックした加工だけを足す)
     const paramsSummary = (params: ConversionParams): string => {
@@ -202,7 +207,7 @@ export default function ConversionPage() {
                 protect: params.protect.toFixed(2),
             }),
         ];
-        parts.push(...filterSummary(t, params, noiseModels));
+        parts.push(...filterSummary(t, params, [...dereverbModels, ...noiseModels]));
         return parts.join(' / ');
     };
     const selected = conv.candidates.find(item => item.id === conv.selectedId) ?? null;
@@ -276,6 +281,7 @@ export default function ConversionPage() {
                     voiceId: voice.id,
                     params: {
                         ...conv.params,
+                        dereverb: resolvedDereverbOption(conv.params.dereverb, dereverbModels),
                         noiseRemoval: resolvedNoiseOption(conv.params.noiseRemoval, noiseModels),
                     },
                 })
@@ -578,9 +584,10 @@ export default function ConversionPage() {
                                     label={t('voice.conversion.voice')}
                                     value={voice ? voice.id : ''}
                                     onChange={event => conv.setVoiceId(String(event.target.value))}
+                                    sx={wrapSelectSx}
                                 >
                                     {voices.map(item => (
-                                        <MenuItem key={item.id} value={item.id}>
+                                        <MenuItem key={item.id} value={item.id} sx={wrapMenuItemSx}>
                                             {/* ユーザーモデルにだけ、名前の右にアイコンを付ける */}
                                             <Box component='span' sx={{ flexGrow: 1, minWidth: 0, mr: 1 }}>
                                                 {voiceLabel(item)}
@@ -593,6 +600,7 @@ export default function ConversionPage() {
                             {voices.length === 0 && <Alert severity='info'>{t('voice.conversion.noVoices')}</Alert>}
                             <SliderField
                                 label={t('voice.conversion.pitch')}
+                                defaultValue={DEFAULT_CONVERSION_PARAMS.pitch}
                                 value={conv.params.pitch}
                                 min={-24}
                                 max={24}
@@ -621,6 +629,7 @@ export default function ConversionPage() {
                             </FormControl>
                             <SliderField
                                 label={t('voice.conversion.indexRate')}
+                                defaultValue={DEFAULT_CONVERSION_PARAMS.indexRate}
                                 value={conv.params.indexRate}
                                 min={0}
                                 max={1}
@@ -636,6 +645,7 @@ export default function ConversionPage() {
                             />
                             <SliderField
                                 label={t('voice.conversion.volumeEnvelope')}
+                                defaultValue={DEFAULT_CONVERSION_PARAMS.volumeEnvelope}
                                 value={conv.params.volumeEnvelope}
                                 min={0}
                                 max={1}
@@ -647,6 +657,7 @@ export default function ConversionPage() {
                             />
                             <SliderField
                                 label={t('voice.conversion.protect')}
+                                defaultValue={DEFAULT_CONVERSION_PARAMS.protect}
                                 value={conv.params.protect}
                                 min={0}
                                 max={0.5}
@@ -656,6 +667,13 @@ export default function ConversionPage() {
                                 helperText={t('voice.conversion.protectHint')}
                                 onChange={protect => conv.setParams({ ...conv.params, protect })}
                             />
+                            {/* 処理の順に並べる (残響・エコーの除去は変換の前、無音の扱いは変換の中、ノイズ除去は変換の後) */}
+                            <DereverbFields
+                                models={dereverbModels}
+                                value={conv.params.dereverb}
+                                disabled={busy}
+                                onChange={dereverb => conv.setParams({ ...conv.params, dereverb })}
+                            />
                             <SilenceFields
                                 mode='mute'
                                 value={conv.params.muteSilence}
@@ -663,6 +681,7 @@ export default function ConversionPage() {
                                 onChange={muteSilence => conv.setParams({ ...conv.params, muteSilence })}
                             />
                             <NoiseRemovalFields
+                                models={noiseModels}
                                 value={conv.params.noiseRemoval}
                                 disabled={busy}
                                 onChange={noiseRemoval => conv.setParams({ ...conv.params, noiseRemoval })}

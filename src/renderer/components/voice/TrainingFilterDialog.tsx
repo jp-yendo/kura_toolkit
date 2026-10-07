@@ -6,12 +6,16 @@ import Panel from '../common/Panel';
 import ProgressDialog from '../common/ProgressDialog';
 import SyncPlayer from './SyncPlayer';
 import {
+    DereverbFields,
     filterSummary,
     LoudnessFields,
     NoiseRemovalFields,
+    resolvedDereverbOption,
     resolvedNoiseOption,
     SilenceFields,
+    useDereverbModels,
     useNoiseRemovalModels,
+    type FilterModel,
 } from './AudioFilterFields';
 import { newWorkKey } from './voiceFormat';
 import { isCancelledError, voiceErrorMessage } from './voiceErrors';
@@ -33,28 +37,39 @@ type Props = {
 
 type FilterResult = { id: string; media: MediaRef; summary: string };
 
-// 加工の内容の欄 (無音部分の除去・ノイズ除去・音量をそろえる)
+// 加工の内容の欄。処理の順 (残響・エコーの除去 → ノイズ除去 → 無音部分の除去 → 音量をそろえる) に並べる
 function FilterOptionFields({
     value,
     onChange,
     disabled,
+    dereverbModels,
+    noiseModels,
 }: {
     value: TrainingFilterOptions;
     onChange(value: TrainingFilterOptions): void;
     disabled?: boolean;
+    dereverbModels: FilterModel[];
+    noiseModels: FilterModel[];
 }) {
     return (
         <Stack spacing={1}>
+            <DereverbFields
+                models={dereverbModels}
+                value={value.dereverb}
+                disabled={disabled}
+                onChange={dereverb => onChange({ ...value, dereverb })}
+            />
+            <NoiseRemovalFields
+                models={noiseModels}
+                value={value.noiseRemoval}
+                disabled={disabled}
+                onChange={noiseRemoval => onChange({ ...value, noiseRemoval })}
+            />
             <SilenceFields
                 mode='remove'
                 value={value.removeSilence}
                 disabled={disabled}
                 onChange={removeSilence => onChange({ ...value, removeSilence })}
-            />
-            <NoiseRemovalFields
-                value={value.noiseRemoval}
-                disabled={disabled}
-                onChange={noiseRemoval => onChange({ ...value, noiseRemoval })}
             />
             <LoudnessFields
                 value={value.loudness}
@@ -79,6 +94,7 @@ export default function TrainingFilterDialog({ open, feature, setId, audio, onCl
     const [workKey, setWorkKey] = React.useState(newWorkKey);
     const { job, run, cancel } = useJobRunner();
     const noiseModels = useNoiseRemovalModels();
+    const dereverbModels = useDereverbModels();
     // 確定 (学習セットの音の置き換え) の途中
     const [confirming, setConfirming] = React.useState(false);
     const busy = job !== null || confirming;
@@ -106,6 +122,7 @@ export default function TrainingFilterDialog({ open, feature, setId, audio, onCl
 
     const request = (): TrainingFilterOptions => ({
         ...options,
+        dereverb: resolvedDereverbOption(options.dereverb, dereverbModels),
         noiseRemoval: resolvedNoiseOption(options.noiseRemoval, noiseModels),
     });
 
@@ -119,7 +136,11 @@ export default function TrainingFilterDialog({ open, feature, setId, audio, onCl
             const id = crypto.randomUUID();
             setResults(previous => [
                 ...previous,
-                { id, media: result.media, summary: filterSummary(t, current, noiseModels).join(' / ') },
+                {
+                    id,
+                    media: result.media,
+                    summary: filterSummary(t, current, [...dereverbModels, ...noiseModels]).join(' / '),
+                },
             ]);
             setSelectedId(id);
         } catch (error) {
@@ -190,7 +211,13 @@ export default function TrainingFilterDialog({ open, feature, setId, audio, onCl
                 </DialogTitle>
                 <DialogContent>
                     <Stack spacing={2} sx={{ pt: 1 }}>
-                        <FilterOptionFields value={options} onChange={setOptions} disabled={busy} />
+                        <FilterOptionFields
+                            value={options}
+                            onChange={setOptions}
+                            disabled={busy}
+                            dereverbModels={dereverbModels}
+                            noiseModels={noiseModels}
+                        />
                         {audio && (
                             <>
                                 <Stack direction='row'>

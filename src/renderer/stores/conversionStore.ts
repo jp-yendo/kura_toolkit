@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { noiseRemovalOption, silenceOption } from '@shared/voice/audio-filters';
+import { dereverbOption, noiseRemovalOption, silenceOption } from '@shared/voice/audio-filters';
 import type { ConversionCandidate, ConversionParams, MediaRef, MixParams } from '@shared/voice/types';
 
 // 音声変換の作業 (入力の選び方・変換する音と伴奏の選択・候補・合成)。元の音源と分離の結果の木は
@@ -7,18 +7,19 @@ import type { ConversionCandidate, ConversionParams, MediaRef, MixParams } from 
 
 export type ConversionInputMode = 'separate' | 'direct';
 
-const DEFAULT_CONVERSION_PARAMS: ConversionParams = {
+export const DEFAULT_CONVERSION_PARAMS: ConversionParams = {
     pitch: 0,
     f0Method: 'rmvpe',
     indexRate: 0.75,
     volumeEnvelope: 1,
     protect: 0.5,
-    // 無音部分の雑音を消すは、初期値でチェックする。ノイズ除去は、初期値ではチェックしない
+    // 無音部分の雑音を消すは、初期値でチェックする。残響・エコーの除去とノイズ除去は、初期値ではチェックしない
+    dereverb: dereverbOption(false),
     muteSilence: silenceOption(true),
     noiseRemoval: noiseRemovalOption(false),
 };
 
-const DEFAULT_MIX_PARAMS: MixParams = {
+export const DEFAULT_MIX_PARAMS: MixParams = {
     vocalGainDb: 0,
     accompanimentGainDb: 0,
     masterGainDb: 0,

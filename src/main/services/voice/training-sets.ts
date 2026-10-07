@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { emitJobEvent, finishJob, isCancelled, startJob } from '../job-manager';
 import { encodeTrainingWav, probeAudio } from './audio-tools';
-import { editSilence, normalizeLoudness, removeNoise } from './audio-filters';
+import { editSilence, normalizeLoudness, removeNoise, removeReverb } from './audio-filters';
 import { discardLater, isInsideWork, newId, newTempDir, sessionDir, sessionPath } from '../work-dir';
 import { mediaRef } from './media';
 import type { SilenceOption, TrainingFilterOptions } from '../../../shared/voice/audio-filters';
@@ -453,8 +453,9 @@ export function removeTrainingAudio(feature: VoiceModelFeature, setId: string, a
 
 // --- 学習用の音のフィルター ---
 
-// 加工する。無音部分の除去 → ノイズ除去 → 音量をそろえるの順に行い、最後に学習用の音声と同じ形式 (16bit・モノラル) に
-// して output に書く (聞いた音と置き換える音を同じにするため)。途中のファイルは work に作る
+// 加工する。残響・エコーの除去 → ノイズ除去 → 無音部分の除去 → 音量をそろえるの順に行い (TrainingFilterOptions)、
+// 最後に学習用の音声と同じ形式 (16bit・モノラル) にして output に書く (聞いた音と置き換える音を同じにするため)。
+// 途中のファイルは work に作る
 async function applyTrainingFilters(
     jobId: string,
     feature: VoiceModelFeature,
@@ -464,15 +465,20 @@ async function applyTrainingFilters(
     work: string
 ): Promise<void> {
     let current = input;
-    if (options.removeSilence.enabled) {
-        const next = path.join(work, 'silence.wav');
-        // 無音の判断は、その機能の処理役で行う (音声変換の学習は変換、読み上げの学習は読み上げ)
-        await editSilence(jobId, feature, current, next, options.removeSilence, 'remove');
+    if (options.dereverb.enabled) {
+        const next = path.join(work, 'dereverb.wav');
+        await removeReverb(jobId, current, next, options.dereverb, work);
         current = next;
     }
     if (options.noiseRemoval.enabled) {
         const next = path.join(work, 'noise.wav');
         await removeNoise(jobId, current, next, options.noiseRemoval, work);
+        current = next;
+    }
+    if (options.removeSilence.enabled) {
+        const next = path.join(work, 'silence.wav');
+        // 無音の判断は、その機能の処理役で行う (音声変換の学習は変換、読み上げの学習は読み上げ)
+        await editSilence(jobId, feature, current, next, options.removeSilence, 'remove');
         current = next;
     }
     if (options.loudness.enabled) {

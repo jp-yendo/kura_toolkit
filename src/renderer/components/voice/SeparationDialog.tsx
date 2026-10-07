@@ -12,6 +12,7 @@ import SeparationMethodPicker, {
     EMPTY_METHOD_SELECTION,
     hasUnavailableChoice,
     resolveMethod,
+    SelectedMethodPanel,
     type MethodSelection,
 } from './SeparationMethodPicker';
 import { showNotice } from '../../stores/noticeStore';
@@ -50,7 +51,8 @@ type Props = {
 };
 
 // 分離のダイアログ。分離する音の「分岐」と、結果の「パラメーターを変えて作成」から開く。
-// プリセット (どのタブでも共通)・方式 (おすすめ・モデル・その他)・詳細な設定を選んで分離する
+// 左にプリセット (どのタブでも共通)・方式 (おすすめ・モデル・その他)・詳細な設定、右に選んだ内容を置き、選んで分離する。
+// 幅が足りないときは、選んだ内容を下に置く
 export default function SeparationDialog({
     open,
     inputLabel,
@@ -108,7 +110,7 @@ export default function SeparationDialog({
         <AppDialog
             open={open}
             onClose={busy ? undefined : onClose}
-            maxWidth='sm'
+            maxWidth='md'
             fullWidth
             // 高さは中身によらず一定にし、中身が長いときはダイアログの中をスクロールする
             slotProps={{ paper: { sx: { height: 'min(760px, calc(100% - 64px))' } } }}
@@ -116,8 +118,28 @@ export default function SeparationDialog({
             <DialogTitle sx={{ overflowWrap: 'anywhere' }}>
                 {t('voice.separation.dialogTitle', { input: inputLabel })}
             </DialogTitle>
-            <DialogContent>
-                <Stack spacing={2} sx={{ pt: 1 }}>
+            {/* 2 列のときは列ごとにスクロールし、1 列のときは全体をスクロールする。列はスクロールバーの幅を常に空け、右に余白を
+                取る (スクロールバーと欄の右端が接して操作しにくくならないように) */}
+            <DialogContent
+                sx={{
+                    display: 'grid',
+                    gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 1fr) minmax(0, 1fr)' },
+                    gridTemplateRows: { md: 'minmax(0, 1fr)' },
+                    columnGap: 3,
+                    rowGap: 2,
+                    overflowY: { xs: 'auto', md: 'hidden' },
+                }}
+            >
+                <Stack
+                    spacing={2}
+                    sx={{
+                        pt: 1,
+                        minHeight: 0,
+                        overflowY: { md: 'auto' },
+                        scrollbarGutter: { md: 'stable' },
+                        pr: { md: 1.5 },
+                    }}
+                >
                     <SeparationMethodPicker
                         models={models}
                         // プリセットは、方式の選び方 (おすすめ・モデル・その他) から詳細な設定までの条件一式を保存・呼び出しする
@@ -162,6 +184,19 @@ export default function SeparationDialog({
                             </Collapse>
                         </Box>
                     )}
+                </Stack>
+                <Stack
+                    spacing={1}
+                    sx={{
+                        pt: 1,
+                        minHeight: 0,
+                        overflowY: { md: 'auto' },
+                        scrollbarGutter: { md: 'stable' },
+                        pr: { md: 1.5 },
+                    }}
+                >
+                    <SectionLabel>{t('voice.separation.selectedTitle')}</SectionLabel>
+                    <SelectedMethodPanel models={models} value={selection} />
                 </Stack>
             </DialogContent>
             <DialogActions>

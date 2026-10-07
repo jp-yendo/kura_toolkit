@@ -55,7 +55,7 @@ import { isCancelledError, voiceErrorMessage } from '../../components/voice/voic
 import { useJobRunner } from '../../hooks/useJobRunner';
 import { showNotice } from '../../stores/noticeStore';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { timedSnapshot, useTtsStore, type TimedRow } from '../../stores/ttsStore';
+import { DEFAULT_TTS_PARAMS, timedSnapshot, useTtsStore, type TimedRow } from '../../stores/ttsStore';
 import { openVoiceLibrary, useVoiceLibraryStore } from '../../stores/voiceLibraryStore';
 import { applyTagFixes, findTagRanges, parseControlTags, type TagFix, type TagIssue } from '@shared/voice/control-tags';
 import {
@@ -86,6 +86,7 @@ import type {
     VoiceModelInfo,
 } from '@shared/voice/types';
 import type { TFunction } from 'i18next';
+import { wrapMenuItemSx, wrapSelectSx } from '../../components/common/selectStyles';
 
 const OVERFLOW_MODES: TimelineOverflowMode[] = ['speedup', 'overlap', 'shift', 'warn'];
 const INPUT_MODES: TtsInputMode[] = ['normal', 'timed'];
@@ -710,9 +711,10 @@ export default function TtsPage() {
                                 label={t('voice.tts.voice')}
                                 value={voice?.id ?? ''}
                                 onChange={event => tts.setVoiceId(String(event.target.value))}
+                                sx={wrapSelectSx}
                             >
                                 {candidatesVoices.map(item => (
-                                    <MenuItem key={item.id} value={item.id}>
+                                    <MenuItem key={item.id} value={item.id} sx={wrapMenuItemSx}>
                                         {/* ユーザーモデルにだけ、名前の右にアイコンを付ける */}
                                         <Box component='span' sx={{ flexGrow: 1, minWidth: 0, mr: 1 }}>
                                             {voiceLabel(item)}
@@ -761,6 +763,7 @@ export default function TtsPage() {
                         )}
                         <SliderField
                             label={t('voice.tts.styleWeight')}
+                            defaultValue={DEFAULT_TTS_PARAMS.styleWeight}
                             disabled={styles.length === 0}
                             value={tts.params.styleWeight}
                             min={0}
@@ -771,6 +774,7 @@ export default function TtsPage() {
                         />
                         <SliderField
                             label={t('voice.tts.speed')}
+                            defaultValue={DEFAULT_TTS_PARAMS.speed}
                             value={tts.params.speed}
                             min={0.5}
                             max={2}
@@ -780,6 +784,7 @@ export default function TtsPage() {
                         />
                         <SliderField
                             label={t('voice.tts.pitchScale')}
+                            defaultValue={DEFAULT_TTS_PARAMS.pitchScale}
                             value={tts.params.pitchScale}
                             min={0.7}
                             max={1.3}
@@ -789,6 +794,7 @@ export default function TtsPage() {
                         />
                         <SliderField
                             label={t('voice.tts.intonationScale')}
+                            defaultValue={DEFAULT_TTS_PARAMS.intonationScale}
                             value={tts.params.intonationScale}
                             min={0}
                             max={2}
@@ -810,6 +816,7 @@ export default function TtsPage() {
                             <Stack spacing={1}>
                                 <SliderField
                                     label={t('voice.tts.sdpRatio')}
+                                    defaultValue={DEFAULT_TTS_PARAMS.sdpRatio}
                                     value={tts.params.sdpRatio}
                                     min={0}
                                     max={1}
@@ -819,6 +826,7 @@ export default function TtsPage() {
                                 />
                                 <SliderField
                                     label={t('voice.tts.noise')}
+                                    defaultValue={DEFAULT_TTS_PARAMS.noise}
                                     value={tts.params.noise}
                                     min={0}
                                     max={2}
@@ -828,6 +836,7 @@ export default function TtsPage() {
                                 />
                                 <SliderField
                                     label={t('voice.tts.noiseW')}
+                                    defaultValue={DEFAULT_TTS_PARAMS.noiseW}
                                     value={tts.params.noiseW}
                                     min={0}
                                     max={2}
@@ -838,6 +847,7 @@ export default function TtsPage() {
                                 {!timedMode && (
                                     <SliderField
                                         label={t('voice.tts.paragraphPause')}
+                                        defaultValue={DEFAULT_TTS_PARAMS.paragraphPause}
                                         value={tts.params.paragraphPause}
                                         min={0}
                                         max={3}

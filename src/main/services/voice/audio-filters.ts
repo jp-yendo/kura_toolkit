@@ -13,15 +13,18 @@ import { resolveFfmpegPath } from '../ffmpeg/ffmpeg';
 import { discardLater } from '../work-dir';
 import { DEFAULT_SEPARATION_PARAMS } from '../../../shared/voice/separation-defaults';
 import {
+    DEREVERB_MODELS,
     NOISE_REMOVAL_MODELS,
+    type DereverbOption,
     type LoudnessOption,
     type NoiseRemovalOption,
     type SilenceOption,
 } from '../../../shared/voice/audio-filters';
 import type { VoiceComponentId } from '../../../shared/voice/types';
 
-// 声の音の加工 (無音の扱い・ノイズ除去・音量をそろえる)。学習用の音のフィルターと分岐の「その他」で使い、変換では
-// ノイズ除去を使う (変換の無音の扱いは converter_service.rpc_convert の中で行う)。どれも入力を変えずに output に書く
+// 声の音の加工 (残響・エコーの除去・無音の扱い・ノイズ除去・音量をそろえる)。学習用の音のフィルターと分岐の「その他」で
+// 使い、変換では残響・エコーの除去とノイズ除去を使う (変換の無音の扱いは converter_service.rpc_convert の中で行う)。
+// どれも入力を変えずに output に書く
 // (書く形式は 32bit 浮動小数の WAV。音量をそろえる処理で測れない場合だけは、入力をそのまま写す)
 
 // 無音部分の音量を 0 にする (mute。長さは変わらない) か、除去して詰める (remove)。無音の判断は Python の処理役で行う
@@ -50,6 +53,35 @@ export function noiseRemovalModel(requested: string | null): (typeof NOISE_REMOV
     return installed.find(model => model.filename === requested) ?? installed[0] ?? null;
 }
 
+// 残響・エコーの除去で使うモデル。指定されたモデルが取得済みのおすすめならそれ、無ければ取得済みのおすすめのうち先頭。
+// 1 つも無ければ null
+export function dereverbModel(requested: string | null): (typeof DEREVERB_MODELS)[number] | null {
+    const installed = DEREVERB_MODELS.filter(model => isItemInstalled(separatorItemId(model.filename)));
+    return installed.find(model => model.filename === requested) ?? installed[0] ?? null;
+}
+
+// 残響・エコーを除去する。残響・エコーの除去のモデルで分離して、残響を除いた方の出力を使う (途中のファイルは tempDir に作る)
+export async function removeReverb(
+    jobId: string,
+    input: string,
+    output: string,
+    option: DereverbOption,
+    tempDir: string
+): Promise<void> {
+    const model = dereverbModel(option.model);
+    if (!model) throw new Error('DEREVERB_MODEL_REQUIRED');
+    voicePhase(jobId, 'dereverb', { fraction: 0 });
+    await separateOneStem(
+        jobId,
+        'dereverb',
+        input,
+        model.filename,
+        model.cleanStem,
+        output,
+        path.join(tempDir, 'dereverb-model')
+    );
+}
+
 // ノイズを除去する。FFT の場合は ffmpeg の afftdn (音の位置がずれるため、ずれを打ち消して使う)、ウェーブレットの場合は
 // ffmpeg の afwtdn (音の位置はずれない)、モデルの場合はノイズ除去のモデルで分離して、ノイズを除いた方の出力を使う
 // (途中のファイルは tempDir に作る)
@@ -64,7 +96,15 @@ export async function removeNoise(
         const model = noiseRemovalModel(option.model);
         if (!model) throw new Error('NOISE_REMOVAL_MODEL_REQUIRED');
         voicePhase(jobId, 'noiseRemoval', { fraction: 0 });
-        await separateOneStem(jobId, input, model.filename, model.cleanStem, output, path.join(tempDir, 'noise-model'));
+        await separateOneStem(
+            jobId,
+            'noiseRemoval',
+            input,
+            model.filename,
+            model.cleanStem,
+            output,
+            path.join(tempDir, 'noise-model')
+        );
         return;
     }
     if (option.method === 'wavelet') {
@@ -133,9 +173,11 @@ export async function normalizeLoudness(
 }
 
 // 1 つのモデルでファイルを分離し、指定した出力 (名前。大文字・小文字は区別しない) を output に書く。チャンネル数と長さは
-// 入力にそろえる (ノイズ除去の「モデルで除去する」で使う)。途中のファイルは dir に作り、終わったら片付けの一覧に積む
+// 入力にそろえる (残響・エコーの除去と、ノイズ除去の「モデルで除去する」で使う。進み具合は phase の段階として示す)。
+// 途中のファイルは dir に作り、終わったら片付けの一覧に積む
 async function separateOneStem(
     jobId: string,
+    phase: 'noiseRemoval' | 'dereverb',
     input: string,
     filename: string,
     stemName: string,
@@ -151,7 +193,7 @@ async function separateOneStem(
     try {
         await padEnd(input, padded, SEPARATION_PAD_SECONDS, jobId, {
             totalSec: info.durationSec,
-            onProgress: percent => voicePhase(jobId, 'noiseRemoval', { fraction: (0.1 * percent) / 100 }),
+            onProgress: percent => voicePhase(jobId, phase, { fraction: (0.1 * percent) / 100 }),
         });
         const result = await withGpu(jobId, 'separator', () =>
             getWorker('separator').request<{ stems: { name: string; path: string }[] }>(
@@ -165,10 +207,10 @@ async function separateOneStem(
                 },
                 {
                     jobId,
-                    // 呼び出し側のジョブの進み具合を上書きしないよう、ノイズ除去の段階の進み具合として示す
+                    // 呼び出し側のジョブの進み具合を上書きしないよう、その段階の進み具合として示す
                     onEvent: event => {
                         if (event.kind === 'progress' && typeof event.fraction === 'number') {
-                            voicePhase(jobId, 'noiseRemoval', { fraction: 0.1 + 0.85 * event.fraction });
+                            voicePhase(jobId, phase, { fraction: 0.1 + 0.85 * event.fraction });
                         }
                     },
                 }

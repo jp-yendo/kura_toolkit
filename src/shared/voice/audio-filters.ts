@@ -1,5 +1,6 @@
-// 声の音の加工 (無音の扱い・ノイズ除去・音量をそろえる)。変換のオプション・学習用の音のフィルター・分岐の「その他」で
-// 同じ設定・同じ初期値を使う。どれも「チェックするとスライダーが出る」形で、スライダーの値はチェックを外しても覚えておく
+// 声の音の加工 (残響・エコーの除去・無音の扱い・ノイズ除去・音量をそろえる)。変換のオプション・学習用の音のフィルター・
+// 分岐の「その他」で同じ設定・同じ初期値を使う。どれも「チェックすると設定の欄が出る」形で、欄の値はチェックを外しても
+// 覚えておく
 
 // 無音の判断。音のピークから thresholdDb (負の値) より小さい状態が minSeconds 以上続く部分を無音とする。
 // 変換と分岐では無音部分の音量を 0 にし (時間は変わらない)、学習用の音のフィルターでは無音部分を除去して詰める
@@ -22,6 +23,13 @@ export type NoiseRemovalOption = {
     // 除去の強さ (%。afwtdn の percent)
     waveletPercent: number;
     // モデルで除去する場合のモデル (ファイル名。null は、取得済みのおすすめのうち先頭)
+    model: string | null;
+};
+
+// 残響・エコーの除去。残響・エコーの除去のおすすめのモデル (DEREVERB_MODELS) で分離し、残響を除いた方の出力を使う
+export type DereverbOption = {
+    enabled: boolean;
+    // 使うモデル (ファイル名。null は、取得済みのおすすめのうち先頭)
     model: string | null;
 };
 
@@ -55,6 +63,10 @@ export function loudnessOption(enabled: boolean): LoudnessOption {
     return { enabled, targetLufs: LOUDNESS_DEFAULT_LUFS };
 }
 
+export function dereverbOption(enabled: boolean): DereverbOption {
+    return { enabled, model: null };
+}
+
 // ノイズ除去のおすすめのモデル (目的別のおすすめの「ノイズ除去」と、ノイズ除去の「モデルで除去する」で使う)。
 // 上から順に、取得済みのものを初期値にする。cleanStem はノイズを除いた方の出力の名前 (大文字・小文字は区別しない)。
 // 出典: 分離の利用者コミュニティのガイド。Mel-Roformer Denoise は VR 方式の DeNoise より控えめに取り除き、
@@ -65,17 +77,30 @@ export const NOISE_REMOVAL_MODELS: { filename: string; cleanStem: string }[] = [
     { filename: 'UVR-DeNoise-Lite.pth', cleanStem: 'no noise' },
 ];
 
-// 学習用の音のフィルター。処理の順は、無音部分の除去 → ノイズ除去 → 音量をそろえる (ノイズ除去で音量が下がるため、
+// 残響・エコーの除去のおすすめのモデル (目的別のおすすめの「残響・エコーの除去」と、残響・エコーの除去で使う)。
+// 上から順に、取得済みのものを初期値にする。cleanStem は残響・エコーを除いた方の出力の名前 (大文字・小文字は区別しない)
+export const DEREVERB_MODELS: { filename: string; cleanStem: string }[] = [
+    { filename: 'dereverb_echo_mbr_fused.ckpt', cleanStem: 'dry' },
+    { filename: 'dereverb_mel_band_roformer_less_aggressive_anvuew_sdr_18.8050.ckpt', cleanStem: 'noreverb' },
+    { filename: 'MDX23C-De-Reverb-aufr33-jarredou.ckpt', cleanStem: 'dry' },
+    { filename: 'UVR-De-Echo-Normal.pth', cleanStem: 'no echo' },
+];
+
+// 学習用の音のフィルター。処理の順は、残響・エコーの除去 → ノイズ除去 → 無音部分の除去 → 音量をそろえる
+// (残響の尾や雑音を除いてから無音を判断すると、無音として除ける部分が増えるため。残響・ノイズの除去で音量が下がるため、
 // 音量は最後にそろえる。無音の判断はピークからの大きさなので、音量をそろえる前後で変わらない)
 export type TrainingFilterOptions = {
+    dereverb: DereverbOption;
     removeSilence: SilenceOption;
     noiseRemoval: NoiseRemovalOption;
     loudness: LoudnessOption;
 };
 
-// 個々の音のフィルターの初期値 (すべてチェックあり)。全体に適用するときは、無音部分の除去だけチェックあり
+// 個々の音のフィルターの初期値 (残響・エコーの除去のほかはチェックあり)。全体に適用するときは、無音部分の除去だけ
+// チェックあり。残響・エコーの除去は、時間がかかるためどちらもチェックなし
 export function trainingFilterDefaults(scope: 'audio' | 'set'): TrainingFilterOptions {
     return {
+        dereverb: dereverbOption(false),
         removeSilence: silenceOption(true),
         noiseRemoval: noiseRemovalOption(scope === 'audio'),
         loudness: loudnessOption(scope === 'audio'),
@@ -83,7 +108,12 @@ export function trainingFilterDefaults(scope: 'audio' | 'set'): TrainingFilterOp
 }
 
 export function hasTrainingFilter(options: TrainingFilterOptions): boolean {
-    return options.removeSilence.enabled || options.noiseRemoval.enabled || options.loudness.enabled;
+    return (
+        options.dereverb.enabled ||
+        options.removeSilence.enabled ||
+        options.noiseRemoval.enabled ||
+        options.loudness.enabled
+    );
 }
 
 // 画面から受け取った設定を確かめ、数値は範囲に収める (main で使う。値は ffmpeg のフィルターの指定にも入るため)
@@ -126,6 +156,11 @@ export function sanitizeNoiseRemovalOption(value: unknown): NoiseRemovalOption {
     };
 }
 
+export function sanitizeDereverbOption(value: unknown): DereverbOption {
+    const item = record(value);
+    return { enabled: item.enabled === true, model: typeof item.model === 'string' ? item.model : null };
+}
+
 export function sanitizeLoudnessOption(value: unknown): LoudnessOption {
     const item = record(value);
     return {
@@ -137,6 +172,7 @@ export function sanitizeLoudnessOption(value: unknown): LoudnessOption {
 export function sanitizeTrainingFilterOptions(value: unknown): TrainingFilterOptions {
     const item = record(value);
     return {
+        dereverb: sanitizeDereverbOption(item.dereverb),
         removeSilence: sanitizeSilenceOption(item.removeSilence),
         noiseRemoval: sanitizeNoiseRemovalOption(item.noiseRemoval),
         loudness: sanitizeLoudnessOption(item.loudness),
