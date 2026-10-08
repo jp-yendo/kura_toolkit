@@ -788,31 +788,8 @@ export default function ConversionPage() {
                                                     {paramsSummary(candidate)}
                                                 </Typography>
                                             </Box>
-                                            <Tooltip title={t('voice.filters.filterButton')}>
-                                                <span>
-                                                    <IconButton
-                                                        size='small'
-                                                        aria-label={t('voice.filters.filterFor', {
-                                                            name: candidate.voiceName,
-                                                        })}
-                                                        disabled={busy}
-                                                        onClick={event => {
-                                                            // 候補のカードを選ぶクリックとして扱わない
-                                                            event.stopPropagation();
-                                                            setFilterTarget(candidate);
-                                                            setFilterOpen(true);
-                                                        }}
-                                                    >
-                                                        <GraphicEqIcon fontSize='small' />
-                                                    </IconButton>
-                                                </span>
-                                            </Tooltip>
-                                            {saveButton(
-                                                `${candidate.id}-converted`,
-                                                `${candidate.voiceName} ${t('voice.conversion.targets.converted')}`,
-                                                candidate.vocals,
-                                                `${candidate.voiceName}_${t('voice.conversion.suffixConvertedVocals')}`
-                                            )}
+                                            {/* 見出しの行には候補全体の操作 (削除) だけを置く。フィルターと保存は、どの音に
+                                                かかるかが分かるよう、変換後のボーカルの行に置く */}
                                             <Tooltip title={t('voice.common.deleteCandidate')}>
                                                 <span>
                                                     <IconButton
@@ -837,7 +814,34 @@ export default function ConversionPage() {
                                         {playerRow(
                                             `${candidate.id}-converted`,
                                             t('voice.conversion.targets.converted'),
-                                            candidate.vocals
+                                            candidate.vocals,
+                                            <Stack direction='row' spacing={0.5}>
+                                                <Tooltip title={t('voice.filters.filterButton')}>
+                                                    <span>
+                                                        <IconButton
+                                                            size='small'
+                                                            aria-label={t('voice.filters.filterFor', {
+                                                                name: `${candidate.voiceName} ${t('voice.conversion.targets.converted')}`,
+                                                            })}
+                                                            disabled={busy}
+                                                            onClick={event => {
+                                                                // 候補のカードを選ぶクリックとして扱わない
+                                                                event.stopPropagation();
+                                                                setFilterTarget(candidate);
+                                                                setFilterOpen(true);
+                                                            }}
+                                                        >
+                                                            <GraphicEqIcon fontSize='small' />
+                                                        </IconButton>
+                                                    </span>
+                                                </Tooltip>
+                                                {saveButton(
+                                                    `${candidate.id}-converted`,
+                                                    `${candidate.voiceName} ${t('voice.conversion.targets.converted')}`,
+                                                    candidate.vocals,
+                                                    `${candidate.voiceName}_${t('voice.conversion.suffixConvertedVocals')}`
+                                                )}
+                                            </Stack>
                                         )}
                                         {/* 伴奏と重ねた音は、ボタンを押したときに作る (変換の実行では作らない) */}
                                         {accompaniment.length > 0 &&

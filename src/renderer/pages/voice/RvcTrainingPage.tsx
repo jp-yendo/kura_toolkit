@@ -73,9 +73,6 @@ function TrainingAudioRow({
                 >
                     {item.name}
                 </Typography>
-                <Typography variant='body2' color='text.secondary'>
-                    {formatDuration(item.durationSec)}
-                </Typography>
                 <Tooltip title={t('voice.filters.filterButton')}>
                     <span>
                         <IconButton

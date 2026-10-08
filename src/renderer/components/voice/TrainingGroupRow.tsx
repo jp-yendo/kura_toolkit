@@ -9,7 +9,6 @@ import Panel from '../common/Panel';
 import RecorderControl from './RecorderControl';
 import SyncPlayer from './SyncPlayer';
 import { AUDIO_INPUT_EXTENSIONS } from './audioInput';
-import { formatDuration } from './voiceFormat';
 import { useInView } from '../../hooks/useInView';
 import { showNotice } from '../../stores/noticeStore';
 import type { RecordedAudio } from './useRecorder';
@@ -80,9 +79,8 @@ export default function TrainingGroupRow({
                             color='text.secondary'
                             sx={{ flexGrow: 1, minWidth: 0, overflowWrap: 'anywhere' }}
                         >
-                            {audio
-                                ? `${audio.name} (${formatDuration(audio.durationSec)})`
-                                : t('voice.training.notRecorded')}
+                            {/* 長さは下の波形のプレーヤーに示すため、名前だけを示す */}
+                            {audio ? audio.name : t('voice.training.notRecorded')}
                         </Typography>
                         <Tooltip title={t('voice.filters.filterButton')}>
                             <span>
