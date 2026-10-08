@@ -56,8 +56,8 @@ const ARCH_KEYS: Record<SeparationArch, keyof SeparationParams> = {
     MDXC: 'mdxc',
 };
 
-// 1 段の字下げ (MUI の spacing の単位)
-const INDENT = 3;
+// 出力から分離した結果の枠を、その出力の行から字下げする量 (MUI の spacing の単位)
+const INDENT = 2;
 // 保存対象の列の幅
 const SAVE_COLUMN_WIDTH = 56;
 
@@ -283,15 +283,13 @@ export default function SeparationWorkbench({ store, disabled, saveColumn }: Pro
         alignItems: 'center',
         columnGap: 1,
     } as const;
-    const cellSx = (depth: number) =>
-        ({
-            display: 'grid',
-            gridTemplateColumns: { xs: '1fr', sm: '160px minmax(0, 1fr) auto' },
-            alignItems: 'center',
-            gap: 1.5,
-            pl: depth * INDENT,
-            minWidth: 0,
-        }) as const;
+    const cellSx = {
+        display: 'grid',
+        gridTemplateColumns: { xs: '1fr', sm: '160px minmax(0, 1fr) auto' },
+        alignItems: 'center',
+        gap: 1.5,
+        minWidth: 0,
+    } as const;
 
     const separateButton = (key: string, label: string) => (
         <Button
@@ -306,61 +304,75 @@ export default function SeparationWorkbench({ store, disabled, saveColumn }: Pro
         </Button>
     );
 
-    // ある音から分離した結果 (見出しと出力)。出力から分離した結果は、さらに字下げしてその出力の下に置く
-    const renderChildren = (parentKey: string, depth: number): React.ReactNode =>
+    // ある音から分離した結果 (見出しと出力) を、1 回の分離ごとに枠で囲む。出力から分離した結果は、その出力の行の下に
+    // 字下げした枠として入れ子にする。枠は右に余白を取らず、入れ子の枠は右の線を持たずに親の枠の右の線に突き当てる
+    // (どの深さでも右端の位置が変わらず、保存対象の列がそろう。線を重ねると、半透明の線が表示倍率によってずれて二重に見える)
+    const renderChildren = (parentKey: string, nested: boolean): React.ReactNode =>
         childrenOf(nodes, parentKey).map(node => {
             const summary = paramsSummary(node.result);
             return (
-                <Stack key={node.id} spacing={1}>
-                    <Box sx={{ ...rowSx }}>
-                        <Stack
-                            direction='row'
-                            spacing={1}
-                            sx={{ alignItems: 'center', pl: depth * INDENT, minWidth: 0 }}
-                        >
-                            <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                                <Typography variant='body2' sx={{ fontWeight: 600, overflowWrap: 'anywhere' }}>
-                                    {resultLabel(node.result)}
+                <Stack
+                    key={node.id}
+                    spacing={1}
+                    sx={{
+                        border: 1,
+                        borderColor: 'divider',
+                        borderRadius: 2,
+                        pl: 1.5,
+                        py: 1,
+                        pr: 0,
+                        ...(nested && {
+                            ml: INDENT,
+                            borderRight: 0,
+                            borderTopRightRadius: 0,
+                            borderBottomRightRadius: 0,
+                        }),
+                    }}
+                >
+                    {/* 見出しの行は枠の右端まで使い、操作は右端に寄せる */}
+                    <Stack direction='row' spacing={1} sx={{ alignItems: 'center', minWidth: 0, pr: 0.5 }}>
+                        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                            <Typography variant='body2' sx={{ fontWeight: 600, overflowWrap: 'anywhere' }}>
+                                {resultLabel(node.result)}
+                            </Typography>
+                            {summary && (
+                                <Typography
+                                    variant='caption'
+                                    color='text.secondary'
+                                    sx={{ display: 'block', lineHeight: 1.5 }}
+                                >
+                                    {summary}
                                 </Typography>
-                                {summary && (
-                                    <Typography
-                                        variant='caption'
-                                        color='text.secondary'
-                                        sx={{ display: 'block', lineHeight: 1.5 }}
-                                    >
-                                        {summary}
-                                    </Typography>
-                                )}
-                            </Box>
-                            <Button
-                                size='small'
-                                disabled={busy}
-                                onClick={() => askRedo(node)}
-                                sx={{ whiteSpace: 'nowrap' }}
-                            >
-                                {t('voice.separation.recreate')}
-                            </Button>
-                            <Tooltip title={t('voice.separation.deleteResult')}>
-                                <span>
-                                    <IconButton
-                                        size='small'
-                                        aria-label={t('voice.separation.deleteResult')}
-                                        disabled={busy}
-                                        onClick={() => askRemove(node)}
-                                    >
-                                        <DeleteOutlineIcon fontSize='small' />
-                                    </IconButton>
-                                </span>
-                            </Tooltip>
-                        </Stack>
-                    </Box>
+                            )}
+                        </Box>
+                        <Button
+                            size='small'
+                            disabled={busy}
+                            onClick={() => askRedo(node)}
+                            sx={{ whiteSpace: 'nowrap' }}
+                        >
+                            {t('voice.separation.recreate')}
+                        </Button>
+                        <Tooltip title={t('voice.separation.deleteResult')}>
+                            <span>
+                                <IconButton
+                                    size='small'
+                                    aria-label={t('voice.separation.deleteResult')}
+                                    disabled={busy}
+                                    onClick={() => askRemove(node)}
+                                >
+                                    <DeleteOutlineIcon fontSize='small' />
+                                </IconButton>
+                            </span>
+                        </Tooltip>
+                    </Stack>
                     {node.result.stems.map(stem => {
                         const key = outputKey(node.id, stem.name);
                         const label = outputLabel(node, stem.name);
                         return (
                             <Stack key={key} spacing={1}>
                                 <Box sx={rowSx}>
-                                    <Box sx={cellSx(depth)}>
+                                    <Box sx={cellSx}>
                                         <Stack
                                             direction='row'
                                             spacing={0.25}
@@ -422,7 +434,7 @@ export default function SeparationWorkbench({ store, disabled, saveColumn }: Pro
                                         />
                                     )}
                                 </Box>
-                                {renderChildren(key, depth + 1)}
+                                {renderChildren(key, true)}
                             </Stack>
                         );
                     })}
@@ -450,7 +462,7 @@ export default function SeparationWorkbench({ store, disabled, saveColumn }: Pro
             <Panel>
                 <Stack spacing={1.5}>
                     <Box sx={rowSx}>
-                        <Box sx={cellSx(0)}>
+                        <Box sx={cellSx}>
                             <Typography variant='body2' sx={{ fontWeight: 600 }}>
                                 {sourceLabel}
                             </Typography>
@@ -464,7 +476,7 @@ export default function SeparationWorkbench({ store, disabled, saveColumn }: Pro
                             {t('voice.separation.noResults')}
                         </Typography>
                     )}
-                    {renderChildren(SOURCE_KEY, 1)}
+                    {renderChildren(SOURCE_KEY, false)}
                 </Stack>
             </Panel>
 

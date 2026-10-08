@@ -31,9 +31,10 @@ export async function availableEncoders(): Promise<Set<string> | null> {
 }
 
 // 使っている ffmpeg で書き出せる形式 (要るエンコーダーが ffmpeg のビルドに含まれるもの)。エンコーダーを調べられない場合は
-// すべての形式を返す (書き出しの時点で ffmpeg の問題を知らせるため)
-export async function availableAudioFormats(): Promise<AudioFormat[]> {
+// すべての形式を返す (書き出しの時点で ffmpeg の問題を知らせるため)。known は、エンコーダーを調べられたか
+// (画面は調べられた結果だけを覚える)
+export async function availableAudioFormats(): Promise<{ formats: AudioFormat[]; known: boolean }> {
     const encoders = await availableEncoders();
-    if (!encoders) return AUDIO_FORMATS;
-    return AUDIO_FORMATS.filter(format => encoders.has(AUDIO_FORMAT_ENCODERS[format]));
+    if (!encoders) return { formats: AUDIO_FORMATS, known: false };
+    return { formats: AUDIO_FORMATS.filter(format => encoders.has(AUDIO_FORMAT_ENCODERS[format])), known: true };
 }
