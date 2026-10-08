@@ -1,4 +1,4 @@
-// Audio separation, voice conversion and text to speech (English)
+// Audio separation and processing, voice conversion and text to speech (English)
 export default {
     common: {
         back: 'Back',
@@ -25,7 +25,7 @@ export default {
         training: 'Model Training',
     },
     features: {
-        separation: 'Audio Separation',
+        separation: 'Audio Separation & Processing',
         conversion: 'Voice Conversion',
         conversionTraining: 'Voice Conversion model training',
         tts: 'Text to Speech',
@@ -43,8 +43,8 @@ export default {
     platform: {
         unsupportedTitle: 'Voice features are not available on this system',
         unsupported: {
-            os: 'Audio Separation, Voice Conversion and Text to Speech are available on Windows, macOS and Linux.',
-            arch: 'Audio Separation, Voice Conversion and Text to Speech are available on 64-bit Windows (x64), Apple Silicon Macs and 64-bit Linux (x64), because the libraries used by the voice features do not support Intel Macs or Arm-based Windows and Linux.',
+            os: 'Audio Separation & Processing, Voice Conversion and Text to Speech are available on Windows, macOS and Linux.',
+            arch: 'Audio Separation & Processing, Voice Conversion and Text to Speech are available on 64-bit Windows (x64), Apple Silicon Macs and 64-bit Linux (x64), because the libraries used by the voice features do not support Intel Macs or Arm-based Windows and Linux.',
             macosVersion:
                 'macOS 14 (Sonoma) or later is required, because the libraries used by the voice features do not support macOS 13 or earlier.',
         },
@@ -84,7 +84,7 @@ export default {
             conversionExtras: 'For extra features',
             whenFcpe: 'Needed when FCPE is chosen as the pitch extraction method',
             whenSeparateInput:
-                'Needed to separate the vocals from the input on the conversion screen (choose separation models on the "Audio Separation" tab)',
+                'Needed to separate the vocals from the input on the conversion screen (choose separation models on the "Audio Separation & Processing" tab)',
             importedEmbedders: 'For imported voice models',
             importedEmbeddersNote:
                 'If an imported voice model was made with a method other than ContentVec, the model for that method is needed. The method is shown in the "Voice Models" list. It has nothing to do with the language of the voice you convert. Voices trained in this app do not need these.',
@@ -492,10 +492,10 @@ export default {
         items: {
             python: 'Python 3.11',
             pythonDesc:
-                'The runtime that runs the programs of the voice features (Audio Separation, Voice Conversion and Text to Speech). It runs in a location of its own, separately from any Python installed on your computer.',
+                'The runtime that runs the programs of the voice features (Audio Separation & Processing, Voice Conversion and Text to Speech). It runs in a location of its own, separately from any Python installed on your computer.',
             separatorPackages: 'Audio Separation package set',
             separatorPackagesDesc:
-                'The Audio Separation program (python-audio-separator) and the libraries it needs (PyTorch and others). Used for Audio Separation and for separating on the Voice Conversion screen. The Xcode Command Line Tools on macOS, or a C/C++ compiler (such as build-essential) on Linux, must be installed first.',
+                'The Audio Separation program (python-audio-separator) and the libraries it needs (PyTorch and others). Used for Audio Separation & Processing and for separating on the Voice Conversion screen. The Xcode Command Line Tools on macOS, or a C/C++ compiler (such as build-essential) on Linux, must be installed first.',
             converterPackages: 'Voice Conversion package set',
             converterPackagesDesc:
                 'The Voice Conversion (RVC) program (Applio) and the libraries it needs (PyTorch and others). Used for Voice Conversion and for training its models.',
@@ -578,7 +578,7 @@ export default {
         separateFrom: 'Branch',
         separateFromFor: 'Branch from {{name}}',
         dialogTitle: 'Separate: {{input}}',
-        noResults: 'Use "Branch" on a sound to choose a method and separate it.',
+        noResults: 'Use "Branch" on a sound to choose a method and separate or process it.',
         recreate: 'Recreate with Other Settings',
         recreateMessage:
             'Recreating removes the following sounds separated from this result (they are removed when the recreation runs). Continue?',

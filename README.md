@@ -6,74 +6,83 @@ Kura Toolkit is a desktop application that brings together audio, video and imag
 
 ### Audio: Audio Normalizer
 
-- Make the loudness of audio files (wav / mp3 / aac / flac) even and save them
-- The original format, tags and album art are kept
-- Choose the sample rate and bitrate of the output
+- Measure the loudness of audio files (WAV, MP3, AAC, M4A, FLAC, Ogg, Opus, AIFF, WMA and more) and save them at an even target level
+- The whole song is turned up or down by the same amount, so the dynamics within the song do not change
+- Save in the original format, or choose MP3, FLAC, Ogg Vorbis, Opus, AAC, WAV or ALAC (with settings such as the sample rate and bitrate for each format)
+- Tags and album art are kept (except album art in formats that cannot contain it)
 
-### Audio: Audio Separation
+### Audio: Audio Separation & Processing
 
-- Split songs and recordings into vocals and accompaniment, instruments (drums, bass, guitar, piano and more), or lead and backing vocals
-- Remove reverb, echo and noise
+- Split songs and recordings into vocals and accompaniment, instruments (drums, bass, guitar, piano and more), lead and backing vocals, and more
+- Remove reverb, echo and noise, silence the noise in silent parts, and match the volume (also without separating)
 - Compare the results of different methods and models, and choose the one to use
-- Separate a result further (for example vocals, then lead and backing vocals, then reverb removal)
-- Export as MP3 or FLAC
+- Separate or process a result further (for example vocals, then lead and backing vocals, then reverb removal)
+- Export the chosen results as MP3, FLAC, Ogg Vorbis, Opus, AAC, WAV or ALAC
 
 ### Audio: Voice Conversion
 
 - Convert a singing or speaking voice into the voice of a chosen voice model
-- For songs, only the vocals are converted and then mixed back with the accompaniment, with adjustable volume balance, reverb and more. Changing the key transposes the accompaniment as well
+- For songs, convert only the vocals and mix them back with the accompaniment, adjusting the volume balance, reverb and more
+- Changing the key transposes the accompaniment as well
+- Remove reverb, echo and noise, and silence the noise in silent parts, while converting
 - Compare the results of different settings, and choose the one to use
+- Export the chosen results as MP3, FLAC, Ogg Vorbis, Opus, AAC, WAV or ALAC
 - Import and export voice models, and search for models on Hugging Face
 - Create a voice model of your own voice from recordings made in the app or from audio files
 
 ### Audio: Text to Speech
 
-- Read text aloud in Japanese, English or Chinese
+- Read text aloud in a chosen voice (Japanese, English or Chinese)
 - Read rows at their own start and end times (subtitle files in SRT, WebVTT, ASS, SSA or SBV format can be opened)
 - Set pauses, speed, pitch, volume and readings with control tags
+- Export the speech as MP3, FLAC, Ogg Vorbis, Opus, AAC, WAV or ALAC
 - Download, import and export voice models
-- Create a voice model of your own voice by recording the presented sentences, or by choosing audio files of them (Windows or Linux with an NVIDIA GPU)
+- Create a voice model of your own voice from recordings or audio files of presented sentences or sentences of your own (Windows or Linux with an NVIDIA GPU)
 
 ### Voice Feature Downloads
 
-Audio Separation, Voice Conversion and Text to Speech need items (Python, packages and models) that are downloaded from within the app. Open "Downloads" on each screen and choose what to download. The download size is shown beforehand.
+Audio Separation & Processing, Voice Conversion and Text to Speech need items (Python, packages and models) that are downloaded from within the app. Open "Downloads" on each screen and choose what to download. The download size is shown beforehand.
 
 ### Video: Chapter Cut
 
-- Show the chapters of a video
-- Cut out a range of chapters (without re-encoding, or re-encoded to cut exactly at the chapter positions)
+- Show the chapters of a video and the details of the file (its video, audio and other streams)
+- Cut out a range of chapters
 - Split a video into several files at the chosen chapters
+- Choose to work quickly without re-encoding, or to re-encode and cut exactly at the chapter positions
 
 ### Image: SVG Converter
 
-- Convert images (PNG / JPEG / BMP / GIF / TIFF) into vector SVG files
+- Convert images (PNG, JPEG, BMP, GIF, TIFF) into vector SVG files
 - Adjust the conversion settings and check the result next to the original before saving
 
 ### Tools: Cleanup
 
-- Find and remove junk files such as Zone.Identifier, Thumbs.db and .DS_Store
-- Choose where to search: the home directory, drives or any folder
-- Found items are moved to the trash
+- Find and delete junk files such as Zone.Identifier, Thumbs.db and .DS_Store
+- Choose what to look for and where to search: the home directory, drives or any folder
+- Found files are moved to the trash (on Windows, Zone.Identifier is deleted directly, as it cannot be moved to the trash)
 
 On macOS, Full Disk Access is required to search folders such as Desktop, Documents and Downloads. When it has not been granted, the Cleanup screen shows how to grant it.
 
 ### App Settings
 
+The following can be set.
+
 - Theme (light / dark / system) and language (Japanese / English)
-- Search threads (how many threads scan directories)
+- Search threads (how many threads search directories in parallel)
 - Location of ffmpeg / ffprobe (found automatically when not set)
+- Microphone and input gain for recording (check them with the microphone test)
 - Storage locations (library, model, cache and work directories) and how long the cache is kept
 
 ### Required External Tools
 
-Audio Normalizer, Chapter Cut and the voice features (Audio Separation, Voice Conversion, Text to Speech) require [FFmpeg](https://ffmpeg.org/). It is not included with the app, so install it separately.
+Audio Normalizer, Chapter Cut and the voice features (Audio Separation & Processing, Voice Conversion, Text to Speech) require [FFmpeg](https://ffmpeg.org/). It is not included with the app, so install it separately.
 
 - Changing the key in Voice Conversion (except by whole octaves), and timed rows in Text to Speech that are sped up to fit their time (the default), need an FFmpeg build that includes rubberband (such as Gyan.FFmpeg from winget on Windows, the Homebrew `ffmpeg` on macOS, or your distribution's `ffmpeg` on Linux)
 - The voice feature downloads need an Internet connection and several GB of free space
 - Windows: the [Microsoft Visual C++ Redistributable](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist) (x64, needed for the voice features)
 - Recording voices for model training needs permission to use the microphone (on macOS, allow it in System Settings when asked)
-- macOS: the Xcode Command Line Tools (`xcode-select --install`, needed for Audio Separation)
-- Linux: a C/C++ compiler (such as `build-essential`, needed for Audio Separation)
+- macOS: the Xcode Command Line Tools (`xcode-select --install`, needed for Audio Separation & Processing)
+- Linux: a C/C++ compiler (such as `build-essential`, needed for Audio Separation & Processing)
 
 ## 2. Supported OS
 
@@ -81,7 +90,7 @@ Audio Normalizer, Chapter Cut and the voice features (Audio Separation, Voice Co
 - macOS 12 (Monterey) or later
 - Linux (Debian-based / RHEL-based)
 
-Audio Separation, Voice Conversion and Text to Speech are available on Windows 10/11 (x64), macOS 14 or later on Apple Silicon, and Linux (x64). They use the GPU when there is one (NVIDIA on Windows and Linux, Apple Silicon on macOS) and the CPU otherwise.
+Audio Separation & Processing, Voice Conversion and Text to Speech are available on Windows 10/11 (x64), macOS 14 or later on Apple Silicon, and Linux (x64). They use the GPU when there is one (NVIDIA on Windows and Linux, Apple Silicon on macOS) and the CPU otherwise.
 
 Note: Windows builds are not code-signed. If SmartScreen shows a warning, choose "More info" then "Run anyway".
 

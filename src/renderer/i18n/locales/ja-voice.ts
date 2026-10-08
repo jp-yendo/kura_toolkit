@@ -1,4 +1,4 @@
-// 音声分離・音声変換・読み上げ (日本語)
+// 音声分離・加工、音声変換、読み上げ (日本語)
 export default {
     common: {
         back: '戻る',
@@ -25,7 +25,7 @@ export default {
         training: 'モデルの学習',
     },
     features: {
-        separation: '音声分離',
+        separation: '音声分離・加工',
         conversion: '音声変換',
         conversionTraining: '音声変換のモデルの学習',
         tts: '読み上げ',
@@ -43,8 +43,8 @@ export default {
     platform: {
         unsupportedTitle: 'この環境では音声機能を利用できません',
         unsupported: {
-            os: '音声分離・音声変換・読み上げは Windows・macOS・Linux で利用できます。',
-            arch: '音声分離・音声変換・読み上げは 64bit 版 Windows (x64)・Apple Silicon の Mac・64bit 版 Linux (x64) で利用できます。音声機能が使うライブラリが Intel 版 Mac と Arm 版の Windows・Linux に対応していないためです。',
+            os: '音声分離・加工、音声変換、読み上げは Windows・macOS・Linux で利用できます。',
+            arch: '音声分離・加工、音声変換、読み上げは 64bit 版 Windows (x64)・Apple Silicon の Mac・64bit 版 Linux (x64) で利用できます。音声機能が使うライブラリが Intel 版 Mac と Arm 版の Windows・Linux に対応していないためです。',
             macosVersion:
                 'macOS 14 (Sonoma) 以降が必要です。音声機能が使うライブラリが macOS 13 以前に対応していないためです。',
         },
@@ -84,7 +84,7 @@ export default {
             conversionExtras: '追加の機能用',
             whenFcpe: 'ピッチ抽出方式に FCPE を選ぶ場合に必要',
             whenSeparateInput:
-                '変換の画面で、入力の音源からボーカルを分離する場合に必要 (分離モデルは「音声分離」のタブで選びます)',
+                '変換の画面で、入力の音源からボーカルを分離する場合に必要 (分離モデルは「音声分離・加工」のタブで選びます)',
             importedEmbedders: '取り込んだ声のモデル用',
             importedEmbeddersNote:
                 '取り込んだ声のモデルが ContentVec 以外の方式で作られている場合に、その方式のモデルが 1 つ必要です。どの方式かは「声のモデル」の一覧に表示されます。変換する声の言語とは関係ありません。アプリで学習した声には不要です。',
@@ -499,10 +499,10 @@ export default {
         items: {
             python: 'Python 3.11 本体',
             pythonDesc:
-                '音声機能 (音声分離・音声変換・読み上げ) のプログラムを動かす実行環境です。パソコンに入っている Python とは別に、アプリ専用の場所で動きます。',
+                '音声機能 (音声分離・加工、音声変換、読み上げ) のプログラムを動かす実行環境です。パソコンに入っている Python とは別に、アプリ専用の場所で動きます。',
             separatorPackages: '音声分離のパッケージ一式',
             separatorPackagesDesc:
-                '音声分離のプログラム (python-audio-separator) と、動作に必要なライブラリ (PyTorch など) の一式です。音声分離と、音声変換の画面での分離に使います。macOS では Xcode Command Line Tools を、Linux では C/C++ のコンパイラー (build-essential など) を、先にインストールしておく必要があります。',
+                '音声分離のプログラム (python-audio-separator) と、動作に必要なライブラリ (PyTorch など) の一式です。音声分離・加工と、音声変換の画面での分離に使います。macOS では Xcode Command Line Tools を、Linux では C/C++ のコンパイラー (build-essential など) を、先にインストールしておく必要があります。',
             converterPackages: '音声変換のパッケージ一式',
             converterPackagesDesc:
                 '音声変換 (RVC) のプログラム (Applio) と、動作に必要なライブラリ (PyTorch など) の一式です。音声変換と、変換のモデルの学習に使います。',
@@ -585,7 +585,7 @@ export default {
         separateFrom: '分岐',
         separateFromFor: '{{name}}から分岐',
         dialogTitle: '分離: {{input}}',
-        noResults: '分離する音の「分岐」で、方式を選んで分離します。',
+        noResults: '音の「分岐」で、方式を選んで分離や加工をします。',
         recreate: 'パラメーターを変えて作成',
         recreateMessage:
             '作り直すと、この結果から分離した次の音が消えます (消えるのは、作り直しを実行した時点です)。よろしいですか？',

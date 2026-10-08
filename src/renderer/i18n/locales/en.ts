@@ -105,31 +105,31 @@ export default {
     features: {
         audioNormalizer: {
             title: 'Audio Normalizer',
-            desc: 'Analyze loudness (LUFS) of audio files and normalize them to a target level.',
+            desc: 'Measure the loudness of audio files and save them at an even target level. Keep the dynamics within each song, and save in the original format or another one.',
         },
         separation: {
-            title: 'Audio Separation',
-            desc: 'Split songs and recordings into vocals, accompaniment, instruments and more. Compare and adopt results, then separate them further.',
+            title: 'Audio Separation & Processing',
+            desc: 'Split songs and recordings into vocals, accompaniment, instruments and more, remove reverb and noise, or match the volume. Compare the results, then separate or process them further.',
         },
         conversion: {
             title: 'Voice Conversion',
-            desc: 'Convert singing or speaking voices into another voice and export them mixed with the accompaniment. You can also train voice models.',
+            desc: 'Convert singing or speaking voices into the voice of a chosen voice model. Convert only the vocals of a song and mix them back with the accompaniment, and create a voice model from your own recordings.',
         },
         tts: {
             title: 'Text to Speech',
-            desc: 'Read text or subtitles (SRT, WebVTT, ASS, SSA, SBV) aloud in the chosen voice. You can also train voice models.',
+            desc: 'Read text and subtitles aloud in a chosen voice. Read Japanese, English or Chinese, and create a voice model from your own recordings.',
         },
         chapterCut: {
             title: 'Chapter Cut',
-            desc: 'Show chapter information of a video and cut ranges or split by chapters.',
+            desc: 'Cut out chapters of a video or split it into several files at chapters. Cut quickly without re-encoding, or exactly at the chapter positions.',
         },
         svgConverter: {
             title: 'SVG Converter',
-            desc: 'Convert raster images (PNG/JPEG etc.) into vector SVG files.',
+            desc: 'Convert images into vector SVG files and save them. Adjust the settings and compare the result with the original image.',
         },
         cleanup: {
             title: 'Cleanup',
-            desc: 'Find and remove junk files such as Thumbs.db and .DS_Store.',
+            desc: 'Find and delete junk files such as Thumbs.db and .DS_Store. Choose what to look for and where to search.',
         },
     },
     audioPage: {
