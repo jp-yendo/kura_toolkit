@@ -6,7 +6,7 @@ import gc
 import os
 import platform
 import sys
-from typing import Any, Callable, Iterable, TypeVar
+from typing import Any, Callable, Iterable, List, Optional, TypeVar
 
 from kura_voice.protocol import KuraError
 
@@ -110,39 +110,94 @@ class TqdmBridge:
 
     Libraries create bars with ``from tqdm import tqdm`` at import time, so the module level
     names are replaced with a subclass that reports ``n / total`` on every update.
+
+    A library can run several bars in turn for one task. When the bars to come are known (``expect``), each bar has
+    a weight: the bars of equal work are reported as one progress from 0 to 1, and the bars of weight 0 (short
+    preparation) only report that they run (``on_light``), without moving the progress. When they are not known,
+    each bar reports from its own start, and from the second bar on the bar's number is passed as ``repeat`` (so
+    that the progress going back to 0 is shown as the next pass, not as a restart).
     """
 
-    def __init__(self, callback: Callable[[float], None]) -> None:
+    def __init__(
+        self,
+        callback: Callable[[float, Optional[int]], None],
+        on_light: Optional[Callable[[], None]] = None,
+    ) -> None:
         import tqdm as tqdm_module
 
         base = tqdm_module.tqdm
         bridge = self
 
+        # A bar iterated in a loop calls update() only every mininterval (0.1 s), so a short bar may never call it.
+        # The bar is also reported when it is made (its start) and when it is closed (tqdm sets the final count
+        # before closing), so that every bar is seen and ends at its total.
         class ReportingTqdm(base):  # type: ignore[misc, valid-type]
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                super().__init__(*args, **kwargs)
+                bridge._report(self)
+
             def update(self, n: float = 1) -> Any:
                 result = super().update(n)
                 bridge._report(self)
                 return result
 
+            def close(self) -> None:
+                if not getattr(self, "_kura_closed", False):
+                    self._kura_closed = True
+                    bridge._report(self)
+                super().close()
+
         self._callback = callback
+        self._on_light = on_light
         self.cls = ReportingTqdm
         self._bar: Any = None
+        self._last = -1.0
+        self._index = -1
+        self._plan: Optional[List[float]] = None
+
+    def expect(self, weights: Optional[List[float]]) -> None:
+        """Set the weights of the bars to come (None: not known), counting the bars from the next one."""
+        self._plan = list(weights) if weights is not None else None
+        self._bar = None
+        self._index = -1
         self._last = -1.0
 
     def _report(self, bar: Any) -> None:
         total = getattr(bar, "total", None)
         if not total:
             return
-        # Each bar (a library can run several in turn) reports from its own start
-        if bar is not self._bar:
+        new_bar = bar is not self._bar
+        if new_bar:
+            # A bar seen before that reports again after the next one started (closed late) is not a new bar
+            if getattr(bar, "_kura_seen", False):
+                return
+            bar._kura_seen = True
             self._bar = bar
-            self._last = -1.0
+            self._index += 1
+            if self._plan is None:
+                self._last = -1.0
         fraction = min(1.0, float(bar.n) / float(total))
+        repeat: Optional[int] = None
+        if self._plan is not None:
+            weight = self._plan[self._index] if self._index < len(self._plan) else 0.0
+            if weight <= 0:
+                # A short step: show that it runs, keep the progress where it is
+                if new_bar and self._on_light is not None:
+                    self._on_light()
+                return
+            done = sum(item for item in self._plan[: self._index] if item > 0)
+            whole = sum(item for item in self._plan if item > 0)
+            fraction = min(1.0, (done + weight * fraction) / whole)
+            if new_bar:
+                # Continue from where the previous bars ended (a bar may stop short of its total)
+                self._last = min(self._last, fraction)
+        elif self._index > 0:
+            repeat = self._index + 1
         # Avoid flooding the protocol: report in steps of 1%.
-        if fraction - self._last < 0.01 and fraction < 1.0:
+        if not new_bar and fraction - self._last < 0.01 and fraction < 1.0:
             return
         self._last = fraction
-        self._callback(fraction)
+        self._callback(fraction, repeat)
 
     def install(self, modules: Iterable[Any]) -> None:
         """Replace the module level ``tqdm`` name of the modules that have one."""

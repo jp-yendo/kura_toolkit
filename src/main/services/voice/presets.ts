@@ -22,64 +22,42 @@ function presetPath(kind: PresetKind): string {
     return path.join(getAppRootDir(), 'voice-presets', `${kind}.json`);
 }
 
-// 初期の合成プリセット。名前は renderer で翻訳するため翻訳キーで持つ。リバーブの原音の量は 1 (元の大きさのまま) にし、
-// 残響音の量で響きの強さを分ける
+// 初期の合成プリセット。名前は renderer で翻訳するため翻訳キーで持つ。合成は音量だけを扱う (ボーカルのリバーブは
+// 候補のフィルターのエフェクトでかけ、リバーブのプリセットはそちらに持つ)
 const BUILTIN_MIX_PRESETS: PresetRecord<MixParams>[] = [
     {
         id: 'builtin-standard',
         name: '',
         nameKey: 'voice.mix.builtin.standard',
         builtin: true,
-        params: {
-            vocalGainDb: 0,
-            accompanimentGainDb: 0,
-            masterGainDb: 0,
-            reverb: { enabled: true, roomSize: 0.3, damping: 0.5, wetLevel: 0.2, dryLevel: 1, width: 1 },
-        },
-    },
-    {
-        id: 'builtin-dry',
-        name: '',
-        nameKey: 'voice.mix.builtin.dry',
-        builtin: true,
-        params: {
-            vocalGainDb: 0,
-            accompanimentGainDb: 0,
-            masterGainDb: 0,
-            reverb: { enabled: false, roomSize: 0.3, damping: 0.5, wetLevel: 0.2, dryLevel: 1, width: 1 },
-        },
-    },
-    {
-        id: 'builtin-hall',
-        name: '',
-        nameKey: 'voice.mix.builtin.hall',
-        builtin: true,
-        params: {
-            vocalGainDb: 0,
-            accompanimentGainDb: -1,
-            masterGainDb: 0,
-            reverb: { enabled: true, roomSize: 0.75, damping: 0.4, wetLevel: 0.53, dryLevel: 1, width: 1 },
-        },
+        params: { vocalGainDb: 0, accompanimentGainDb: 0, masterGainDb: 0 },
     },
     {
         id: 'builtin-vocal-forward',
         name: '',
         nameKey: 'voice.mix.builtin.vocalForward',
         builtin: true,
-        params: {
-            vocalGainDb: 3,
-            accompanimentGainDb: -2,
-            masterGainDb: 0,
-            reverb: { enabled: true, roomSize: 0.25, damping: 0.6, wetLevel: 0.13, dryLevel: 1, width: 0.8 },
-        },
+        params: { vocalGainDb: 3, accompanimentGainDb: -2, masterGainDb: 0 },
     },
 ];
+
+// 合成のプリセットのファイルを今の形にする。初期のプリセットは今の定義に置き換え (定義から外したものは除く)、利用者の
+// プリセットからは合成で扱わなくなった値 (リバーブ) を外す
+function currentMixPresets(presets: PresetRecord<PresetParams>[]): PresetRecord<PresetParams>[] {
+    const user = presets
+        .filter(preset => !preset.builtin)
+        .map(preset => {
+            const { vocalGainDb, accompanimentGainDb, masterGainDb } = preset.params as MixParams;
+            return { ...preset, params: { vocalGainDb, accompanimentGainDb, masterGainDb } };
+        });
+    return [...structuredClone(BUILTIN_MIX_PRESETS), ...user];
+}
 
 // ファイルが無い場合は初期状態 (合成は初期のプリセットの複製。定義そのものは書き換えない)。
 // 読めない・壊れている場合は DATA_FILE_CORRUPT で失敗する
 function readFile(kind: PresetKind): PresetFile {
     const data = readJsonFile<PresetFile>(presetPath(kind));
-    if (data) return data;
+    if (data) return kind === 'mix' ? { ...data, presets: currentMixPresets(data.presets) } : data;
     return { version: 1, presets: kind === 'mix' ? structuredClone(BUILTIN_MIX_PRESETS) : [] };
 }
 

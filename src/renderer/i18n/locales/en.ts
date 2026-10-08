@@ -53,6 +53,7 @@ export default {
         decodeInput: 'Loading the audio',
         loadModel: 'Loading the model',
         separate: 'Separating the audio',
+        separatePass: 'Separating the audio',
         finishStems: 'Finishing the separated audio',
         convert: 'Converting the voice',
         loudness: 'Matching the volume',
@@ -65,6 +66,7 @@ export default {
         stretch: 'Adjusting the speed',
         assemble: 'Joining the audio',
         encode: 'Exporting',
+        effects: 'Applying effects',
         training: {
             prepare: 'Preparing for training',
             preprocess: 'Preprocessing the audio',
@@ -77,6 +79,7 @@ export default {
     jobPhasesCounted: {
         encode: 'Exporting ({{current}} / {{total}})',
         separate: 'Separating the audio ({{current}} / {{total}})',
+        separatePass: 'Separating the audio (pass {{current}})',
         training: {
             train: 'Training (epoch {{current}} / {{total}})',
         },
@@ -109,7 +112,7 @@ export default {
         },
         separation: {
             title: 'Audio Separation & Processing',
-            desc: 'Split songs and recordings into vocals, accompaniment, instruments and more, remove reverb and noise, or match the volume. Compare the results, then separate or process them further.',
+            desc: 'Split songs and recordings into vocals, accompaniment, instruments and more, remove reverb and noise, or apply effects. Compare the results, then separate or process them further.',
         },
         conversion: {
             title: 'Voice Conversion',

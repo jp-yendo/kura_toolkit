@@ -32,6 +32,8 @@ export type TreeOutput = {
     label: string;
     // 根からの名前を「_」でつないだもの (書き出しのファイル名)
     path: string;
+    // 根からの名前を「/」でつないだもの (画面で音を示す名前。どの出力から分離したかが分かるように)
+    displayPath: string;
     // 深さ (元の音源から分離した出力は 0)
     depth: number;
     mediaPath: string;
@@ -74,11 +76,12 @@ export function descendantsOf(nodes: SepNode[], nodeId: string): SepNode[] {
 // すべての出力を、木の順 (深さ優先。結果は番号の順、出力はモデルが返した順) に並べる
 export function treeOutputs(nodes: SepNode[]): TreeOutput[] {
     const list: TreeOutput[] = [];
-    const visit = (parentKey: string, depth: number, parentPath: string) => {
+    const visit = (parentKey: string, depth: number, parentPath: string, parentDisplay: string) => {
         for (const node of childrenOf(nodes, parentKey)) {
             for (const stem of node.result.stems) {
                 const label = outputLabel(node, stem.name);
                 const path = parentPath ? `${parentPath}_${label}` : label;
+                const displayPath = parentDisplay ? `${parentDisplay}/${label}` : label;
                 const key = outputKey(node.id, stem.name);
                 list.push({
                     key,
@@ -86,15 +89,16 @@ export function treeOutputs(nodes: SepNode[]): TreeOutput[] {
                     stemName: stem.name,
                     label,
                     path,
+                    displayPath,
                     depth,
                     mediaPath: stem.media.path,
                     mediaUrl: stem.media.url,
                 });
-                visit(key, depth + 1, path);
+                visit(key, depth + 1, path, displayPath);
             }
         }
     };
-    visit(SOURCE_KEY, 0, '');
+    visit(SOURCE_KEY, 0, '', '');
     return list;
 }
 

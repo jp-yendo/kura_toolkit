@@ -53,6 +53,7 @@ export default {
         decodeInput: '音声を読み込んでいます',
         loadModel: 'モデルを読み込んでいます',
         separate: '音声を分離しています',
+        separatePass: '音声を分離しています',
         finishStems: '分離した音声を仕上げています',
         convert: '声を変換しています',
         loudness: '音量をそろえています',
@@ -65,6 +66,7 @@ export default {
         stretch: '話速を調整しています',
         assemble: '音声をつなげています',
         encode: '書き出しています',
+        effects: 'エフェクトをかけています',
         training: {
             prepare: '学習の準備をしています',
             preprocess: '音声を前処理しています',
@@ -77,6 +79,7 @@ export default {
     jobPhasesCounted: {
         encode: '書き出しています ({{current}} / {{total}})',
         separate: '音声を分離しています ({{current}} / {{total}})',
+        separatePass: '音声を分離しています ({{current}} 回目)',
         training: {
             train: '学習しています ({{current}} / {{total}} 回目)',
         },
@@ -109,7 +112,7 @@ export default {
         },
         separation: {
             title: '音声分離・加工',
-            desc: '楽曲や音声を、ボーカル・伴奏・楽器などに分離したり、残響やノイズを除去したり、音量をそろえたりします。結果を聞き比べて選び、さらに分離や加工を重ねられます。',
+            desc: '楽曲や音声を、ボーカル・伴奏・楽器などに分離したり、残響やノイズを除去したり、エフェクトをかけたりします。結果を聞き比べて選び、さらに分離や加工を重ねられます。',
         },
         conversion: {
             title: '音声変換',

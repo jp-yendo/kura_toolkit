@@ -1,6 +1,5 @@
 import React from 'react';
-import { Alert, AlertTitle, Box, Button, Typography } from '@mui/material';
-import DownloadIcon from '@mui/icons-material/Download';
+import { Alert, AlertTitle, Box, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { itemLabel } from './libraryItems';
 import { openVoiceLibrary, useVoiceLibraryStore } from '../../stores/voiceLibraryStore';
@@ -47,7 +46,8 @@ type Props = {
     state: ReadinessState;
 };
 
-// 機能を使うのに必要なものが足りない場合の案内 (足りないものを選んだ状態でダウンロードを開く)
+// 機能を使うのに必要なものが足りない場合の案内。ダウンロードは画面の「ダウンロード管理」から開く (案内にはボタンを
+// 置かない。同じボタンが画面に 2 つ並ばないように)
 export default function ReadinessAlert({ state }: Props) {
     const { t } = useTranslation();
     const { readiness, status } = state;
@@ -63,20 +63,7 @@ export default function ReadinessAlert({ state }: Props) {
     if (readiness.ready) return null;
     const byId = new Map((status?.items ?? []).map(item => [item.id, item]));
     return (
-        <Alert
-            severity='info'
-            action={
-                <Button
-                    color='inherit'
-                    size='small'
-                    startIcon={<DownloadIcon />}
-                    onClick={() => openVoiceLibrary({ select: readiness.missing, focus: state.feature })}
-                    sx={{ whiteSpace: 'nowrap' }}
-                >
-                    {t('voice.readiness.openLibrary')}
-                </Button>
-            }
-        >
+        <Alert severity='info'>
             <AlertTitle>{t('voice.readiness.title')}</AlertTitle>
             <Typography variant='body2' sx={{ lineHeight: 1.6 }}>
                 {t('voice.readiness.message')}

@@ -31,7 +31,6 @@ import SaveIcon from '@mui/icons-material/Save';
 import SaveAsIcon from '@mui/icons-material/SaveAs';
 import NoteAddIcon from '@mui/icons-material/NoteAdd';
 import CodeIcon from '@mui/icons-material/Code';
-import DownloadIcon from '@mui/icons-material/Download';
 import EditNoteIcon from '@mui/icons-material/EditNote';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -57,7 +56,7 @@ import { useJobRunner } from '../../hooks/useJobRunner';
 import { showNotice } from '../../stores/noticeStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { DEFAULT_TTS_PARAMS, timedSnapshot, useTtsStore, type TimedRow } from '../../stores/ttsStore';
-import { openVoiceLibrary, useVoiceLibraryStore } from '../../stores/voiceLibraryStore';
+import { useVoiceLibraryStore } from '../../stores/voiceLibraryStore';
 import { applyTagFixes, findTagRanges, parseControlTags, type TagFix, type TagIssue } from '@shared/voice/control-tags';
 import {
     formatSrt,
@@ -501,25 +500,9 @@ export default function TtsPage() {
         <PageContainer sx={{ height: '100%', minHeight: 640 }}>
             <VoiceFeatureHeader feature='tts' />
             <ReadinessAlert state={readiness} />
+            {/* ダウンロードは画面上部の「ダウンロード管理」から開く (案内にはボタンを置かない) */}
             {languageModelMissing && (
-                <Alert
-                    severity='info'
-                    action={
-                        <Button
-                            color='inherit'
-                            size='small'
-                            startIcon={<DownloadIcon />}
-                            onClick={() =>
-                                openVoiceLibrary({
-                                    select: [TTS_LANGUAGE_MODEL_ITEMS[language]],
-                                    focus: 'tts',
-                                })
-                            }
-                        >
-                            {t('voice.readiness.openLibrary')}
-                        </Button>
-                    }
-                >
+                <Alert severity='info'>
                     {t('voice.tts.languageModelMissing', { language: t(`voice.languages.${language}`) })}
                 </Alert>
             )}

@@ -206,18 +206,6 @@ export default function SeparationParamsForm({ arch, params, onChange, disabled 
                     onChange={v => patch({ overlap: v })}
                     disabled={disabled}
                 />
-                <FormControlLabel
-                    sx={FULL_ROW_SX}
-                    disabled={disabled}
-                    control={
-                        <Switch
-                            size='small'
-                            checked={value.segmentsEnabled}
-                            onChange={(_e, v) => patch({ segmentsEnabled: v })}
-                        />
-                    }
-                    label={label('segmentsEnabled')}
-                />
             </Box>
         );
     }

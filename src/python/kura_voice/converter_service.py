@@ -1,4 +1,4 @@
-"""Voice conversion (RVC) with Applio, model sanitising and the final mix (pedalboard).
+"""Voice conversion (RVC) with Applio, model sanitising, the final mix and the effects (pedalboard).
 
 The worker is started with the Applio root as its working directory, because Applio resolves
 its configuration and model files relative to the current directory.
@@ -16,6 +16,8 @@ from kura_voice import runtime
 from kura_voice.protocol import Context, KuraError
 # The silence handling requests are shared by every component (the worker looks up rpc_<method> in this module)
 from kura_voice.silence import rpc_detect_silence, rpc_edit_silence  # noqa: F401
+# The effects are shared by the components that have pedalboard
+from kura_voice.effects import rpc_apply_effects  # noqa: F401
 
 APPLIO_ROOT = os.getcwd()
 if APPLIO_ROOT not in sys.path:
@@ -192,18 +194,6 @@ def rpc_convert(params: dict, context: Context) -> dict:
         if peak > 1:
             audio = audio / peak
         ratio = vc.tgt_sr / vc.sample_rate
-        # Silence the noise in silent parts: where the input (the vocals before conversion) is silent, the result is
-        # muted. The silent parts are found on the whole input, then applied to each chunk of the result.
-        mute = params.get("muteSilence") or {}
-        mute_runs = []
-        if mute.get("enabled"):
-            from kura_voice.silence import mono_runs
-
-            mute_runs = [
-                (round(begin * ratio), round(end * ratio))
-                for begin, end in mono_runs(audio, vc.sample_rate, float(mute["thresholdDb"]), float(mute["minSeconds"]))
-            ]
-        mute_fade = max(1, round(vc.tgt_sr * 0.01))
         context_samples = _CHUNK_CONTEXT_SECONDS * vc.sample_rate
         chunks = _chunk_bounds(audio, vc.sample_rate, vc.window)
         crossfade = max(1, round(_CHUNK_CROSSFADE_SECONDS * vc.tgt_sr))
@@ -234,10 +224,6 @@ def rpc_convert(params: dict, context: Context) -> dict:
                     fade = np.linspace(0.0, 1.0, count, endpoint=False, dtype=np.float32)
                     kept[:count] = carry[:count] * (1.0 - fade) + kept[:count] * fade
                 carry = np.asarray(converted[first + length : first + length + crossfade], dtype=np.float32)
-                if mute_runs:
-                    from kura_voice.silence import block_gain
-
-                    kept = kept * block_gain(round(start * ratio), len(kept), mute_runs, mute_fade)
                 kept = kept[: max(0, total - written)]
                 out.write(kept)
                 written += len(kept)
@@ -419,12 +405,6 @@ _MIX_BLOCK_SECONDS = 10
 # constant gain, so the balance between quiet and loud parts is kept.
 _MIX_PEAK_LIMIT_DB = -1.0
 
-# pedalboard's Reverb (JUCE) multiplies dry_level by 2 and wet_level by 3 internally. The parameters are divided
-# by these factors so that the values in the app are the actual gains (dry 1.0 = the original volume).
-_REVERB_DRY_SCALE = 2.0
-_REVERB_WET_SCALE = 3.0
-
-
 def _stereo(block: Any) -> Any:
     import numpy as np
 
@@ -434,36 +414,24 @@ def _stereo(block: Any) -> Any:
 
 
 def rpc_mix(params: dict, context: Context) -> dict:
-    """Vocal / accompaniment balance, reverb on the vocals and the master volume.
+    """Vocal / accompaniment balance and the master volume.
 
     The mix shown in the app and the export use this same rendering, so they always sound the same. The vocals
-    layered on the accompaniment on the conversion step use it too, with the volumes unchanged and no reverb.
-    Processed block by block; the effects keep their state between blocks (reset=False), so the result is the
+    layered on the accompaniment on the conversion step use it too, with the volumes unchanged. A reverb on the
+    vocals is an effect of the candidate (applied before the mix), not of the mix. The vocals may be mono or stereo.
+    Processed block by block; the gains keep their state between blocks (reset=False), so the result is the
     same as processing the whole audio at once. When the peak of the mix goes over _MIX_PEAK_LIMIT_DB, the
     written file is lowered by one constant gain in a second pass.
     """
     import os
 
     import numpy as np
-    from pedalboard import Gain, Pedalboard, Reverb
+    from pedalboard import Gain, Pedalboard
     from pedalboard.io import AudioFile
 
     sample_rate = int(params["sampleRate"])
     settings = params["params"]
-    reverb = settings["reverb"]
-    chain = [Gain(gain_db=float(settings["vocalGainDb"]))]
-    if reverb["enabled"]:
-        chain.append(
-            Reverb(
-                room_size=float(reverb["roomSize"]),
-                damping=float(reverb["damping"]),
-                wet_level=float(reverb["wetLevel"]) / _REVERB_WET_SCALE,
-                dry_level=float(reverb["dryLevel"]) / _REVERB_DRY_SCALE,
-                width=float(reverb["width"]),
-                freeze_mode=0.0,
-            )
-        )
-    vocal_board = Pedalboard(chain)
+    vocal_board = Pedalboard([Gain(gain_db=float(settings["vocalGainDb"]))])
     accompaniment_board = Pedalboard([Gain(gain_db=float(settings["accompanimentGainDb"]))])
     master_board = Pedalboard([Gain(gain_db=float(settings["masterGainDb"]))])
     channels = 1 if int(params["channels"]) == 1 else 2

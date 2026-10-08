@@ -52,8 +52,8 @@ export type FilterModel = {
 const db = (value: number) => `${value} dB`;
 
 // チェックで有効・無効を切り替える項目。チェックしているときだけ、中身の欄と、行の右端に中身をまとめて初期値に戻すボタンを
-// 出す (チェックの状態は変えない)
-function OptionBlock({
+// 出す (チェックの状態は変えない)。エフェクトの欄 (AudioEffectFields) も同じ形にする
+export function OptionBlock({
     label,
     checked,
     onChecked,

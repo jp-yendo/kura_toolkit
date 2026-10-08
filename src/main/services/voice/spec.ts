@@ -132,7 +132,7 @@ export const COMPONENT_SPECS: ComponentSpec[] = [
     {
         id: 'separator',
         env: 'separator',
-        version: 'separator-0.47.0-1',
+        version: 'separator-0.47.0-2',
         requirements: 'separator',
         files: [
             {

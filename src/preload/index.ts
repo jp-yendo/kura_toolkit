@@ -81,6 +81,7 @@ const IPC_CHANNELS = {
     VOICE_SEPARATION_RUN: 'voice:separation:run',
     VOICE_CONVERSION_RUN: 'voice:conversion:run',
     VOICE_CONVERSION_MIX: 'voice:conversion:mix',
+    VOICE_CONVERSION_FILTER: 'voice:conversion:filter',
     VOICE_RUBBERBAND: 'voice:rubberband',
     VOICE_TTS_RUN: 'voice:tts:run',
     VOICE_TTS_CANCEL_CONFIRMATION: 'voice:tts:cancelConfirmation',
@@ -312,6 +313,7 @@ const api: IpcApi = {
         conversion: {
             run: (jobId, request) => invoke(IPC_CHANNELS.VOICE_CONVERSION_RUN, jobId, request),
             renderMix: (jobId, request) => invoke(IPC_CHANNELS.VOICE_CONVERSION_MIX, jobId, request),
+            filter: (jobId, request) => invoke(IPC_CHANNELS.VOICE_CONVERSION_FILTER, jobId, request),
             hasRubberband: () => invoke(IPC_CHANNELS.VOICE_RUBBERBAND),
         },
         tts: {

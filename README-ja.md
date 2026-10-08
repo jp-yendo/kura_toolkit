@@ -15,6 +15,7 @@ Kura Toolkit は、音声・動画・画像の処理とファイルの整理を 
 
 - 曲や音声を、ボーカルと伴奏、楽器ごと (ドラム・ベース・ギター・ピアノなど)、メインボーカルとコーラスなどに分離できます
 - 残響・エコーやノイズを除去したり、無音部分の雑音を消したり、音量をそろえたりできます (分離せずに使うこともできます)
+- EQ (プリセット付きの 10 バンド)・コンプレッサー・ディエッサー・コーラス・ディレイ・リバーブのエフェクトをかけられます (分離せずに使うこともできます)
 - 方式やモデルを変えた結果を聞き比べて、使うものを選べます
 - 結果をさらに分離・加工できます (例: ボーカル → メインとコーラス → 残響の除去)
 - 選んだ結果を MP3・FLAC・Ogg Vorbis・Opus・AAC・WAV・ALAC で書き出せます
@@ -22,10 +23,10 @@ Kura Toolkit は、音声・動画・画像の処理とファイルの整理を 
 ### オーディオ: 音声変換
 
 - 歌声や話し声を、選んだ声のモデルの声に変換できます
-- 曲ではボーカルだけを変換し、音量バランスやリバーブを調整して伴奏と合成できます
+- 曲ではボーカルだけを変換し、音量バランスを調整して伴奏と合成できます
 - キーを変えると、伴奏も同じだけ移調します
-- 残響・エコーやノイズを除去したり、無音部分の雑音を消したりしながら変換できます
 - 設定を変えた結果を聞き比べて、使うものを選べます
+- 変換した結果ごとに、残響・エコーやノイズの除去、無音部分の雑音の消去、エフェクト (リバーブなど) をかけて、元の結果と聞き比べられます
 - 選んだ結果を MP3・FLAC・Ogg Vorbis・Opus・AAC・WAV・ALAC で書き出せます
 - 声のモデルの取り込み・書き出しと、Hugging Face でのモデルの検索ができます
 - アプリでの録音や音声ファイルから、自分の声のモデルを作れます
@@ -221,7 +222,7 @@ FFmpeg はアプリに同梱せず、ユーザー環境にインストールさ�
 | Ultimate Vocal Remover (UVR) のモデル                                | 音声分離                          | 各モデルの作者による。UVR (Anjok07 と貢献者) へのクレジット表記                                              | https://github.com/Anjok07/ultimatevocalremovergui                |
 | Applio                                                               | 音声変換とその学習                | MIT                                                                                                          | https://github.com/IAHispano/Applio                               |
 | RMVPE / FCPE / ContentVec ほかの埋め込みモデル、RVC の事前学習モデル | 音声変換とその学習                | MIT (Applio の配布物として)                                                                                  | https://huggingface.co/IAHispano/Applio                           |
-| pedalboard                                                           | 合成 (リバーブ・リミッター)       | GPL-3.0                                                                                                      | https://github.com/spotify/pedalboard                             |
+| pedalboard                                                           | エフェクト・合成                  | GPL-3.0                                                                                                      | https://github.com/spotify/pedalboard                             |
 | faiss                                                                | 音声変換 (インデックス)           | MIT                                                                                                          | https://github.com/facebookresearch/faiss                         |
 | Style-Bert-VITS2 (sync-dev-org 版、style-bert-vits2-mk)              | 読み上げとその学習                | AGPL-3.0 (ユーザー辞書関連は LGPL-3.0)                                                                       | https://github.com/sync-dev-org/Style-Bert-VITS2                  |
 | deberta-v2-large-japanese-char-wwm                                   | 読み上げ (日本語 BERT)            | CC BY-SA 4.0                                                                                                 | https://huggingface.co/ku-nlp/deberta-v2-large-japanese-char-wwm  |

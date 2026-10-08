@@ -4,6 +4,7 @@
 import type { SymbolReading, TtsModelType, VoiceLanguage } from './languages';
 import type { TagFix, TagIssue } from './control-tags';
 import type { DereverbOption, LoudnessOption, NoiseRemovalOption, SilenceOption } from './audio-filters';
+import type { EffectsOptions } from './audio-effects';
 import type { AudioEncodeSettings, AudioFormat } from '../audio-format';
 
 // ---------------------------------------------------------------------------
@@ -259,12 +260,13 @@ type VrParams = {
     batchSize: number;
 };
 
+// Demucs は常に区切って処理する (区切らないと、htdemucs 系のモデルは学習時の長さ (約 7.8 秒) より長い音声で失敗し、
+// 進捗も示せないため、選べるようにしない)
 type DemucsParams = {
     // null = モデルの既定
     segmentSize: number | null;
     shifts: number;
     overlap: number;
-    segmentsEnabled: boolean;
 };
 
 type MdxcParams = {
@@ -289,17 +291,19 @@ export type SeparationMethod =
     | { kind: 'model'; filename: string }
     | { kind: 'verifiedEnsemble'; ensembleId: string }
     | { kind: 'ensemble'; filenames: string[]; algorithm: EnsembleAlgorithm }
-    // 分岐の「その他」: 分離はせず、音を加工した 1 つの出力を作る (長さは変わらない。処理の順は、残響・エコーの除去 →
-    // ノイズ除去 → 無音部分の雑音を消す → 音量をそろえる)
+    // 分岐の「除去・調整」: 分離はせず、音を加工した 1 つの出力を作る (長さは変わらない。処理の順は、残響・エコーの
+    // 除去 → ノイズ除去 → 無音部分の雑音を消す → 音量をそろえる)
     | {
           kind: 'process';
           dereverb: DereverbOption;
           noiseRemoval: NoiseRemovalOption;
           muteSilence: SilenceOption;
           loudness: LoudnessOption;
-      };
+      }
+    // 分岐の「エフェクト」: 分離はせず、エフェクトをかけた 1 つの出力を作る (長さとチャンネル数は変わらない)
+    | { kind: 'effects'; effects: EffectsOptions };
 
-// 分岐の「その他」で指定する加工
+// 分岐の「除去・調整」で指定する加工
 export type SeparationOtherChoice = {
     dereverb: DereverbOption;
     noiseRemoval: NoiseRemovalOption;
@@ -394,12 +398,14 @@ export type ConversionParams = {
     volumeEnvelope: number;
     // 子音の保護の強さ (0-0.5)
     protect: number;
-    // 変換前のボーカルの残響・エコーの除去 (変換後の声には残響がほぼ残らないため、変換の前に除く)
-    dereverb: DereverbOption;
-    // 無音部分の雑音を消す (変換前のボーカルが無音の部分で、変換後の音量を 0 にする。長さは変わらない)
-    muteSilence: SilenceOption;
-    // 変換後の声のノイズ除去
-    noiseRemoval: NoiseRemovalOption;
+};
+
+// 音声変換の候補にかけるフィルター。除去・調整 (分岐の「除去・調整」と同じ加工) と、エフェクト (分岐の「エフェクト」と
+// 同じもの) を 1 回でかける (処理の順: 残響・エコーの除去 → ノイズ除去 → 無音部分の雑音を消す → エフェクト → 音量を
+// そろえる)
+export type CandidateFilters = {
+    process: SeparationOtherChoice;
+    effects: EffectsOptions;
 };
 
 export type ConversionCandidate = {
@@ -407,13 +413,24 @@ export type ConversionCandidate = {
     voiceId: string;
     voiceName: string;
     params: ConversionParams;
-    // 変換後のボーカル (モデルのサンプリング周波数のモノラル)
+    // 変換後のボーカル (モデルのサンプリング周波数のモノラル。リバーブ・コーラス・ディレイをかけた候補は、元の音源が
+    // ステレオならステレオ)
     vocals: MediaRef;
     // 合成で出力するチャンネル数 (元の音源がステレオなら 2。ボーカルは左右に同じ音を置いた中央定位にする)
     channels: number;
     // 変換後のボーカルと伴奏をそのまま重ねた試聴用の音。変換の段階で求められたときに作る (まだ無ければ null)
     withAccompaniment: MediaRef | null;
     createdAt: number;
+    // フィルターをかけて作った候補では、元にした候補の ID と、変換の結果からかけたフィルター (かけた順)
+    parentId?: string;
+    filters?: CandidateFilters[];
+};
+
+// 候補にフィルターをかけて、新しい候補を作る
+export type ConversionFilterRequest = {
+    workKey: string;
+    source: ConversionCandidate;
+    filters: CandidateFilters;
 };
 
 export type ConversionRunRequest = {
@@ -424,25 +441,11 @@ export type ConversionRunRequest = {
     params: ConversionParams;
 };
 
-export type ReverbParams = {
-    enabled: boolean;
-    // 部屋の大きさ (0-1)
-    roomSize: number;
-    // 高域の減衰 (0-1)
-    damping: number;
-    // 残響音の量 (0-1。音量の倍率)
-    wetLevel: number;
-    // 原音の量 (0-1。音量の倍率で、1 で元の大きさのまま)
-    dryLevel: number;
-    // ステレオの広がり (0-1)
-    width: number;
-};
-
+// 合成の音量 (ボーカルのリバーブは合成ではなく、候補のフィルターのエフェクトでかける)
 export type MixParams = {
     vocalGainDb: number;
     accompanimentGainDb: number;
     masterGainDb: number;
-    reverb: ReverbParams;
 };
 
 export type MixRenderRequest = {
@@ -453,7 +456,7 @@ export type MixRenderRequest = {
     channels: number;
     // キーの変更量。オクターブ単位以外なら伴奏を同じだけ移調する
     pitch: number;
-    // null は変換の段階の試聴用 (音量を変えず、リバーブなしでそのまま重ねる)
+    // null は変換の段階の試聴用 (音量を変えずにそのまま重ねる)
     params: MixParams | null;
 };
 
@@ -475,16 +478,18 @@ export type PresetRecord<T> = {
 
 // 分離の方式の選び方 (画面の選択の状態)。おすすめから 1 つを選ぶか、モデル (複数可) を選ぶ
 export type SeparationMethodChoice = {
-    // 選び方 (おすすめ / モデル / その他。null は、選べる選び方のうち先頭)
-    mode: 'recommended' | 'model' | 'other' | null;
+    // 選び方 (おすすめ / モデル / 除去・調整 (other) / エフェクト。null は、選べる選び方のうち先頭)
+    mode: 'recommended' | 'model' | 'other' | 'effects' | null;
     // おすすめから選んだもの (`verified:<組み合わせの ID>` または `model:<ファイル名>`)
     recommended: string;
     // モデルの一覧から選んだもの (`model:<ファイル名>`)
     keys: string[];
     // 2 つ以上のモデルを選んだときの結果の決め方
     algorithm: EnsembleAlgorithm;
-    // 「その他」で指定した加工 (無い場合は初期値)
+    // 「除去・調整」で指定した加工 (無い場合は初期値)
     other?: SeparationOtherChoice;
+    // 「エフェクト」で指定したエフェクト (無い場合は初期値)
+    effects?: EffectsOptions;
 };
 
 // 分離のプリセット。方式の選び方 (おすすめ・組み合わせるモデル・組み合わせ方) と詳細な設定 (全アーキテクチャの
@@ -717,6 +722,9 @@ export type VoicePhaseId =
     | 'decodeInput'
     | 'loadModel'
     | 'separate'
+    // 分離の中で、前もって分からない繰り返し (何回目かを示す)
+    | 'separatePass'
+    | 'effects'
     | 'finishStems'
     | 'convert'
     | 'loudness'

@@ -13,6 +13,8 @@ import { ensureSeparatorModelList, readSeparatorModelList, separatorModelInstall
 import { separatorItemId } from './spec';
 import { withGpu } from './gpu-lock';
 import { editSilence, normalizeLoudness, removeNoise, removeReverb } from './audio-filters';
+import { applyEffects, effectStageCount } from './audio-effects';
+import { hasEffect, sanitizeEffectsOptions, type EffectsOptions } from '../../../shared/voice/audio-effects';
 import {
     SEPARATION_LOUDNESS_DEFAULT_LUFS,
     sanitizeDereverbOption,
@@ -20,7 +22,7 @@ import {
     sanitizeNoiseRemovalOption,
     sanitizeSilenceOption,
 } from '../../../shared/voice/audio-filters';
-import { ffmpegPhase, voicePhase, workerEvents } from './job-progress';
+import { ffmpegPhase, nextStep, voicePhase, withSteps, workerEvents } from './job-progress';
 import { discardLater, isInsideWork, newId, produceShared, removeSession, sessionDir, sessionPath } from '../work-dir';
 import type {
     SeparationMethod,
@@ -45,10 +47,14 @@ export async function prepareInput(jobId: string, workKey: string, sourcePath: s
         const dir = sessionDir(workKey, 'input');
         const output = path.join(dir, `${newId()}.wav`);
         try {
-            const info = await decodeToWav(sourcePath, output, {
-                jobId,
-                channels: 'keep',
-                onProgress: ffmpegPhase(jobId, 'decodeInput'),
+            // ゲージは読み込みの進み具合で動かす (1 手順のジョブ)
+            const info = await withSteps(jobId, 1, () => {
+                nextStep(jobId);
+                return decodeToWav(sourcePath, output, {
+                    jobId,
+                    channels: 'keep',
+                    onProgress: ffmpegPhase(jobId, 'decodeInput'),
+                });
             });
             return { media: await mediaRef(output), channels: Math.min(2, info.channels), sourcePath };
         } catch (error) {
@@ -112,8 +118,8 @@ function requiredModels(request: SeparationRunRequest): string[] {
 
 function methodLabel(request: SeparationRunRequest): string {
     const method = request.method;
-    // 「その他」の名前は画面で付ける
-    if (method.kind === 'process') return '';
+    // 「除去・調整」「エフェクト」の名前は画面で付ける
+    if (method.kind === 'process' || method.kind === 'effects') return '';
     const list = readSeparatorModelList();
     if (method.kind === 'model')
         return list?.models.find(model => model.filename === method.filename)?.name ?? method.filename;
@@ -139,29 +145,41 @@ function usedParams(request: SeparationRunRequest): Partial<SeparationParams> {
     return result;
 }
 
-export async function runSeparation(jobId: string, request: SeparationRunRequest): Promise<SeparationCandidate> {
+export async function runSeparation(jobId: string, received: SeparationRunRequest): Promise<SeparationCandidate> {
     startJob(jobId);
     try {
+        // Demucs は今の設定項目だけを使う (以前のプリセットにある、区切らずに処理する設定などは使わない)
+        const { segmentSize, shifts, overlap } = received.params.demucs;
+        const request: SeparationRunRequest = {
+            ...received,
+            params: { ...received.params, demucs: { segmentSize, shifts, overlap } },
+        };
         if (!isInsideWork(request.workKey, request.input)) throw new Error('INVALID_PATH');
         const id = newId();
         const dir = sessionDir(request.workKey, 'candidates', id);
         try {
-            return request.method.kind === 'process'
-                ? await processInto(
-                      jobId,
-                      request,
-                      {
-                          kind: 'process',
-                          // 画面から受け取った設定を確かめる
-                          dereverb: sanitizeDereverbOption(request.method.dereverb),
-                          noiseRemoval: sanitizeNoiseRemovalOption(request.method.noiseRemoval),
-                          muteSilence: sanitizeSilenceOption(request.method.muteSilence),
-                          loudness: sanitizeLoudnessOption(request.method.loudness, SEPARATION_LOUDNESS_DEFAULT_LUFS),
-                      },
-                      id,
-                      dir
-                  )
-                : await separateInto(jobId, request, id, dir);
+            if (request.method.kind === 'effects') {
+                // 画面から受け取った設定を確かめる
+                return await effectsInto(jobId, request, sanitizeEffectsOptions(request.method.effects), id, dir);
+            }
+            if (request.method.kind !== 'process') {
+                // 準備 (末尾に無音を足す)・分離・仕上げ (チャンネル数と長さをそろえる) の 3 手順
+                return await withSteps(jobId, 3, () => separateInto(jobId, request, id, dir));
+            }
+            return await processInto(
+                jobId,
+                request,
+                {
+                    kind: 'process',
+                    // 画面から受け取った設定を確かめる
+                    dereverb: sanitizeDereverbOption(request.method.dereverb),
+                    noiseRemoval: sanitizeNoiseRemovalOption(request.method.noiseRemoval),
+                    muteSilence: sanitizeSilenceOption(request.method.muteSilence),
+                    loudness: sanitizeLoudnessOption(request.method.loudness, SEPARATION_LOUDNESS_DEFAULT_LUFS),
+                },
+                id,
+                dir
+            );
         } catch (error) {
             // 失敗・キャンセルした場合は作りかけの候補を消す
             discardLater(dir);
@@ -187,6 +205,7 @@ async function separateInto(
     if (missing.length > 0) throw new Error(`MODEL_NOT_INSTALLED: ${missing.join(', ')}`);
     const raw = path.join(dir, 'raw');
     // 末尾に無音を足した入力で分離し、結果を元の長さに切りそろえる (末尾を短く返すモデルがあるため)
+    nextStep(jobId);
     voicePhase(jobId, 'prepare');
     const { durationSec } = await probeAudio(request.input, jobId);
     const padded = path.join(raw, 'input.wav');
@@ -196,6 +215,7 @@ async function separateInto(
         onProgress: ffmpegPhase(jobId, 'prepare'),
     });
     const worker = getWorker('separator');
+    nextStep(jobId);
     const result = await withGpu(jobId, 'separator', () =>
         worker.request<{ stems: { name: string; path: string }[] }>(
             'separate',
@@ -212,6 +232,7 @@ async function separateInto(
             }
         )
     );
+    nextStep(jobId);
     voicePhase(jobId, 'finishStems', { fraction: 0 });
     for (const [index, stem] of result.stems.entries()) {
         const target = path.join(dir, `${sanitizeStem(stem.name)}.wav`);
@@ -255,25 +276,44 @@ async function processInto(
     }
     const work = path.join(dir, 'work');
     fs.mkdirSync(work, { recursive: true });
+    // チェックした加工ごとに 1 手順
+    const steps = [method.dereverb, method.noiseRemoval, method.muteSilence, method.loudness].filter(
+        option => option.enabled
+    ).length;
+    return withSteps(jobId, steps, () => processSteps(jobId, request, method, id, dir, work));
+}
+
+async function processSteps(
+    jobId: string,
+    request: SeparationRunRequest,
+    method: Extract<SeparationMethod, { kind: 'process' }>,
+    id: string,
+    dir: string,
+    work: string
+): Promise<SeparationCandidate> {
     // 残響・エコーの除去 → ノイズ除去 → 無音部分の雑音を消す → 音量をそろえるの順に行う (残響の尾や雑音を除いてから
     // 無音を判断すると、無音として消せる部分が増えるため。除去で音量が下がるため、音量は最後にそろえる)
     let current = request.input;
     if (method.dereverb.enabled) {
+        nextStep(jobId);
         const next = path.join(work, 'dereverbed.wav');
         await removeReverb(jobId, current, next, method.dereverb, work);
         current = next;
     }
     if (method.noiseRemoval.enabled) {
+        nextStep(jobId);
         const next = path.join(work, 'denoised.wav');
         await removeNoise(jobId, current, next, method.noiseRemoval, work);
         current = next;
     }
     if (method.muteSilence.enabled) {
+        nextStep(jobId);
         const next = path.join(work, 'muted.wav');
         await editSilence(jobId, 'separator', current, next, method.muteSilence, 'mute');
         current = next;
     }
     if (method.loudness.enabled) {
+        nextStep(jobId);
         const next = path.join(work, 'loudness.wav');
         await normalizeLoudness(jobId, current, next, method.loudness);
         current = next;
@@ -294,8 +334,42 @@ async function processInto(
     };
 }
 
-// 分岐の「その他」の出力の名前
+// 分岐の「除去・調整」の出力の名前
 const OTHER_OUTPUT_NAME = 'Filtered';
+// 分岐の「エフェクト」の出力の名前
+const EFFECTS_OUTPUT_NAME = 'Effects';
+
+// 分岐の「エフェクト」: 分離はせず、エフェクトをかけた 1 つの出力を作る (長さとチャンネル数は変わらない)。
+// エフェクトは分離の処理役の pedalboard で行うため、パッケージ一式が今の版であることを確かめる
+async function effectsInto(
+    jobId: string,
+    request: SeparationRunRequest,
+    effects: EffectsOptions,
+    id: string,
+    dir: string
+): Promise<SeparationCandidate> {
+    if (!hasEffect(effects)) throw new Error('NOTHING_TO_PROCESS');
+    if (!(await isComponentCurrent('separator'))) throw new Error('SEPARATOR_NOT_INSTALLED');
+    const work = path.join(dir, 'work');
+    fs.mkdirSync(work, { recursive: true });
+    // 出力の名前は、モデルの出力名と同じく言語によらない英語の固定名
+    const name = EFFECTS_OUTPUT_NAME;
+    const target = path.join(dir, `${name}.wav`);
+    // 処理の段ごとに 1 手順 (applyEffects が段ごとに次の手順に入る)
+    await withSteps(jobId, effectStageCount(effects), () =>
+        applyEffects(jobId, 'separator', request.input, target, effects, work)
+    );
+    discardLater(work);
+    emitJobEvent({ jobId, kind: 'progress', percent: 100 });
+    return {
+        id,
+        method: { kind: 'effects', effects },
+        methodLabel: methodLabel(request),
+        params: {},
+        stems: [{ name, media: await mediaRef(target) }],
+        createdAt: Date.now(),
+    };
+}
 
 function sanitizeStem(name: string): string {
     return name.replace(/[^A-Za-z0-9 _-]/g, '_').trim() || 'stem';
@@ -314,7 +388,12 @@ export async function mixStems(jobId: string, workKey: string, paths: string[], 
             .digest('hex')
             .slice(0, 16);
         const output = path.join(sessionDir(workKey, 'mixes'), `${key}.wav`);
-        await produceShared(output, target => mixFiles(paths, target, { channels }, jobId));
+        await withSteps(jobId, 1, () => {
+            nextStep(jobId);
+            return produceShared(output, target =>
+                mixFiles(paths, target, { channels }, jobId, ffmpegPhase(jobId, 'mix'))
+            );
+        });
         return await mediaRef(output);
     } finally {
         finishJob(jobId);

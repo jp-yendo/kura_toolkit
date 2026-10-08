@@ -13,12 +13,14 @@ import os
 import re
 import types
 from importlib import resources
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from kura_voice import runtime
 from kura_voice.protocol import Context, KuraError
 # The silence handling requests are shared by every component (the worker looks up rpc_<method> in this module)
 from kura_voice.silence import rpc_detect_silence, rpc_edit_silence  # noqa: F401
+# The effects are shared by the components that have pedalboard
+from kura_voice.effects import rpc_apply_effects  # noqa: F401
 
 UVR_PUBLIC = "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models"
 AS_REPO = "https://github.com/nomadkaraoke/python-audio-separator/releases/download/model-configs"
@@ -46,13 +48,58 @@ def _patch_library() -> None:
     _patched = True
 
 
+# The progress bridge of the separation being run (one request at a time), read by the patched architectures
+_PASS_BRIDGE: Dict[str, Any] = {"bridge": None}
+_passes_patched = False
+
+
+def _patch_passes() -> None:
+    """Tell the progress bridge which bars an architecture runs for one model, before it runs them.
+
+    Demucs predicts once per model of its bag and per shift (all equal work), so these passes are shown as one
+    progress. VR reads the bands and gathers the patches (short) before predicting, and predicts twice with TTA;
+    only the predictions move the progress. The other architectures run one bar per model.
+    """
+    global _passes_patched
+    if _passes_patched:
+        return
+    from audio_separator.separator.architectures.demucs_separator import DemucsSeparator
+    from audio_separator.separator.architectures.vr_separator import VRSeparator
+
+    original_demix = DemucsSeparator.demix_demucs
+
+    def demix_demucs(self: Any, mix: Any) -> Any:
+        bridge = _PASS_BRIDGE["bridge"]
+        if bridge is not None:
+            models = getattr(self.demucs_model_instance, "models", None)
+            passes = (len(models) if models else 1) * max(1, int(self.shifts or 0))
+            # Without segments, Demucs shows no bar
+            bridge.expect([1.0] * passes if self.segments_enabled else None)
+        return original_demix(self, mix)
+
+    original_vr_separate = VRSeparator.separate
+
+    def vr_separate(self: Any, *args: Any, **kwargs: Any) -> Any:
+        bridge = _PASS_BRIDGE["bridge"]
+        if bridge is not None:
+            # Bands, patches, prediction (TTA: patches and prediction again)
+            bridge.expect([0.0, 0.0, 1.0] + ([0.0, 1.0] if self.enable_tta else []))
+        return original_vr_separate(self, *args, **kwargs)
+
+    DemucsSeparator.demix_demucs = demix_demucs
+    VRSeparator.separate = vr_separate
+    _passes_patched = True
+
+
 def _install_progress(context: Context, start: float, span: float, separator: Any) -> None:
     """Report the library's progress bars as progress between ``start`` and ``start + span``.
 
     An ensemble runs its models one after another, and each model reports its own bars from 0. How long each
     model takes is not known in advance, so no overall share is made up: the progress runs from 0 to the end for
     each model, and the step is reported with the model's number ("(1 / 3)") so that the progress and the time left
-    are read as those of the model being run.
+    are read as those of the model being run. Within a model, the bars are combined as known for its architecture
+    (``_patch_passes``); short steps only change the message, and bars not known in advance are shown with their
+    number ("(2nd pass)") instead of starting the progress again silently.
     """
     from audio_separator.separator import separator as separator_module
     from audio_separator.separator.architectures import (
@@ -67,13 +114,23 @@ def _install_progress(context: Context, start: float, span: float, separator: An
     # The model being run (the library separates the input once per model)
     state = {"index": 0}
 
-    def report(fraction: float) -> None:
+    def report(fraction: float, repeat: Optional[int]) -> None:
         index = min(state["index"], count - 1)
         context.progress(start + span * fraction)
-        if count > 1:
+        if repeat is not None:
+            # A bar not known in advance: the pass number tells that the progress starts again
+            context.phase("separatePass", fraction, current=repeat, total=repeat)
+        elif count > 1:
             context.phase("separate", fraction, current=index + 1, total=count)
         else:
             context.phase("separate", fraction)
+
+    def report_light() -> None:
+        context.phase("prepare")
+
+    bridge = runtime.TqdmBridge(report, on_light=report_light)
+    _patch_passes()
+    _PASS_BRIDGE["bridge"] = bridge
 
     separate_file = separator._separate_file
     runs = {"count": 0}
@@ -81,11 +138,12 @@ def _install_progress(context: Context, start: float, span: float, separator: An
     def counted_separate_file(*args: Any, **kwargs: Any) -> Any:
         state["index"] = runs["count"]
         runs["count"] += 1
+        # Each model reports its own bars (the architecture sets what it runs once the model is loaded)
+        bridge.expect(None)
         return separate_file(*args, **kwargs)
 
     separator._separate_file = counted_separate_file
 
-    bridge = runtime.TqdmBridge(report)
     bridge.install([separator_module, mdx_separator, vr_separator, mdxc_separator, demucs_separator])
     # Demucs uses the module ("import tqdm" and "tqdm.tqdm(...)") rather than the class
     demucs_apply.tqdm = types.SimpleNamespace(tqdm=bridge.cls)
@@ -230,7 +288,9 @@ def _arch_params(params: dict) -> dict:
             "segment_size": "Default" if demucs["segmentSize"] is None else str(int(demucs["segmentSize"])),
             "shifts": int(demucs["shifts"]),
             "overlap": float(demucs["overlap"]),
-            "segments_enabled": bool(demucs["segmentsEnabled"]),
+            # Always in segments: without them htdemucs fails on audio longer than its training length (about
+            # 7.8 s) and shows no progress
+            "segments_enabled": True,
         },
         "mdxc_params": {
             "segment_size": int(mdxc["segmentSize"]),

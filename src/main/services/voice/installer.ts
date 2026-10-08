@@ -457,7 +457,7 @@ function setupApplio(): void {
 
 // 導入できたかを、主要なモジュールの読み込みで確かめる
 const VERIFY_IMPORTS: Record<ComponentSpec['id'], string> = {
-    separator: 'import torch, onnxruntime, audio_separator.separator',
+    separator: 'import torch, onnxruntime, pedalboard, audio_separator.separator',
     converter: 'import torch, torchaudio, faiss, librosa, pedalboard, soundfile, transformers',
     tts: 'import torch, style_bert_vits2.tts_model, pyopenjtalk',
     'tts-train': 'import torch, torchaudio, librosa, pyloudnorm, pyannote.audio',

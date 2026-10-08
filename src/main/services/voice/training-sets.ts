@@ -4,6 +4,7 @@ import path from 'path';
 import { emitJobEvent, finishJob, isCancelled, startJob } from '../job-manager';
 import { encodeTrainingWav, probeAudio } from './audio-tools';
 import { editSilence, normalizeLoudness, removeNoise, removeReverb } from './audio-filters';
+import { nextStep, withSteps } from './job-progress';
 import { discardLater, isInsideWork, newId, newTempDir, sessionDir, sessionPath } from '../work-dir';
 import { mediaRef } from './media';
 import type { SilenceOption, TrainingFilterOptions } from '../../../shared/voice/audio-filters';
@@ -563,23 +564,28 @@ async function applyTrainingFilters(
     work: string
 ): Promise<void> {
     let current = input;
+    // 手順で進むジョブでは、加工ごとに次の手順に入る (すべての音に適用するときは、何個目の音かで進める)
     if (options.dereverb.enabled) {
+        nextStep(jobId);
         const next = path.join(work, 'dereverb.wav');
         await removeReverb(jobId, current, next, options.dereverb, work);
         current = next;
     }
     if (options.noiseRemoval.enabled) {
+        nextStep(jobId);
         const next = path.join(work, 'noise.wav');
         await removeNoise(jobId, current, next, options.noiseRemoval, work);
         current = next;
     }
     if (options.removeSilence.enabled) {
+        nextStep(jobId);
         const next = path.join(work, 'silence.wav');
         // 無音の判断は、その機能の処理役で行う (音声変換の学習は変換、読み上げの学習は読み上げ)
         await editSilence(jobId, feature, current, next, options.removeSilence, 'remove');
         current = next;
     }
     if (options.loudness.enabled) {
+        nextStep(jobId);
         const next = path.join(work, 'loudness.wav');
         await normalizeLoudness(jobId, current, next, options.loudness);
         current = next;
@@ -609,7 +615,13 @@ export async function filterTrainingAudio(
         const dir = sessionDir(workKey, 'filters', newId());
         const output = path.join(dir, 'result.wav');
         try {
-            await applyTrainingFilters(jobId, feature, audioPath(feature, setId, audioId), output, options, dir);
+            // チェックした加工ごとに 1 手順
+            const steps = [options.dereverb, options.noiseRemoval, options.removeSilence, options.loudness].filter(
+                option => option.enabled
+            ).length;
+            await withSteps(jobId, steps, () =>
+                applyTrainingFilters(jobId, feature, audioPath(feature, setId, audioId), output, options, dir)
+            );
         } catch (error) {
             discardLater(dir);
             throw error;

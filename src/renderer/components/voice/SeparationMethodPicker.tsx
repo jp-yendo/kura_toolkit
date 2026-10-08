@@ -50,14 +50,17 @@ import {
     SilenceFields,
     type FilterModel,
 } from './AudioFilterFields';
+import { completeEffects, EffectFields, effectsSummary } from './AudioEffectFields';
+import { effectsDefaults, hasEffect, type EffectsOptions } from '@shared/voice/audio-effects';
 import { wrapSelectSx } from '../common/selectStyles';
 
-// 分離の方式の選択。選び方は 3 つ (タブで切り替える):
+// 分離の方式の選択。選び方は 4 つ (タブで切り替える。実行したときに開いているタブが、その分岐の方式になる):
 // - おすすめ: 目的別のおすすめ (ダウンロード画面と同じ。配布元が検証した組み合わせと、目的に合うモデル) から 1 つを選ぶ
 // - モデル: 取得済みのモデルを、まとまり (分離の種類。ダウンロード画面と同じ名前・順) ごとの欄から選ぶ (欄ごとに複数選べ、
 //   絞り込める)。まとまりをまたいでも選べ、2 つ以上選ぶと各モデルの結果から「結果の決め方」で 1 つの結果を決める
-// - その他: 分離はせず、残響・エコーを除去する・ノイズを除去する・無音部分の雑音を消す・音量をそろえるで音を加工した
-//   1 つの出力を作る
+// - 除去・調整 (other): 分離はせず、残響・エコーを除去する・ノイズを除去する・無音部分の雑音を消す・音量をそろえるで
+//   音を加工した 1 つの出力を作る
+// - エフェクト: 分離はせず、EQ・コンプレッサー・ディエッサー・コーラス・ディレイ・リバーブをかけた 1 つの出力を作る
 // 選んだ内容は SelectedMethodPanel で示す (分岐のダイアログの右側)
 
 export type MethodSelection = SeparationMethodChoice;
@@ -69,7 +72,7 @@ export const EMPTY_METHOD_SELECTION: MethodSelection = {
     algorithm: 'avg_wave',
 };
 
-type PickMode = 'recommended' | 'model' | 'other';
+type PickMode = 'recommended' | 'model' | 'other' | 'effects';
 
 // おすすめの項目
 type RecommendedOption = {
@@ -148,11 +151,11 @@ function findRecommended(
 }
 
 // 選べる選び方 (おすすめは取得済みのものが無ければ出さない)。モデルのタブは、取得済みのモデルが無くても
-// まとまりと取得の案内を示すため常に出す。その他のタブもモデルを使わないため常に出す
+// まとまりと取得の案内を示すため常に出す。除去・調整とエフェクトのタブもモデルを使わないため常に出す
 function availableModes(list: SeparationModelList | null): PickMode[] {
     const modes: PickMode[] = [];
     if (buildRecommended(list).length > 0) modes.push('recommended');
-    modes.push('model', 'other');
+    modes.push('model', 'other', 'effects');
     return modes;
 }
 
@@ -184,6 +187,10 @@ function selectedModels(selection: MethodSelection, list: SeparationModelList | 
 export function resolveMethod(selection: MethodSelection, list: SeparationModelList | null): ResolvedMethod {
     const none: ResolvedMethod = { method: null, archs: [] };
     const mode = activeMode(selection, availableModes(list));
+    if (mode === 'effects') {
+        const effects = effectsChoice(selection);
+        return hasEffect(effects) ? { method: { kind: 'effects', effects }, archs: [] } : none;
+    }
     if (mode === 'other') {
         const other = otherChoice(selection);
         const dereverb = resolvedDereverbOption(other.dereverb, installedRecommended(list, DEREVERB_MODELS));
@@ -230,7 +237,12 @@ export function resolveMethod(selection: MethodSelection, list: SeparationModelL
     };
 }
 
-// 「その他」の加工 (選んでいなければ初期値。どれもチェックなし)。保存したプリセットに無い項目 (後から増えた項目) も
+// 「エフェクト」のエフェクト (選んでいなければ初期値。どれもチェックなし)。保存したプリセットに無い項目も初期値で補う
+function effectsChoice(selection: MethodSelection): EffectsOptions {
+    return completeEffects(selection.effects, effectsDefaults());
+}
+
+// 「除去・調整」の加工 (選んでいなければ初期値。どれもチェックなし)。保存したプリセットに無い項目 (後から増えた項目) も
 // 初期値で補う
 function otherChoice(selection: MethodSelection): SeparationOtherChoice {
     return {
@@ -283,6 +295,8 @@ type Props = {
     disabled?: boolean;
     // タブの上に置くもの (プリセット。呼び出すとタブの状態から詳細な設定まで戻す)
     presets?: React.ReactNode;
+    // 分岐する音がステレオか (リバーブのステレオの広がりの添え書きに使う)
+    inputStereo: boolean;
 };
 
 const captionSx = { lineHeight: 1.5 } as const;
@@ -307,7 +321,7 @@ function OptionSummary({ t, option }: { t: TFunction; option: RecommendedOption 
     );
 }
 
-export default function SeparationMethodPicker({ models, value, onChange, disabled, presets }: Props) {
+export default function SeparationMethodPicker({ models, value, onChange, disabled, presets, inputStereo }: Props) {
     const { t } = useTranslation();
     const modes = React.useMemo(() => availableModes(models), [models]);
     const recommended = React.useMemo(() => buildRecommended(models), [models]);
@@ -355,6 +369,7 @@ export default function SeparationMethodPicker({ models, value, onChange, disabl
 
     const selectedRecommended = findRecommended(recommended, value.recommended);
     const other = otherChoice(value);
+    const effects = effectsChoice(value);
 
     return (
         <Stack spacing={1.5}>
@@ -443,6 +458,16 @@ export default function SeparationMethodPicker({ models, value, onChange, disabl
                         onChange={loudness => update({ other: { ...other, loudness } })}
                     />
                 </Stack>
+            )}
+
+            {/* かける順 (EQ → コンプレッサー → ディエッサー → コーラス → ディレイ → リバーブ) に並べる */}
+            {mode === 'effects' && (
+                <EffectFields
+                    value={effects}
+                    stereo={inputStereo}
+                    disabled={disabled}
+                    onChange={next => update({ effects: next })}
+                />
             )}
 
             {mode === 'model' && (
@@ -558,7 +583,7 @@ export default function SeparationMethodPicker({ models, value, onChange, disabl
 }
 
 // 選んだ内容 (分岐のダイアログの右側)。おすすめは選んだ方式と説明、モデルは選んだモデルを積み重ねて (まとまりの順、
-// まとまりの中は名前の順)、その他はチェックした加工を処理の順に示す
+// まとまりの中は名前の順)、除去・調整はチェックした加工を、エフェクトはチェックしたエフェクトを処理の順に示す
 export function SelectedMethodPanel({ models, value }: { models: SeparationModelList | null; value: MethodSelection }) {
     const { t } = useTranslation();
     const mode = activeMode(value, availableModes(models));
@@ -604,11 +629,12 @@ export function SelectedMethodPanel({ models, value }: { models: SeparationModel
         );
     }
     const method = resolveMethod(value, models).method;
-    if (method?.kind !== 'process') return none;
+    if (method?.kind !== 'process' && method?.kind !== 'effects') return none;
     const names = (models?.models ?? []).map(model => ({ filename: model.filename, name: model.name }));
+    const parts = method.kind === 'effects' ? effectsSummary(t, method.effects) : filterSummary(t, method, names);
     return (
         <Stack spacing={1} component='ol' sx={{ m: 0, pl: 2.5 }}>
-            {filterSummary(t, method, names).map(part => (
+            {parts.map(part => (
                 <Typography key={part} component='li' variant='body2' sx={{ overflowWrap: 'anywhere' }}>
                     {part}
                 </Typography>

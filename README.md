@@ -15,6 +15,7 @@ Kura Toolkit is a desktop application that brings together audio, video and imag
 
 - Split songs and recordings into vocals and accompaniment, instruments (drums, bass, guitar, piano and more), lead and backing vocals, and more
 - Remove reverb, echo and noise, silence the noise in silent parts, and match the volume (also without separating)
+- Apply effects: EQ (10 bands with presets), compressor, de-esser, chorus, delay and reverb (also without separating)
 - Compare the results of different methods and models, and choose the one to use
 - Separate or process a result further (for example vocals, then lead and backing vocals, then reverb removal)
 - Export the chosen results as MP3, FLAC, Ogg Vorbis, Opus, AAC, WAV or ALAC
@@ -22,10 +23,10 @@ Kura Toolkit is a desktop application that brings together audio, video and imag
 ### Audio: Voice Conversion
 
 - Convert a singing or speaking voice into the voice of a chosen voice model
-- For songs, convert only the vocals and mix them back with the accompaniment, adjusting the volume balance, reverb and more
+- For songs, convert only the vocals and mix them back with the accompaniment, adjusting the volume balance
 - Changing the key transposes the accompaniment as well
-- Remove reverb, echo and noise, and silence the noise in silent parts, while converting
 - Compare the results of different settings, and choose the one to use
+- Remove reverb, echo and noise, silence the noise in silent parts, or apply effects such as reverb to each result, and compare it with the original result
 - Export the chosen results as MP3, FLAC, Ogg Vorbis, Opus, AAC, WAV or ALAC
 - Import and export voice models, and search for models on Hugging Face
 - Create a voice model of your own voice from recordings made in the app or from audio files
@@ -221,7 +222,7 @@ The voice features use the following components. Except for the training sentenc
 | Ultimate Vocal Remover (UVR) models                                  | Audio Separation                             | Models by their authors; credit to UVR (Anjok07 and contributors)                                          | https://github.com/Anjok07/ultimatevocalremovergui                |
 | Applio                                                               | Voice Conversion and its training            | MIT                                                                                                        | https://github.com/IAHispano/Applio                               |
 | RMVPE / FCPE / ContentVec and other embedders, RVC pretrained models | Voice Conversion and its training            | MIT (as distributed by Applio)                                                                             | https://huggingface.co/IAHispano/Applio                           |
-| pedalboard                                                           | Mixing (reverb, limiter)                     | GPL-3.0                                                                                                    | https://github.com/spotify/pedalboard                             |
+| pedalboard                                                           | Effects and mixing                           | GPL-3.0                                                                                                    | https://github.com/spotify/pedalboard                             |
 | faiss                                                                | Voice Conversion (index)                     | MIT                                                                                                        | https://github.com/facebookresearch/faiss                         |
 | Style-Bert-VITS2 (sync-dev-org fork, style-bert-vits2-mk)            | Text to Speech and its training              | AGPL-3.0 (user dictionary: LGPL-3.0)                                                                       | https://github.com/sync-dev-org/Style-Bert-VITS2                  |
 | deberta-v2-large-japanese-char-wwm                                   | Text to Speech (Japanese BERT)               | CC BY-SA 4.0                                                                                               | https://huggingface.co/ku-nlp/deberta-v2-large-japanese-char-wwm  |

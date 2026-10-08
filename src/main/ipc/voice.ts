@@ -1,6 +1,6 @@
 import { ipcMain, shell, systemPreferences } from 'electron';
 import { IPC_CHANNELS } from '../../shared/constants';
-import { renderMix, runConversion } from '../services/voice/conversion';
+import { filterCandidate, renderMix, runConversion } from '../services/voice/conversion';
 import { hasRubberband } from '../services/voice/audio-tools';
 import { existingPaths, exportAudio } from '../services/voice/exporter';
 import {
@@ -72,6 +72,7 @@ import {
     type AudioExportSettings,
     type ConversionRunRequest,
     type ExportItem,
+    type ConversionFilterRequest,
     type MixRenderRequest,
     type PresetKind,
     type SeparationRunRequest,
@@ -191,6 +192,9 @@ export function registerVoiceIpcHandlers() {
     );
     ipcMain.handle(IPC_CHANNELS.VOICE_CONVERSION_MIX, (_e, jobId: string, request: MixRenderRequest) =>
         renderMix(jobId, request)
+    );
+    ipcMain.handle(IPC_CHANNELS.VOICE_CONVERSION_FILTER, (_e, jobId: string, request: ConversionFilterRequest) =>
+        filterCandidate(jobId, request)
     );
     ipcMain.handle(IPC_CHANNELS.VOICE_RUBBERBAND, () => hasRubberband());
 

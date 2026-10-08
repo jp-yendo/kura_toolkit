@@ -41,6 +41,7 @@ import type { TtsModelType, VoiceLanguage } from './voice/languages';
 import type {
     AudioExportSettings,
     ConversionCandidate,
+    ConversionFilterRequest,
     ConversionRunRequest,
     ExportItem,
     ExportResult,
@@ -127,6 +128,8 @@ export type VoiceApi = {
     conversion: {
         run(jobId: string, request: ConversionRunRequest): Promise<ConversionCandidate>;
         renderMix(jobId: string, request: MixRenderRequest): Promise<MediaRef>;
+        // 候補にフィルターをかけて、新しい候補を作る
+        filter(jobId: string, request: ConversionFilterRequest): Promise<ConversionCandidate>;
         hasRubberband(): Promise<boolean>;
     };
     tts: {

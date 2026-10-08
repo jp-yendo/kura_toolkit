@@ -32,7 +32,10 @@ function isSeparationPreset(params: VoicePresetParams): params is SeparationPres
         params !== null &&
         'method' in params &&
         'params' in params &&
-        (params.method.mode === 'recommended' || params.method.mode === 'model' || params.method.mode === 'other')
+        (params.method.mode === 'recommended' ||
+            params.method.mode === 'model' ||
+            params.method.mode === 'other' ||
+            params.method.mode === 'effects')
     );
 }
 
@@ -40,6 +43,8 @@ type Props = {
     open: boolean;
     // 分離する音の名前
     inputLabel: string;
+    // 分離する音がステレオか (エフェクトのリバーブのステレオの広がりの添え書きに使う)
+    inputStereo: boolean;
     models: SeparationModelList | null;
     // 開いたときの条件 (作り直すときは前回の条件)
     initialSelection: MethodSelection;
@@ -51,11 +56,13 @@ type Props = {
 };
 
 // 分離のダイアログ。分離する音の「分岐」と、結果の「パラメーターを変えて作成」から開く。
-// 左にプリセット (どのタブでも共通)・方式 (おすすめ・モデル・その他)・詳細な設定、右に選んだ内容を置き、選んで分離する。
+// 左にプリセット (どのタブでも共通)・方式 (おすすめ・モデル・除去・調整・エフェクト)・詳細な設定、右に選んだ内容を置き、
+// 選んで分離する。
 // 幅が足りないときは、選んだ内容を下に置く
 export default function SeparationDialog({
     open,
     inputLabel,
+    inputStereo,
     models,
     initialSelection,
     initialParams,
@@ -81,7 +88,7 @@ export default function SeparationDialog({
     const resolved = resolveMethod(selection, models);
     const busy = disabled || running;
 
-    // プリセットの呼び出し: 方式の選び方 (おすすめ・モデル・その他) と詳細な設定をまとめて戻す
+    // プリセットの呼び出し: 方式の選び方 (おすすめ・モデル・除去・調整・エフェクト) と詳細な設定をまとめて戻す
     // (取得していないものを含む場合は知らせる)
     const applyPreset = (preset: SeparationPresetParams) => {
         setSelection({ ...EMPTY_METHOD_SELECTION, ...preset.method });
@@ -136,13 +143,16 @@ export default function SeparationDialog({
                         pt: 1,
                         minHeight: 0,
                         overflowY: { md: 'auto' },
+                        // スライダーのつまみが端で欄の外へわずかにはみ出すため、横には広げない
+                        overflowX: 'hidden',
                         scrollbarGutter: { md: 'stable' },
                         pr: { md: 1.5 },
                     }}
                 >
                     <SeparationMethodPicker
                         models={models}
-                        // プリセットは、方式の選び方 (おすすめ・モデル・その他) から詳細な設定までの条件一式を保存・呼び出しする
+                        // プリセットは、方式の選び方 (おすすめ・モデル・除去・調整・エフェクト) から詳細な設定までの条件一式を
+                        // 保存・呼び出しする
                         presets={
                             <PresetBar<SeparationPresetParams>
                                 kind='separation'
@@ -153,6 +163,7 @@ export default function SeparationDialog({
                             />
                         }
                         value={selection}
+                        inputStereo={inputStereo}
                         onChange={setSelection}
                         disabled={busy}
                     />
@@ -191,6 +202,8 @@ export default function SeparationDialog({
                         pt: 1,
                         minHeight: 0,
                         overflowY: { md: 'auto' },
+                        // スライダーのつまみが端で欄の外へわずかにはみ出すため、横には広げない
+                        overflowX: 'hidden',
                         scrollbarGutter: { md: 'stable' },
                         pr: { md: 1.5 },
                     }}
@@ -209,7 +222,14 @@ export default function SeparationDialog({
                     disabled={busy || !resolved.method}
                     onClick={() => void run()}
                 >
-                    {t('voice.separation.run')}
+                    {/* 開いているタブ (その分岐の方式) に合わせた名前にする (除去・調整とエフェクトは分離しないため) */}
+                    {t(
+                        selection.mode === 'other'
+                            ? 'voice.separation.runProcess'
+                            : selection.mode === 'effects'
+                              ? 'voice.separation.runEffects'
+                              : 'voice.separation.run'
+                    )}
                 </Button>
             </DialogActions>
         </AppDialog>

@@ -17,6 +17,7 @@ import {
 import CallSplitIcon from '@mui/icons-material/CallSplit';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import SaveAltIcon from '@mui/icons-material/SaveAlt';
 import { useTranslation } from 'react-i18next';
 import AppDialog from '../common/AppDialog';
 import Panel from '../common/Panel';
@@ -26,6 +27,7 @@ import { EMPTY_METHOD_SELECTION, type MethodSelection } from './SeparationMethod
 import { separatorDisplayName } from './separatorModelNotes';
 import SyncPlayer from './SyncPlayer';
 import { filterSummary } from './AudioFilterFields';
+import { effectsSummary } from './AudioEffectFields';
 import {
     childrenOf,
     descendantsOf,
@@ -35,6 +37,7 @@ import {
     SOURCE_KEY,
     treeOutputs,
     type SepNode,
+    type TreeOutput,
 } from './separationTree';
 import { isCancelledError, missingItemsFromError, voiceErrorMessage } from './voiceErrors';
 import { useJobRunner } from '../../hooks/useJobRunner';
@@ -66,6 +69,8 @@ type Props = {
     disabled?: boolean;
     // 「保存対象」の列を出す (音声分離の画面。書き出す音を選ぶ)
     saveColumn?: boolean;
+    // 出力の行ごとに書き出しのボタンを置く (音声変換の画面。押した出力を渡す)
+    onExportOutput?(output: TreeOutput): void;
 };
 
 // 分離のダイアログの対象 (新しく分離する音、または作り直す結果)
@@ -79,7 +84,7 @@ type RemoveConfirm = { kind: 'remove' | 'redo'; node: SepNode; outputs: string[]
 // 分離の操作部。音声分離の画面と、音声変換の画面 (入力と分離) で共用する。
 // 元の音源を根にした木の形で、分離した結果をその音の下に字下げして並べる。どの音からも「分岐」で
 // 何度でも分離でき (同じ音から分離した結果どうしを聞き比べられる)、結果は「パラメーターを変えて作成」で作り直せる
-export default function SeparationWorkbench({ store, disabled, saveColumn }: Props) {
+export default function SeparationWorkbench({ store, disabled, saveColumn, onExportOutput }: Props) {
     const { t } = useTranslation();
     const libraryVersion = useVoiceLibraryStore(state => state.version);
     const {
@@ -135,7 +140,15 @@ export default function SeparationWorkbench({ store, disabled, saveColumn }: Pro
     const sourceLabel = t('voice.tracks.source');
 
     // 音の名前 (元の音源、または出力の番号-名前)
-    const labelOf = (key: string) => outputs.find(output => output.key === key)?.label ?? sourceLabel;
+    // 音の名前 (出力は上の階層からの名前)
+    const labelOf = (key: string) => outputs.find(output => output.key === key)?.displayPath ?? sourceLabel;
+    // 音がステレオか (分岐のダイアログのエフェクトで使う)
+    const stereoOf = (key: string) => {
+        const output = outputs.find(item => item.key === key);
+        if (!output) return source.channels >= 2;
+        const stem = output.node.result.stems.find(item => item.name === output.stemName);
+        return (stem?.media.channels ?? 1) >= 2;
+    };
 
     // 結果の名前 (一覧と同じ表示名。組み合わせはモデル名と結果の決め方)
     const modelName = (filename: string) => {
@@ -149,6 +162,7 @@ export default function SeparationWorkbench({ store, disabled, saveColumn }: Pro
             return `${method.filenames.map(modelName).join(' + ')} (${t(`voice.separation.algorithms.${method.algorithm}`)})`;
         }
         if (method.kind === 'process') return t('voice.separation.pickModes.other');
+        if (method.kind === 'effects') return t('voice.separation.pickModes.effects');
         return result.methodLabel;
     };
 
@@ -162,7 +176,8 @@ export default function SeparationWorkbench({ store, disabled, saveColumn }: Pro
         (Object.keys(ARCH_KEYS) as SeparationArch[]).find(arch => ARCH_KEYS[arch] === key) ?? key;
     // 結果に添えるパラメーター。既定から変えた値だけを示す (結果どうしの違いを読み取りやすくするため)
     const paramsSummary = (result: SeparationCandidate) => {
-        // 「その他」は、チェックした加工を示す
+        // 「除去・調整」はチェックした加工を、「エフェクト」はチェックしたエフェクトを示す
+        if (result.method.kind === 'effects') return effectsSummary(t, result.method.effects).join(' / ');
         if (result.method.kind === 'process') {
             const names = (models?.models ?? []).map(model => ({ filename: model.filename, name: model.name }));
             return filterSummary(t, result.method, names).join(' / ');
@@ -209,7 +224,14 @@ export default function SeparationWorkbench({ store, disabled, saveColumn }: Pro
         if (!input) return false;
         if (target.kind === 'redo') discard(removeDescendants(target.node.id));
         try {
-            const result = await run(t('voice.separation.running'), jobId =>
+            // 進捗の見出しは方式に合わせる (除去・調整とエフェクトは分離しないため)
+            const title =
+                method.kind === 'process'
+                    ? t('voice.separation.runningProcess')
+                    : method.kind === 'effects'
+                      ? t('voice.separation.runningEffects')
+                      : t('voice.separation.running');
+            const result = await run(title, jobId =>
                 window.kuraToolkit.voice.separation.run(jobId, {
                     workKey,
                     input,
@@ -404,7 +426,28 @@ export default function SeparationWorkbench({ store, disabled, saveColumn }: Pro
                                             </Tooltip>
                                         </Stack>
                                         <SyncPlayer source={{ key, url: stem.media.url }} />
-                                        {separateButton(key, label)}
+                                        <Stack direction='row' spacing={0.5} sx={{ alignItems: 'center' }}>
+                                            {onExportOutput && (
+                                                <Tooltip title={t('voice.conversion.saveRow')}>
+                                                    <span>
+                                                        <IconButton
+                                                            size='small'
+                                                            aria-label={t('voice.conversion.saveRowFor', {
+                                                                name: labelOf(key),
+                                                            })}
+                                                            disabled={busy}
+                                                            onClick={() => {
+                                                                const output = outputs.find(item => item.key === key);
+                                                                if (output) onExportOutput(output);
+                                                            }}
+                                                        >
+                                                            <SaveAltIcon fontSize='small' />
+                                                        </IconButton>
+                                                    </span>
+                                                </Tooltip>
+                                            )}
+                                            {separateButton(key, label)}
+                                        </Stack>
                                     </Box>
                                     {saveColumn && (
                                         // チェックの下に「対象」を置く 2 行の形 (行ごとに同じ位置に並べ、列として見せる)
@@ -483,6 +526,7 @@ export default function SeparationWorkbench({ store, disabled, saveColumn }: Pro
             <SeparationDialog
                 open={dialog !== null && job === null}
                 inputLabel={labelOf(dialogParentKey)}
+                inputStereo={stereoOf(dialogParentKey)}
                 models={models}
                 initialSelection={
                     dialog ? (dialog.kind === 'new' ? dialog.selection : dialog.node.selection) : EMPTY_METHOD_SELECTION

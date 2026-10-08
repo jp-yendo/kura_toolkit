@@ -9,17 +9,22 @@ import { mediaRef } from './media';
 import { getWorker } from './python-worker';
 import { RVC_EMBEDDER_ITEMS } from './spec';
 import { withGpu } from './gpu-lock';
-import { ffmpegPhase, voicePhase, workerEvents } from './job-progress';
-import { removeNoise, removeReverb } from './audio-filters';
+import { ffmpegPhase, nextStep, voicePhase, withSteps, workerEvents } from './job-progress';
+import { editSilence, normalizeLoudness, removeNoise, removeReverb } from './audio-filters';
+import { applyEffects, effectStageCount } from './audio-effects';
 import {
     sanitizeDereverbOption,
+    sanitizeLoudnessOption,
     sanitizeNoiseRemovalOption,
     sanitizeSilenceOption,
 } from '../../../shared/voice/audio-filters';
+import { hasEffect, hasTailEffect, sanitizeEffectsOptions } from '../../../shared/voice/audio-effects';
 import { rvcModelFiles } from './voice-models';
 import { discardLater, isInsideWork, newId, produceShared, sessionDir, withJobTemp } from '../work-dir';
 import type {
+    CandidateFilters,
     ConversionCandidate,
+    ConversionFilterRequest,
     ConversionRunRequest,
     MediaRef,
     MixParams,
@@ -70,19 +75,9 @@ async function removeOtherShifts(keep: string): Promise<void> {
     }
 }
 
-export async function runConversion(jobId: string, received: ConversionRunRequest): Promise<ConversionCandidate> {
+export async function runConversion(jobId: string, request: ConversionRunRequest): Promise<ConversionCandidate> {
     startJob(jobId);
     try {
-        // 画面から受け取った加工の設定を確かめる
-        const request: ConversionRunRequest = {
-            ...received,
-            params: {
-                ...received.params,
-                dereverb: sanitizeDereverbOption(received.params.dereverb),
-                muteSilence: sanitizeSilenceOption(received.params.muteSilence),
-                noiseRemoval: sanitizeNoiseRemovalOption(received.params.noiseRemoval),
-            },
-        };
         if (!isInsideWork(request.workKey, request.vocals)) throw new Error('INVALID_PATH');
         if (request.accompaniment && !isInsideWork(request.workKey, request.accompaniment)) {
             throw new Error('INVALID_PATH');
@@ -101,7 +96,8 @@ export async function runConversion(jobId: string, received: ConversionRunReques
         const id = newId();
         const dir = sessionDir(request.workKey, 'conversions', id);
         try {
-            return await convertInto(jobId, request, model, id, dir, channels);
+            // 読み込み・変換・音量をそろえるの 3 手順
+            return await withSteps(jobId, 3, () => convertInto(jobId, request, model, id, dir, channels));
         } catch (error) {
             // 失敗・キャンセルした場合は作りかけの候補を消す
             discardLater(dir);
@@ -127,18 +123,13 @@ async function convertInto(
     await withJobTemp(async temp => {
         // 左右を平均したモノラルで変換する (左右を個別に変換すると推定のずれで音が揺れるため)
         const monoInput = path.join(temp, 'input.wav');
+        nextStep(jobId);
         await decodeToWav(request.vocals, monoInput, {
             jobId,
             channels: 'mono',
             onProgress: ffmpegPhase(jobId, 'decodeInput'),
         });
-        // 残響・エコーを除去する場合は、変換前のボーカルから除去する (変換後の声には残響がほぼ残らないため、変換の後では
-        // 除けない)。変換の入力と、無音部分の判断に使う。変換後の声の大きさは、除去する前のボーカルにそろえる
-        let convertInput = monoInput;
-        if (request.params.dereverb.enabled) {
-            convertInput = path.join(temp, 'dereverbed.wav');
-            await removeReverb(jobId, monoInput, convertInput, request.params.dereverb, temp);
-        }
+        nextStep(jobId);
         voicePhase(jobId, 'prepare');
         const converted = path.join(temp, 'converted.wav');
         const worker = getWorker('converter');
@@ -146,7 +137,7 @@ async function convertInto(
             worker.request(
                 'convert',
                 {
-                    input: convertInput,
+                    input: monoInput,
                     output: converted,
                     model: weights,
                     index: index ?? '',
@@ -156,19 +147,14 @@ async function convertInto(
                     volumeEnvelope: request.params.volumeEnvelope,
                     protect: request.params.protect,
                     embedder: rvc.embedder,
-                    muteSilence: request.params.muteSilence,
                 },
                 { jobId, onEvent: workerEvents(jobId, 0, 80) }
             )
         );
-        // ノイズを除去する場合は、変換後の声から除去してから音量をそろえる
-        let cleaned = converted;
-        if (request.params.noiseRemoval.enabled) {
-            cleaned = path.join(temp, 'denoised.wav');
-            await removeNoise(jobId, converted, cleaned, request.params.noiseRemoval, temp);
-        }
+        const cleaned = converted;
         // 変換後の声を、元の声と同じ大きさ (統合ラウドネス) にそろえる。どちらかが無音で測れない場合はそろえない
         // 段階の進み具合: 変換前の測定 0-0.4、変換後の測定 0.4-0.8、音量の調整 0.8-1
+        nextStep(jobId);
         const loudness = (from: number, span: number) => (percent: number) =>
             voicePhase(jobId, 'loudness', { fraction: from + (span * percent) / 100 });
         voicePhase(jobId, 'loudness', { fraction: 0 });
@@ -213,15 +199,114 @@ async function convertInto(
     };
 }
 
-// 変換の段階の試聴用に、変換後のボーカルと伴奏をそのまま重ねるときのパラメーター (音量は変えず、リバーブなし)
+// 変換の段階の試聴用に、変換後のボーカルと伴奏をそのまま重ねるときのパラメーター (音量は変えない)
 const PLAIN_MIX_PARAMS: MixParams = {
     vocalGainDb: 0,
     accompanimentGainDb: 0,
     masterGainDb: 0,
-    reverb: { enabled: false, roomSize: 0, damping: 0, wetLevel: 0, dryLevel: 1, width: 1 },
 };
 
-// 合成 (音量バランス・リバーブ・全体の音量)。合成の段階の確認と書き出しの両方でこの結果を使う。
+// 候補にフィルターをかけて、新しい候補を作る。除去・調整は分岐の「除去・調整」と、エフェクトは分岐の「エフェクト」と同じ
+// 処理で、残響・エコーの除去 → ノイズ除去 → 無音部分の雑音を消す → エフェクト → 音量をそろえるの順に行う (無音の処理を
+// エフェクトの前に行うのは、リバーブなどの余韻を無音として消さないため)。リバーブ・コーラス・ディレイをかけるときは、
+// 元の音源がステレオならステレオで作る (広がりを出すため)。音量は「音量をそろえる」をチェックしたときだけ変える
+export async function filterCandidate(jobId: string, received: ConversionFilterRequest): Promise<ConversionCandidate> {
+    startJob(jobId);
+    try {
+        // 画面から受け取った設定を確かめる
+        const filters: CandidateFilters = {
+            process: {
+                dereverb: sanitizeDereverbOption(received.filters.process.dereverb),
+                noiseRemoval: sanitizeNoiseRemovalOption(received.filters.process.noiseRemoval),
+                muteSilence: sanitizeSilenceOption(received.filters.process.muteSilence),
+                loudness: sanitizeLoudnessOption(received.filters.process.loudness),
+            },
+            effects: sanitizeEffectsOptions(received.filters.effects),
+        };
+        const { process, effects } = filters;
+        const source = received.source;
+        if (!isInsideWork(received.workKey, source.vocals.path)) throw new Error('INVALID_PATH');
+        if (
+            !process.dereverb.enabled &&
+            !process.noiseRemoval.enabled &&
+            !process.muteSilence.enabled &&
+            !process.loudness.enabled &&
+            !hasEffect(effects)
+        ) {
+            throw new Error('NOTHING_TO_PROCESS');
+        }
+        const id = newId();
+        const dir = sessionDir(received.workKey, 'conversions', id);
+        const vocalsOut = path.join(dir, 'vocals.wav');
+        // チェックした加工ごと・エフェクトの処理の段ごとに 1 手順 (エフェクトは applyEffects が段ごとに次の手順に入る)
+        const steps =
+            [process.dereverb, process.noiseRemoval, process.muteSilence, process.loudness].filter(
+                option => option.enabled
+            ).length + effectStageCount(effects);
+        try {
+            await withSteps(jobId, steps, () =>
+                withJobTemp(async temp => {
+                    let current = source.vocals.path;
+                    const step = async (name: string, run: (input: string, output: string) => Promise<unknown>) => {
+                        if (name !== 'effects') nextStep(jobId);
+                        const next = path.join(temp, name + '.wav');
+                        await run(current, next);
+                        current = next;
+                    };
+                    if (process.dereverb.enabled) {
+                        await step('dereverbed', (input, output) =>
+                            removeReverb(jobId, input, output, process.dereverb, temp)
+                        );
+                    }
+                    if (process.noiseRemoval.enabled) {
+                        await step('denoised', (input, output) =>
+                            removeNoise(jobId, input, output, process.noiseRemoval, temp)
+                        );
+                    }
+                    if (process.muteSilence.enabled) {
+                        await step('muted', (input, output) =>
+                            editSilence(jobId, 'converter', input, output, process.muteSilence, 'mute')
+                        );
+                    }
+                    if (hasEffect(effects)) {
+                        const channels = hasTailEffect(effects) && source.channels === 2 ? 2 : undefined;
+                        await step('effects', (input, output) =>
+                            applyEffects(jobId, 'converter', input, output, effects, temp, channels)
+                        );
+                    }
+                    if (process.loudness.enabled) {
+                        await step('loudness', (input, output) =>
+                            normalizeLoudness(jobId, input, output, process.loudness)
+                        );
+                    }
+                    fs.mkdirSync(dir, { recursive: true });
+                    fs.renameSync(current, vocalsOut);
+                })
+            );
+        } catch (error) {
+            // 失敗・キャンセルした場合は作りかけの候補を消す
+            discardLater(dir);
+            throw error;
+        }
+        emitJobEvent({ jobId, kind: 'progress', percent: 100 });
+        return {
+            id,
+            voiceId: source.voiceId,
+            voiceName: source.voiceName,
+            params: source.params,
+            vocals: await mediaRef(vocalsOut),
+            channels: source.channels,
+            withAccompaniment: null,
+            createdAt: Date.now(),
+            parentId: source.id,
+            filters: [...(source.filters ?? []), filters],
+        };
+    } finally {
+        finishJob(jobId);
+    }
+}
+
+// 合成 (音量バランス・全体の音量)。合成の段階の確認と書き出しの両方でこの結果を使う。
 // params が null の場合は、変換の段階の試聴用にそのまま重ねたものを作る (合成結果とは置き場所を分ける)。
 // どちらも、重ねた結果のピークが上限を超える場合は全体を一律に下げる (converter_service.rpc_mix)
 export async function renderMix(jobId: string, request: MixRenderRequest): Promise<MediaRef> {
@@ -250,35 +335,41 @@ export async function renderMix(jobId: string, request: MixRenderRequest): Promi
             .digest('hex')
             .slice(0, 16);
         const output = path.join(sessionDir(request.workKey, request.params ? 'mix' : 'previews'), `${key}.wav`);
-        await produceShared(output, async target => {
-            // 変換結果 (モデルの周波数のモノラル) を、元の音源のチャンネル数と伴奏の周波数に合わせて重ねる
-            const vocalsInfo = await probeAudio(request.vocals, jobId);
-            let sampleRate = vocalsInfo.sampleRate;
-            let channels = request.channels === 2 ? 2 : 1;
-            if (request.accompaniment) {
-                const shifted = await shiftedAccompaniment(
-                    request.workKey,
-                    request.accompaniment,
-                    request.pitch,
-                    jobId
+        // 伴奏の移調が要るときは移調と合成の 2 手順
+        const shifting = !!request.accompaniment && request.pitch % 12 !== 0;
+        await withSteps(jobId, shifting ? 2 : 1, () =>
+            produceShared(output, async target => {
+                // 変換結果 (モデルの周波数のモノラル) を、元の音源のチャンネル数と伴奏の周波数に合わせて重ねる
+                const vocalsInfo = await probeAudio(request.vocals, jobId);
+                let sampleRate = vocalsInfo.sampleRate;
+                let channels = request.channels === 2 ? 2 : 1;
+                if (request.accompaniment) {
+                    if (shifting) nextStep(jobId);
+                    const shifted = await shiftedAccompaniment(
+                        request.workKey,
+                        request.accompaniment,
+                        request.pitch,
+                        jobId
+                    );
+                    const info = await probeAudio(shifted, jobId);
+                    sampleRate = info.sampleRate;
+                    channels = Math.max(channels, info.channels);
+                }
+                nextStep(jobId);
+                await getWorker('converter').request(
+                    'mix',
+                    {
+                        vocals: request.vocals,
+                        accompaniment,
+                        output: target,
+                        sampleRate,
+                        channels,
+                        params,
+                    },
+                    { jobId, onEvent: workerEvents(jobId) }
                 );
-                const info = await probeAudio(shifted, jobId);
-                sampleRate = info.sampleRate;
-                channels = Math.max(channels, info.channels);
-            }
-            await getWorker('converter').request(
-                'mix',
-                {
-                    vocals: request.vocals,
-                    accompaniment,
-                    output: target,
-                    sampleRate,
-                    channels,
-                    params,
-                },
-                { jobId, onEvent: workerEvents(jobId) }
-            );
-        });
+            })
+        );
         return await mediaRef(output);
     } finally {
         finishJob(jobId);

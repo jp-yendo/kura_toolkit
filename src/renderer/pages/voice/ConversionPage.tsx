@@ -4,6 +4,7 @@ import {
     Box,
     Button,
     Checkbox,
+    Collapse,
     DialogActions,
     DialogContent,
     DialogTitle,
@@ -26,6 +27,9 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import SaveAltIcon from '@mui/icons-material/SaveAlt';
 import HeadphonesIcon from '@mui/icons-material/Headphones';
+import GraphicEqIcon from '@mui/icons-material/GraphicEq';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useTranslation } from 'react-i18next';
 import PageContainer from '../../components/common/PageContainer';
 import Panel from '../../components/common/Panel';
@@ -39,16 +43,9 @@ import UserModelIcon from '../../components/voice/UserModelIcon';
 import SeparationWorkbench from '../../components/voice/SeparationWorkbench';
 import SyncPlayer from '../../components/voice/SyncPlayer';
 import SliderField from '../../components/voice/SliderField';
-import {
-    DereverbFields,
-    filterSummary,
-    NoiseRemovalFields,
-    resolvedDereverbOption,
-    resolvedNoiseOption,
-    SilenceFields,
-    useDereverbModels,
-    useNoiseRemovalModels,
-} from '../../components/voice/AudioFilterFields';
+import { filterSummary, useDereverbModels, useNoiseRemovalModels } from '../../components/voice/AudioFilterFields';
+import { effectsSummary } from '../../components/voice/AudioEffectFields';
+import CandidateFilterDialog from '../../components/voice/CandidateFilterDialog';
 import MixForm from '../../components/voice/MixForm';
 import PresetBar from '../../components/voice/PresetBar';
 import ExportDialog, { type ExportEntry } from '../../components/voice/ExportDialog';
@@ -68,8 +65,8 @@ import { DEFAULT_CONVERSION_PARAMS, useConversionStore, type ConversionInputMode
 import { openVoiceLibrary } from '../../stores/voiceLibraryStore';
 import {
     F0_METHODS,
+    type CandidateFilters,
     type ConversionCandidate,
-    type ConversionParams,
     type F0Method,
     type MediaRef,
     type MixParams,
@@ -105,6 +102,11 @@ export default function ConversionPage() {
     const [rowExport, setRowExport] = React.useState<ExportEntry | null>(null);
     const [rowExportOpen, setRowExportOpen] = React.useState(false);
     const [confirmInvalidate, setConfirmInvalidate] = React.useState(false);
+    // フィルターをかける候補 (閉じる途中で中身が変わらないよう、開閉と対象を分けて持つ)
+    const [filterTarget, setFilterTarget] = React.useState<ConversionCandidate | null>(null);
+    const [filterOpen, setFilterOpen] = React.useState(false);
+    // 変換の段階で、伴奏の音を展開して示すか
+    const [accompanimentOpen, setAccompanimentOpen] = React.useState(false);
     const [resetConfirm, setResetConfirm] = React.useState(false);
     const { job, run, cancel } = useJobRunner();
     const ready = readiness.readiness?.ready ?? false;
@@ -196,8 +198,10 @@ export default function ConversionPage() {
     const noiseModels = useNoiseRemovalModels();
     const dereverbModels = useDereverbModels();
 
-    // 候補のパラメーターの表示 (チェックした加工だけを足す)
-    const paramsSummary = (params: ConversionParams): string => {
+    // 候補の条件の表示 (変換のパラメーターと、フィルターをかけた候補ではかけたフィルターを処理の順に足す)
+    const paramsSummary = (candidate: ConversionCandidate): string => {
+        const params = candidate.params;
+        const names = [...dereverbModels, ...noiseModels];
         const parts = [
             t('voice.conversion.paramsSummary', {
                 pitch: params.pitch,
@@ -207,7 +211,13 @@ export default function ConversionPage() {
                 protect: params.protect.toFixed(2),
             }),
         ];
-        parts.push(...filterSummary(t, params, [...dereverbModels, ...noiseModels]));
+        for (const filters of candidate.filters ?? []) {
+            parts.push(
+                ...filterSummary(t, { ...filters.process, loudness: undefined }, names),
+                ...effectsSummary(t, filters.effects),
+                ...filterSummary(t, { loudness: filters.process.loudness }, names)
+            );
+        }
         return parts.join(' / ');
     };
     const selected = conv.candidates.find(item => item.id === conv.selectedId) ?? null;
@@ -279,11 +289,7 @@ export default function ConversionPage() {
                     vocals: (await singlePath(jobId, vocals)) as string,
                     accompaniment: await singlePath(jobId, accompaniment),
                     voiceId: voice.id,
-                    params: {
-                        ...conv.params,
-                        dereverb: resolvedDereverbOption(conv.params.dereverb, dereverbModels),
-                        noiseRemoval: resolvedNoiseOption(conv.params.noiseRemoval, noiseModels),
-                    },
+                    params: conv.params,
                 })
             );
             conv.addCandidate(candidate, inputKey);
@@ -291,6 +297,30 @@ export default function ConversionPage() {
             handleError(error);
         }
     };
+
+    // 候補にフィルターをかけて、新しい候補を作る (元にした候補のすぐ下に加わる)。使った値は次に開いたときに引き継ぐ。
+    // 成功したら true (ダイアログを閉じる)
+    const runFilter = async (filters: CandidateFilters): Promise<boolean> => {
+        const target = filterTarget;
+        if (!target) return false;
+        conv.setCandidateFilters(filters);
+        try {
+            const candidate = await run(t('voice.conversion.filterRunning'), jobId =>
+                window.kuraToolkit.voice.conversion.filter(jobId, { workKey, source: target, filters })
+            );
+            conv.addCandidate(candidate, conv.candidatesInput ?? inputKey);
+            return true;
+        } catch (error) {
+            handleError(error);
+            return false;
+        }
+    };
+
+    // 分離した音の出力の、再生と書き出しに使う音声
+    const outputMedia = (output: TreeOutput): MediaRef | null =>
+        output.node.result.stems.find(stem => stem.name === output.stemName)?.media ?? null;
+    // 伴奏として重ねる音 (分離した音の木の順)
+    const accompanimentOutputs = outputs.filter(output => accompanimentKeys.includes(output.key));
 
     // 入力 (伴奏) が変わった場合も作り直すよう、入力も含める
     const mixSignature = selected
@@ -380,6 +410,7 @@ export default function ConversionPage() {
         </Stack>
     );
 
+    // 合成の段階の書き出しは合成結果だけ (変換後のボーカルは、変換の段階の候補ごとに書き出す)
     const exportEntries: ExportEntry[] = selected
         ? [
               {
@@ -387,13 +418,6 @@ export default function ConversionPage() {
                   label: t('voice.conversion.exportMix'),
                   suffix: t('voice.conversion.suffixConverted'),
                   resolve: async jobId => (await renderMix(jobId)).path,
-              },
-              {
-                  key: 'vocals',
-                  label: t('voice.conversion.exportVocals'),
-                  suffix: t('voice.conversion.suffixConvertedVocals'),
-                  resolve: async () => selected.vocals.path,
-                  defaultChecked: false,
               },
           ]
         : [];
@@ -483,8 +507,18 @@ export default function ConversionPage() {
                             <SeparationWorkbench
                                 store={useConversionSeparationStore}
                                 disabled={!(separationReadiness.readiness?.ready ?? false)}
+                                onExportOutput={output => {
+                                    // ファイル名は、元のファイル名と上の階層からの名前 (音声分離・加工の書き出しと同じ)
+                                    setRowExport({
+                                        key: output.key,
+                                        label: output.displayPath,
+                                        suffix: output.path,
+                                        resolve: async () => output.mediaPath,
+                                    });
+                                    setRowExportOpen(true);
+                                }}
                             />
-                            {/* 分離した音から、変換する音と、伴奏として重ねる音を選ぶ (分離の木と同じ字下げで並べる) */}
+                            {/* 分離した音から、変換する音と、伴奏として重ねる音を選ぶ (名前は上の階層からの名前) */}
                             {outputs.length > 0 && (
                                 <Panel>
                                     <Stack spacing={1.5}>
@@ -498,16 +532,12 @@ export default function ConversionPage() {
                                                 value={vocalsTrack?.key ?? ''}
                                                 onChange={event => conv.setVocalsTrack(String(event.target.value))}
                                                 renderValue={key =>
-                                                    outputs.find(output => output.key === key)?.path ?? ''
+                                                    outputs.find(output => output.key === key)?.displayPath ?? ''
                                                 }
                                             >
                                                 {outputs.map(output => (
-                                                    <MenuItem
-                                                        key={output.key}
-                                                        value={output.key}
-                                                        sx={{ pl: 2 + output.depth * 3 }}
-                                                    >
-                                                        {output.label}
+                                                    <MenuItem key={output.key} value={output.key}>
+                                                        {output.displayPath}
                                                     </MenuItem>
                                                 ))}
                                             </Select>
@@ -524,7 +554,7 @@ export default function ConversionPage() {
                                                             <FormControlLabel
                                                                 key={output.key}
                                                                 disabled={busy}
-                                                                sx={{ pl: output.depth * 3, mr: 0 }}
+                                                                sx={{ mr: 0 }}
                                                                 control={
                                                                     <Checkbox
                                                                         size='small'
@@ -542,7 +572,7 @@ export default function ConversionPage() {
                                                                 }
                                                                 label={
                                                                     <Typography variant='body2'>
-                                                                        {output.label}
+                                                                        {output.displayPath}
                                                                     </Typography>
                                                                 }
                                                             />
@@ -667,25 +697,6 @@ export default function ConversionPage() {
                                 helperText={t('voice.conversion.protectHint')}
                                 onChange={protect => conv.setParams({ ...conv.params, protect })}
                             />
-                            {/* 処理の順に並べる (残響・エコーの除去は変換の前、無音の扱いは変換の中、ノイズ除去は変換の後) */}
-                            <DereverbFields
-                                models={dereverbModels}
-                                value={conv.params.dereverb}
-                                disabled={busy}
-                                onChange={dereverb => conv.setParams({ ...conv.params, dereverb })}
-                            />
-                            <SilenceFields
-                                mode='mute'
-                                value={conv.params.muteSilence}
-                                disabled={busy}
-                                onChange={muteSilence => conv.setParams({ ...conv.params, muteSilence })}
-                            />
-                            <NoiseRemovalFields
-                                models={noiseModels}
-                                value={conv.params.noiseRemoval}
-                                disabled={busy}
-                                onChange={noiseRemoval => conv.setParams({ ...conv.params, noiseRemoval })}
-                            />
                             <Button
                                 variant='contained'
                                 disabled={
@@ -698,13 +709,15 @@ export default function ConversionPage() {
                         </Stack>
                     </Panel>
                     <Stack spacing={1.5} sx={{ minWidth: 0 }}>
-                        {/* 元の音源・変換前のボーカルを上に置き、作った候補を作った順に下へ足していく */}
-                        <Panel>
-                            <Stack spacing={1.5}>
-                                {sourceMedia && playerRow('source', t('voice.conversion.targets.source'), sourceMedia)}
-                                {conv.inputMode === 'separate' &&
-                                    vocalsMedia &&
-                                    playerRow(
+                        {/* 元の音源と、変換前のボーカル (伴奏は折りたたみ、展開すると伴奏として重ねる音をすべて示す) を
+                            別のカードで上に置き、作った候補を下へ足していく */}
+                        {sourceMedia && (
+                            <Panel>{playerRow('source', t('voice.conversion.targets.source'), sourceMedia)}</Panel>
+                        )}
+                        {conv.inputMode === 'separate' && vocalsMedia && (
+                            <Panel>
+                                <Stack spacing={1.5}>
+                                    {playerRow(
                                         'original-vocals',
                                         t('voice.conversion.targets.originalVocals'),
                                         vocalsMedia,
@@ -715,8 +728,43 @@ export default function ConversionPage() {
                                             t('voice.conversion.suffixOriginalVocals')
                                         )
                                     )}
-                            </Stack>
-                        </Panel>
+                                    {accompanimentOutputs.length > 0 && (
+                                        <Box>
+                                            <Button
+                                                size='small'
+                                                startIcon={accompanimentOpen ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                                                aria-expanded={accompanimentOpen}
+                                                onClick={() => setAccompanimentOpen(!accompanimentOpen)}
+                                            >
+                                                {t('voice.conversion.accompanimentShow', {
+                                                    count: accompanimentOutputs.length,
+                                                })}
+                                            </Button>
+                                            <Collapse in={accompanimentOpen} unmountOnExit>
+                                                <Stack spacing={1.5} sx={{ pt: 1 }}>
+                                                    {accompanimentOutputs.map(output => {
+                                                        const media = outputMedia(output);
+                                                        return media
+                                                            ? playerRow(
+                                                                  `accompaniment-${output.key}`,
+                                                                  output.displayPath,
+                                                                  media,
+                                                                  saveButton(
+                                                                      `accompaniment-${output.key}`,
+                                                                      output.displayPath,
+                                                                      media,
+                                                                      output.path
+                                                                  )
+                                                              )
+                                                            : null;
+                                                    })}
+                                                </Stack>
+                                            </Collapse>
+                                        </Box>
+                                    )}
+                                </Stack>
+                            </Panel>
+                        )}
                         <SectionLabel>{t('voice.conversion.candidates')}</SectionLabel>
                         {conv.candidates.length === 0 ? (
                             <Typography variant='body2' color='text.secondary' sx={{ lineHeight: 1.6 }}>
@@ -737,9 +785,28 @@ export default function ConversionPage() {
                                                     {candidate.voiceName}
                                                 </Typography>
                                                 <Typography variant='caption' color='text.secondary'>
-                                                    {paramsSummary(candidate.params)}
+                                                    {paramsSummary(candidate)}
                                                 </Typography>
                                             </Box>
+                                            <Tooltip title={t('voice.filters.filterButton')}>
+                                                <span>
+                                                    <IconButton
+                                                        size='small'
+                                                        aria-label={t('voice.filters.filterFor', {
+                                                            name: candidate.voiceName,
+                                                        })}
+                                                        disabled={busy}
+                                                        onClick={event => {
+                                                            // 候補のカードを選ぶクリックとして扱わない
+                                                            event.stopPropagation();
+                                                            setFilterTarget(candidate);
+                                                            setFilterOpen(true);
+                                                        }}
+                                                    >
+                                                        <GraphicEqIcon fontSize='small' />
+                                                    </IconButton>
+                                                </span>
+                                            </Tooltip>
                                             {saveButton(
                                                 `${candidate.id}-converted`,
                                                 `${candidate.voiceName} ${t('voice.conversion.targets.converted')}`,
@@ -872,6 +939,17 @@ export default function ConversionPage() {
                 onClose={() => setExportOpen(false)}
                 entries={exportEntries}
                 sourcePath={sourcePath || 'output'}
+            />
+            <CandidateFilterDialog
+                open={filterOpen && filterTarget !== null && job === null}
+                name={filterTarget?.voiceName ?? ''}
+                initial={conv.candidateFilters}
+                stereo={filterTarget?.channels === 2}
+                dereverbModels={dereverbModels}
+                noiseModels={noiseModels}
+                onRun={runFilter}
+                onClose={() => setFilterOpen(false)}
+                disabled={busy}
             />
             <ExportDialog
                 workKey={workKey}

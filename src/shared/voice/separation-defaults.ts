@@ -12,6 +12,6 @@ export const DEFAULT_SEPARATION_PARAMS: SeparationParams = {
         highEndProcess: false,
         batchSize: 1,
     },
-    demucs: { segmentSize: null, shifts: 2, overlap: 0.25, segmentsEnabled: true },
+    demucs: { segmentSize: null, shifts: 2, overlap: 0.25 },
     mdxc: { segmentSize: 256, overrideModelSegmentSize: false, batchSize: null, overlap: null, pitchShift: 0 },
 };

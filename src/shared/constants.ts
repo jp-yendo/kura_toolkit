@@ -93,6 +93,7 @@ export const IPC_CHANNELS = {
     VOICE_SEPARATION_RUN: 'voice:separation:run',
     VOICE_CONVERSION_RUN: 'voice:conversion:run',
     VOICE_CONVERSION_MIX: 'voice:conversion:mix',
+    VOICE_CONVERSION_FILTER: 'voice:conversion:filter',
     VOICE_RUBBERBAND: 'voice:rubberband',
     VOICE_TTS_RUN: 'voice:tts:run',
     VOICE_TTS_CANCEL_CONFIRMATION: 'voice:tts:cancelConfirmation',
