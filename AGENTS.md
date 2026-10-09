@@ -59,11 +59,15 @@ CRITICAL: You MUST read [README.md](README.md) BEFORE taking any action.
 </instruction>
 <development_rules>
 - All developer-facing documents, except `README.md` and `README-ja.md`, MUST be placed in the `Documents` directory.
-- After every change, you MUST run the linter and fix all issues. If a linter error is intentionally suppressed, add a comment explaining the reason. **A full build is only required for releases; running the linter alone is sufficient during development.**
+- After every change, you MUST run the linter and fix all issues. If a linter error is intentionally suppressed, add a comment explaining the reason. **After the linter and the rest of the checks pass, run `yarn build` as the final confirmation.**
+- Comments, code, and documents MUST describe only the current state. Never record change history, prior behavior, or wording such as "previously" / "as before" — rewrite it out, including existing occurrences in the code you touch. `CHANGELOG.md` is the only place for change history. Write comments in TypeScript where they add value.
+- Comments on a function, class, component, or any other unit MUST describe only what that unit itself does. Do not mention its callers (file names, function names, etc.) or why they use it. Units invoked by the framework may name the screen or trigger they serve, since their caller is outside the project's code.
 - Temporary or investigative scripts (e.g., research/debug scripts) MUST be placed in the `scripts` directory.
 - When implementing data models, create one file per table.
 - When creating or modifying a data model, update `Documents/テーブル定義.md`. Table definitions must be expressed as one table per database table, with column names, types, and relations documented within the table.
-- When system behavior changes, update `Documents/システム仕様.md`.
+- After each agent (or work unit) finishes, verify validity, omissions and errors (mechanical checks, independent QA, spot checks) before integrating.
+- Reports must describe findings in words, never by numbered item codes assigned during a session. State clearly what decision, if any, is being requested.
+- Remove code, comments, variables, tests and helper scripts that are no longer needed, without leaving traces. Temporary verification scripts placed in `scripts/` must be deleted once their purpose is served.
 - **`src/main/` MUST NOT import from `src/renderer/`**. i18n is renderer-only.
 - When adding or changing user-visible text, update all locale files under `src/renderer/i18n/locales/`.
 - When making notable changes, update `CHANGELOG.md` following the [Keep a Changelog](https://keepachangelog.com/) format. Entries must be written in English. `CHANGELOG.md` is for end users: describe each change concisely from the user's perspective (what they can now do or what visibly changes), not the implementation. Do NOT include internal details such as file paths, IPC channel/function names, internal data structures, or code-level mechanics. Record those developer-facing details in `Documents/システム仕様.md` instead.
