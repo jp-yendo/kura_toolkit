@@ -47,9 +47,13 @@ def preferred_device() -> str:
 
 def release_memory() -> None:
     """Collect unreachable objects and return the GPU memory PyTorch keeps cached."""
-    import torch
-
     gc.collect()
+    try:
+        import torch
+    except ImportError:
+        # The separator environment without PyTorch (Intel Macs, macOS earlier than 14) holds no GPU memory
+        return
+
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
     if is_apple_silicon() and torch.backends.mps.is_available():

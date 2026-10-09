@@ -38,7 +38,7 @@ Kura Toolkit is a desktop application that brings together audio, video and imag
 - Set pauses, speed, pitch, volume and readings with control tags
 - Export the speech as MP3, FLAC, Ogg Vorbis, Opus, AAC, WAV or ALAC
 - Download, import and export voice models
-- Create a voice model of your own voice from recordings or audio files of presented sentences or sentences of your own (Windows or Linux with an NVIDIA GPU)
+- Create a voice model of your own voice from recordings or audio files of presented sentences or sentences of your own (on Windows, only with an NVIDIA GPU)
 
 ### Voice Feature Downloads
 
@@ -78,7 +78,27 @@ The following can be set.
 
 Audio Normalizer, Chapter Cut and the voice features (Audio Separation & Processing, Voice Conversion, Text to Speech) require [FFmpeg](https://ffmpeg.org/). It is not included with the app, so install it separately.
 
-- Changing the key in Voice Conversion (except by whole octaves), and timed rows in Text to Speech that are sped up to fit their time (the default), need an FFmpeg build that includes rubberband (such as Gyan.FFmpeg from winget on Windows, the Homebrew `ffmpeg` on macOS, or your distribution's `ffmpeg` on Linux)
+Changing the key in Voice Conversion (except by whole octaves) and timed rows in Text to Speech that are sped up to fit their time (the default) need an FFmpeg build that includes rubberband, and saving as Ogg Vorbis needs one that includes libvorbis. Installing it as below includes both.
+
+| OS | How to install |
+| --- | --- |
+| Windows | `winget install Gyan.FFmpeg` |
+| macOS | `brew install ffmpeg-full` ([Homebrew](https://brew.sh/)). `ffmpeg` does not include rubberband or libvorbis, and `ffmpeg-full` is not used while it is installed, so remove it first with `brew uninstall ffmpeg` |
+| Ubuntu-based | `sudo apt install ffmpeg` |
+| Debian-based | `sudo apt install ffmpeg` |
+| RHEL-based | The commands below (enable EPEL and RPM Fusion, then install) |
+
+```bash
+sudo dnf install epel-release
+sudo dnf config-manager --set-enabled crb
+sudo dnf install https://mirrors.rpmfusion.org/free/el/rpmfusion-free-release-$(rpm -E %rhel).noarch.rpm
+sudo dnf install ffmpeg
+```
+
+On RHEL itself, replace the first line with `sudo dnf install https://dl.fedoraproject.org/pub/epel/epel-release-latest-$(rpm -E %rhel).noarch.rpm` and the second with `sudo subscription-manager repos --enable codeready-builder-for-rhel-$(rpm -E %rhel)-$(arch)-rpms`.
+
+The following are also needed.
+
 - The voice feature downloads need an Internet connection and several GB of free space
 - Windows: the [Microsoft Visual C++ Redistributable](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist) (x64, needed for the voice features)
 - Recording voices for model training needs permission to use the microphone (on macOS, allow it in System Settings when asked)
@@ -91,7 +111,7 @@ Audio Normalizer, Chapter Cut and the voice features (Audio Separation & Process
 - macOS 12 (Monterey) or later
 - Linux (Debian-based / RHEL-based)
 
-Audio Separation & Processing, Voice Conversion and Text to Speech are available on Windows 10/11 (x64), macOS 14 or later on Apple Silicon, and Linux (x64). They use the GPU when there is one (NVIDIA on Windows and Linux, Apple Silicon on macOS) and the CPU otherwise.
+Audio Separation & Processing, Voice Conversion and Text to Speech are available on Windows 10/11 (x64), macOS 14 or later on Apple Silicon, and Linux (x64 and Arm64). On Intel Macs and macOS 13 or earlier, only the processing in Audio Separation & Processing that does not use a model (noise removal without a model, silencing the noise in silent parts, matching the volume and effects) is available. They use the GPU when there is one (NVIDIA on Windows and Linux, Apple Silicon on macOS) and the CPU otherwise.
 
 Note: Windows builds are not code-signed. If SmartScreen shows a warning, choose "More info" then "Run anyway".
 

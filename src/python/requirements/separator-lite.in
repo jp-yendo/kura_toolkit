@@ -1,0 +1,6 @@
+# 分離・加工のうち PyTorch を使わない処理 (エフェクト・無音部分の処理) に要るものだけのパッケージ一式。
+# アプリが固定している版の PyTorch などに配布物が無い環境 (Intel 版 Mac・macOS 14 より前の macOS) で、
+# 分離・加工のパッケージ一式 (separator) の代わりに使う。版は separator.lock.txt と同じにする
+pedalboard==0.9.24
+numpy==2.4.6
+soundfile==0.14.0

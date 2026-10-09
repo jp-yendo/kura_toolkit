@@ -13,6 +13,7 @@ import {
     removeItems,
 } from '../services/voice/library';
 import { getPlatformInfo } from '../services/voice/platform';
+import { separationModelsAvailable } from '../../shared/voice/availability';
 import { setVoiceFeature } from '../services/voice/python-worker';
 import {
     sanitizeSilenceOption,
@@ -135,7 +136,10 @@ export function registerVoiceIpcHandlers() {
     );
     ipcMain.handle(IPC_CHANNELS.VOICE_LIBRARY_ENSURE_SEPARATOR_LIST, async () => {
         // 更新が必要なパッケージ一式 (古い版) では一覧を作らない (古い版の一覧を新しい版のものとして残さないため)
-        if (await isComponentCurrent('separator')) await ensureSeparatorModelList();
+        // 分離のモデルを使えない環境のパッケージ一式には、一覧を作るためのライブラリ (audio-separator) が無い
+        if (separationModelsAvailable(await getPlatformInfo()) && (await isComponentCurrent('separator'))) {
+            await ensureSeparatorModelList();
+        }
         return getLibraryStatus();
     });
     ipcMain.handle(IPC_CHANNELS.VOICE_LIBRARY_PROBE_SIZES, async () => {

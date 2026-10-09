@@ -4,7 +4,9 @@ import { probeSize } from './downloader';
 import { writeJsonFile } from './json-file';
 import { touchCacheFile } from '../cache-dir';
 import { libraryCacheDirOf, modelPaths } from './paths';
+import { getPlatformInfo } from './platform';
 import { getWorker } from './python-worker';
+import { separationModelsAvailable } from '../../../shared/voice/availability';
 import { componentSpec, SEPARATOR_MODEL_DIR, separatorItemId, type SpecFile } from './spec';
 import type { SeparationArch, SeparationCategory } from '../../../shared/voice/types';
 
@@ -112,6 +114,8 @@ export function ensureSeparatorModelList(): Promise<ModelListCache> {
 // パッケージ一式の Python から一覧を取得して保存する。取得している間に一覧を読み直させた場合
 // (パッケージ一式の削除・導入、ライブラリ・キャッシュの移動) は、古い結果を保存も記録もしない
 async function refreshSeparatorModelList(): Promise<ModelListCache> {
+    // 分離のモデルを使えない環境のパッケージ一式には、一覧を作るためのライブラリ (audio-separator) が無い
+    if (!separationModelsAvailable(await getPlatformInfo())) throw new Error('SEPARATION_MODELS_UNAVAILABLE');
     const started = generation;
     const worker = getWorker('separator');
     const result = await worker.request<{ models: SeparatorModelEntry[]; ensembles: SeparatorEnsembleEntry[] }>(

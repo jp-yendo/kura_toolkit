@@ -12,7 +12,7 @@ import type { StorageInfo, StorageKind } from '../../shared/types';
 //   中は分類 (audio など) の階層を挟み、ほかの種類のモデルが増えてもこの下に追加する
 // - キャッシュディレクトリ: 消しても作り直せるもの (ライブラリが作るキャッシュ・分離のモデル一覧など)。
 //   中はライブラリごとのディレクトリに分け、保持期間を過ぎたものを起動時に消す (cache-dir.ts)
-// - 作業ディレクトリ: 一時ディレクトリ (既定は OS の一時ディレクトリ。Linux は ~/.kura_toolkit/temp)。アプリはその中に
+// - 作業ディレクトリ: 一時ディレクトリ (既定は OS の一時ディレクトリ。Linux は ~/.kura_toolkit/temp、macOS は /tmp)。アプリはその中に
 //   処理ごとの kura_toolkit_<ランダムな値> フォルダを作り、全機能の一時ファイルをそこに置く (work-dir.ts)
 // 設定が空の場合は既定の場所を使う。既定の場所は設定ファイルに書き込まず、画面には実際に使う場所を示す。
 
@@ -26,6 +26,10 @@ export function defaultStorageDir(kind: StorageKind): string {
     if (kind === 'cache') return path.join(getAppRootDir(), 'cache');
     // Linux の OS の一時ディレクトリ (/tmp) はユーザー間で共有されるため、ユーザーごとの場所を既定にする
     if (process.platform === 'linux') return path.join(getAppRootDir(), 'temp');
+    // macOS の OS の一時ディレクトリ (/var/folders/.../T) はパスが長く、その中の処理ごとのフォルダを TMPDIR に渡すと、
+    // PyTorch の共有メモリや Python の multiprocessing が作る UNIX ドメインソケットのパスが上限 (104 バイト) を超え、
+    // 学習のデータの読み込みが応答しなくなる。パスの短い /tmp を既定にする
+    if (process.platform === 'darwin') return '/tmp';
     return os.tmpdir();
 }
 

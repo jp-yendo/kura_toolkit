@@ -51,6 +51,7 @@ import type {
     VoiceFeatureId,
 } from '@shared/voice/types';
 import { FEATURE_REQUIREMENTS, requiredItems, SEPARATOR_MODEL_PREFIX } from '@shared/voice/requirements';
+import { isFeatureHidden, separationModelsAvailable } from '@shared/voice/availability';
 
 const VC_REDIST_URL = 'https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist';
 
@@ -100,10 +101,21 @@ export default function VoiceLibraryDialog() {
         if (open) void refresh();
     }, [version, open, refresh]);
 
+    // その環境で確実に使えない機能 (PyTorch の配布物が無い環境の音声変換・読み上げ) はタブごと出さない
+    const shownFeatures = React.useMemo(
+        () => (status ? VOICE_FEATURES.filter(feature => !isFeatureHidden(status.platform, feature)) : VOICE_FEATURES),
+        [status]
+    );
+    // 表示するタブ (指定された機能を出さない場合は、先頭のタブ)
+    const shownTab = shownFeatures.includes(tab) ? tab : shownFeatures[0];
+    // 分離のモデルを使えない環境では、分離のモデルのまとまりを出さない
+    const modelsShown = !status || separationModelsAvailable(status.platform);
+
     // 分離モデルの一覧が無ければ作る (パッケージ一式の導入後。分離のタブを表示したときに裏で作り、操作は妨げない)
     const needsList =
         open &&
-        tab === 'separation' &&
+        shownTab === 'separation' &&
+        modelsShown &&
         listError === null &&
         !!status &&
         !status.separatorModelsListed &&
@@ -348,12 +360,12 @@ export default function VoiceLibraryDialog() {
                             </Tooltip>
                         </Stack>
                         <Tabs
-                            value={tab}
+                            value={shownTab}
                             onChange={(_event, value: VoiceFeatureId) => setTab(value)}
                             variant='scrollable'
                             scrollButtons='auto'
                         >
-                            {VOICE_FEATURES.map(feature => (
+                            {shownFeatures.map(feature => (
                                 <Tab
                                     key={feature}
                                     value={feature}
@@ -386,8 +398,8 @@ export default function VoiceLibraryDialog() {
                 >
                     {status &&
                         platform &&
-                        VOICE_FEATURES.map(feature => {
-                            const active = feature === tab;
+                        shownFeatures.map(feature => {
+                            const active = feature === shownTab;
                             const missingRequired = requiredItems(feature).filter(id => !isInstalled(id));
                             const ttsTrainingUnavailable = feature === 'ttsTraining' && !platform.ttsTrainingAvailable;
                             // 下の警告のどれかを出すか (出さなければ、警告のまとまりを置かない)
@@ -483,50 +495,56 @@ export default function VoiceLibraryDialog() {
                                             </Stack>
                                         )}
 
-                                        {FEATURE_REQUIREMENTS[feature].map((group, index) => (
-                                            <Stack key={group.titleKey} spacing={1}>
-                                                {/* グループの見出し (中の小見出しより大きくする) */}
-                                                <Typography variant='subtitle1' component='h3' sx={{ fontWeight: 700 }}>
-                                                    {t('voice.library.groupTitle', {
-                                                        name: t(group.titleKey),
-                                                        kind: t(`voice.library.requirementKinds.${group.kind}`),
-                                                    })}
-                                                </Typography>
-                                                {group.noteKey && (
+                                        {FEATURE_REQUIREMENTS[feature].map((group, index) =>
+                                            group.itemPrefix === SEPARATOR_MODEL_PREFIX && !modelsShown ? null : (
+                                                <Stack key={group.titleKey} spacing={1}>
+                                                    {/* グループの見出し (中の小見出しより大きくする) */}
                                                     <Typography
-                                                        variant='body2'
-                                                        color='text.secondary'
-                                                        sx={{ lineHeight: 1.6 }}
+                                                        variant='subtitle1'
+                                                        component='h3'
+                                                        sx={{ fontWeight: 700 }}
                                                     >
-                                                        {t(group.noteKey)}
+                                                        {t('voice.library.groupTitle', {
+                                                            name: t(group.titleKey),
+                                                            kind: t(`voice.library.requirementKinds.${group.kind}`),
+                                                        })}
                                                     </Typography>
-                                                )}
-                                                {group.itemPrefix === SEPARATOR_MODEL_PREFIX ? (
-                                                    <SeparatorModelSection
-                                                        key={openCount}
-                                                        group={group}
-                                                        status={status}
-                                                        items={items}
-                                                        initialCategory={initialSeparatorCategory}
-                                                        selected={selected}
-                                                        toggle={toggle}
-                                                        selectMany={selectMany}
-                                                        onRemove={askRemove}
-                                                        progress={progress}
-                                                        listError={listError}
-                                                        onRetryList={() => setListError(null)}
-                                                    />
-                                                ) : (
-                                                    <LibraryItemTable
-                                                        rows={groupRowsByFeature[feature][index]}
-                                                        selected={selected}
-                                                        toggle={toggle}
-                                                        onRemove={askRemove}
-                                                        progress={progress}
-                                                    />
-                                                )}
-                                            </Stack>
-                                        ))}
+                                                    {group.noteKey && (
+                                                        <Typography
+                                                            variant='body2'
+                                                            color='text.secondary'
+                                                            sx={{ lineHeight: 1.6 }}
+                                                        >
+                                                            {t(group.noteKey)}
+                                                        </Typography>
+                                                    )}
+                                                    {group.itemPrefix === SEPARATOR_MODEL_PREFIX ? (
+                                                        <SeparatorModelSection
+                                                            key={openCount}
+                                                            group={group}
+                                                            status={status}
+                                                            items={items}
+                                                            initialCategory={initialSeparatorCategory}
+                                                            selected={selected}
+                                                            toggle={toggle}
+                                                            selectMany={selectMany}
+                                                            onRemove={askRemove}
+                                                            progress={progress}
+                                                            listError={listError}
+                                                            onRetryList={() => setListError(null)}
+                                                        />
+                                                    ) : (
+                                                        <LibraryItemTable
+                                                            rows={groupRowsByFeature[feature][index]}
+                                                            selected={selected}
+                                                            toggle={toggle}
+                                                            onRemove={askRemove}
+                                                            progress={progress}
+                                                        />
+                                                    )}
+                                                </Stack>
+                                            )
+                                        )}
                                     </Stack>
                                 </Box>
                             );

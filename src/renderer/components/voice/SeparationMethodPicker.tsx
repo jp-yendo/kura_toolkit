@@ -11,6 +11,7 @@ import {
     TextField,
     ToggleButton,
     ToggleButtonGroup,
+    Tooltip,
     Typography,
 } from '@mui/material';
 import CheckIcon from '@mui/icons-material/Check';
@@ -53,6 +54,7 @@ import {
 import { completeEffects, EffectFields, effectsSummary } from './AudioEffectFields';
 import { effectsDefaults, hasEffect, type EffectsOptions } from '@shared/voice/audio-effects';
 import { wrapSelectSx } from '../common/selectStyles';
+import { useSeparationModelsUnavailableKey } from '../../stores/voicePlatformStore';
 
 // 分離の方式の選択。選び方は 4 つ (タブで切り替える。実行したときに開いているタブが、その分岐の方式になる):
 // - おすすめ: 目的別のおすすめ (ダウンロード画面と同じ。配布元が検証した組み合わせと、目的に合うモデル) から 1 つを選ぶ
@@ -72,7 +74,16 @@ export const EMPTY_METHOD_SELECTION: MethodSelection = {
     algorithm: 'avg_wave',
 };
 
-type PickMode = 'recommended' | 'model' | 'other' | 'effects';
+export type PickMode = 'recommended' | 'model' | 'other' | 'effects';
+
+const NO_DISABLED_MODES: PickMode[] = [];
+const MODEL_MODE_DISABLED: PickMode[] = ['model'];
+
+// 選べない選び方。分離のモデルを使えない環境では、モデルのタブを選べない
+// (選び方の画面・選んだ方式の決定・選んだ内容の表示で同じものを使う)
+export function useDisabledPickModes(): PickMode[] {
+    return useSeparationModelsUnavailableKey() ? MODEL_MODE_DISABLED : NO_DISABLED_MODES;
+}
 
 // おすすめの項目
 type RecommendedOption = {
@@ -151,7 +162,8 @@ function findRecommended(
 }
 
 // 選べる選び方 (おすすめは取得済みのものが無ければ出さない)。モデルのタブは、取得済みのモデルが無くても
-// まとまりと取得の案内を示すため常に出す。除去・調整とエフェクトのタブもモデルを使わないため常に出す
+// まとまりと取得の案内を示すため常に出す (分離のモデルを使えない環境では、選べない状態で出す)。
+// 除去・調整とエフェクトのタブもモデルを使わないため常に出す
 function availableModes(list: SeparationModelList | null): PickMode[] {
     const modes: PickMode[] = [];
     if (buildRecommended(list).length > 0) modes.push('recommended');
@@ -159,8 +171,19 @@ function availableModes(list: SeparationModelList | null): PickMode[] {
     return modes;
 }
 
-function activeMode(selection: MethodSelection, modes: PickMode[]): PickMode | null {
-    return selection.mode && modes.includes(selection.mode) ? selection.mode : (modes[0] ?? null);
+// 開いているタブ。選べないタブ (分離のモデルを使えない環境のモデルのタブ) は開かず、選べる先頭のタブにする
+function activeMode(selection: MethodSelection, modes: PickMode[], disabledModes: PickMode[]): PickMode | null {
+    const enabled = modes.filter(item => !disabledModes.includes(item));
+    return selection.mode && enabled.includes(selection.mode) ? selection.mode : (enabled[0] ?? null);
+}
+
+// 開いているタブ (分岐のダイアログの実行ボタンの名前に使う)
+export function activePickMode(
+    selection: MethodSelection,
+    list: SeparationModelList | null,
+    disabledModes: PickMode[]
+): PickMode | null {
+    return activeMode(selection, availableModes(list), disabledModes);
 }
 
 function archsOf(list: SeparationModelList | null, filenames: string[]): SeparationArch[] {
@@ -184,9 +207,13 @@ function selectedModels(selection: MethodSelection, list: SeparationModelList | 
 }
 
 // 選んだ方式を求める
-export function resolveMethod(selection: MethodSelection, list: SeparationModelList | null): ResolvedMethod {
+export function resolveMethod(
+    selection: MethodSelection,
+    list: SeparationModelList | null,
+    disabledModes: PickMode[]
+): ResolvedMethod {
     const none: ResolvedMethod = { method: null, archs: [] };
-    const mode = activeMode(selection, availableModes(list));
+    const mode = activeMode(selection, availableModes(list), disabledModes);
     if (mode === 'effects') {
         const effects = effectsChoice(selection);
         return hasEffect(effects) ? { method: { kind: 'effects', effects }, archs: [] } : none;
@@ -324,11 +351,14 @@ function OptionSummary({ t, option }: { t: TFunction; option: RecommendedOption 
 export default function SeparationMethodPicker({ models, value, onChange, disabled, presets, inputStereo }: Props) {
     const { t } = useTranslation();
     const modes = React.useMemo(() => availableModes(models), [models]);
+    // 分離のモデルを使えない環境では、モデルのタブを選べなくし、理由をツールチップで示す
+    const modelsUnavailableKey = useSeparationModelsUnavailableKey();
+    const disabledModes = useDisabledPickModes();
     const recommended = React.useMemo(() => buildRecommended(models), [models]);
     const installed = React.useMemo(() => installedModels(models), [models]);
     const chosen = React.useMemo(() => selectedModels(value, models), [value, models]);
-    const mode = activeMode(value, modes);
-    const resolved = resolveMethod(value, models);
+    const mode = activeMode(value, modes, disabledModes);
+    const resolved = resolveMethod(value, models, disabledModes);
     const noiseModels = React.useMemo(() => installedRecommended(models, NOISE_REMOVAL_MODELS), [models]);
     const dereverbModels = React.useMemo(() => installedRecommended(models, DEREVERB_MODELS), [models]);
     const update = (patch: Partial<MethodSelection>) => onChange({ ...value, mode, ...patch });
@@ -384,11 +414,27 @@ export default function SeparationMethodPicker({ models, value, onChange, disabl
                     value={mode}
                     onChange={(_event, next: PickMode | null) => next && update({ mode: next })}
                 >
-                    {modes.map(item => (
-                        <ToggleButton key={item} value={item} sx={{ flexGrow: 1 }}>
-                            {t(`voice.separation.pickModes.${item}`)}
-                        </ToggleButton>
-                    ))}
+                    {modes.map(item => {
+                        const button = (
+                            <ToggleButton
+                                key={item}
+                                value={item}
+                                disabled={disabledModes.includes(item)}
+                                sx={{ flexGrow: 1 }}
+                            >
+                                {t(`voice.separation.pickModes.${item}`)}
+                            </ToggleButton>
+                        );
+                        if (!disabledModes.includes(item) || !modelsUnavailableKey) return button;
+                        // 選べないボタンはマウスの操作を受けないため、ツールチップは外側の枠に付ける
+                        return (
+                            <Tooltip key={item} title={t(modelsUnavailableKey)}>
+                                <Box component='span' sx={{ display: 'flex', flexGrow: 1 }}>
+                                    {button}
+                                </Box>
+                            </Tooltip>
+                        );
+                    })}
                 </ToggleButtonGroup>
             )}
 
@@ -584,9 +630,17 @@ export default function SeparationMethodPicker({ models, value, onChange, disabl
 
 // 選んだ内容 (分岐のダイアログの右側)。おすすめは選んだ方式と説明、モデルは選んだモデルを積み重ねて (まとまりの順、
 // まとまりの中は名前の順)、除去・調整はチェックした加工を、エフェクトはチェックしたエフェクトを処理の順に示す
-export function SelectedMethodPanel({ models, value }: { models: SeparationModelList | null; value: MethodSelection }) {
+export function SelectedMethodPanel({
+    models,
+    value,
+    disabledModes,
+}: {
+    models: SeparationModelList | null;
+    value: MethodSelection;
+    disabledModes: PickMode[];
+}) {
     const { t } = useTranslation();
-    const mode = activeMode(value, availableModes(models));
+    const mode = activeMode(value, availableModes(models), disabledModes);
     const none = (
         <Typography variant='body2' color='text.secondary'>
             {t('voice.separation.selectedNone')}
@@ -628,7 +682,7 @@ export function SelectedMethodPanel({ models, value }: { models: SeparationModel
             </Stack>
         );
     }
-    const method = resolveMethod(value, models).method;
+    const method = resolveMethod(value, models, disabledModes).method;
     if (method?.kind !== 'process' && method?.kind !== 'effects') return none;
     const names = (models?.models ?? []).map(model => ({ filename: model.filename, name: model.name }));
     const parts = method.kind === 'effects' ? effectsSummary(t, method.effects) : filterSummary(t, method, names);

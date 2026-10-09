@@ -7,6 +7,8 @@ import CallSplitIcon from '@mui/icons-material/CallSplit';
 import RecordVoiceOverIcon from '@mui/icons-material/RecordVoiceOver';
 import CampaignIcon from '@mui/icons-material/Campaign';
 import { FEATURE_COLORS } from '../theme';
+import { featureUnavailableReasonKey, isFeatureHidden } from '@shared/voice/availability';
+import type { VoiceFeatureId, VoicePlatformInfo } from '@shared/voice/types';
 
 // 機能カテゴリ (タイトルバーのメニューとダッシュボードの分類)
 export type FeatureCategory = 'audio' | 'video' | 'image' | 'tools';
@@ -22,6 +24,8 @@ export type FeatureDef = {
     color: string;
     titleKey: string;
     descKey: string;
+    // 音声機能 (使えない環境ではメニューとダッシュボードで選べなくする)
+    voiceFeature?: VoiceFeatureId;
 };
 
 // 機能レジストリ: タイトルバーのドロップダウンとダッシュボードのカードが共用する
@@ -43,6 +47,7 @@ export const FEATURES: FeatureDef[] = [
         color: FEATURE_COLORS.audio,
         titleKey: 'features.separation.title',
         descKey: 'features.separation.desc',
+        voiceFeature: 'separation',
     },
     {
         id: 'conversion',
@@ -52,6 +57,7 @@ export const FEATURES: FeatureDef[] = [
         color: FEATURE_COLORS.audio,
         titleKey: 'features.conversion.title',
         descKey: 'features.conversion.desc',
+        voiceFeature: 'conversion',
     },
     {
         id: 'tts',
@@ -61,6 +67,7 @@ export const FEATURES: FeatureDef[] = [
         color: FEATURE_COLORS.audio,
         titleKey: 'features.tts.title',
         descKey: 'features.tts.desc',
+        voiceFeature: 'tts',
     },
     {
         id: 'chapterCut',
@@ -99,6 +106,13 @@ const SUB_ROUTE_TITLES: Record<string, string> = {
     '/audio/tts/models': 'features.tts.title',
     '/audio/tts/training': 'features.tts.title',
 };
+
+// 機能をその環境で使えない理由の翻訳キー (使える場合と、環境がまだ分からない場合は null)。
+// アプリが固定している版のライブラリに、その環境向けの配布物が無い機能が当てはまる
+export function featureUnavailableKey(feature: FeatureDef, platform: VoicePlatformInfo | null): string | null {
+    if (!feature.voiceFeature || !platform || !isFeatureHidden(platform, feature.voiceFeature)) return null;
+    return featureUnavailableReasonKey(platform, feature.voiceFeature);
+}
 
 export function featuresByCategory(category: FeatureCategory): FeatureDef[] {
     return FEATURES.filter(feature => feature.category === category);

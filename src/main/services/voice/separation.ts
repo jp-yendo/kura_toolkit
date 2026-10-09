@@ -12,6 +12,8 @@ import { getWorker } from './python-worker';
 import { ensureSeparatorModelList, readSeparatorModelList, separatorModelInstalled } from './separator-models';
 import { separatorItemId } from './spec';
 import { withGpu } from './gpu-lock';
+import { getPlatformInfo } from './platform';
+import { separationModelsAvailable } from '../../../shared/voice/availability';
 import { editSilence, normalizeLoudness, removeNoise, removeReverb } from './audio-filters';
 import { applyEffects, effectStageCount } from './audio-effects';
 import { hasEffect, sanitizeEffectsOptions, type EffectsOptions } from '../../../shared/voice/audio-effects';
@@ -70,6 +72,8 @@ export async function prepareInput(jobId: string, workKey: string, sourcePath: s
 export async function listSeparationModels(): Promise<SeparationModelList> {
     // 更新が必要なパッケージ一式 (古い版) では一覧を作らない (古い版の一覧を新しい版のものとして残さないため)
     if (!(await isComponentCurrent('separator'))) throw new Error('SEPARATOR_NOT_INSTALLED');
+    // 分離のモデルを使えない環境では、モデルの無い一覧を返す (モデルを使わない処理だけを選べる)
+    if (!separationModelsAvailable(await getPlatformInfo())) return { models: [], ensembles: [] };
     const list = await ensureSeparatorModelList();
     const installed = new Set<string>();
     const models: SeparationModel[] = list.models.map(model => {

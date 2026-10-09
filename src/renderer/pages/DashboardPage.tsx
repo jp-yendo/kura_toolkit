@@ -1,9 +1,10 @@
-import { Avatar, Box, ButtonBase, Typography } from '@mui/material';
+import { Avatar, Box, ButtonBase, Tooltip, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { useGuardedNavigate } from '../stores/navigationGuard';
 import PageContainer from '../components/common/PageContainer';
 import SectionLabel from '../components/common/SectionLabel';
-import { FEATURE_CATEGORIES, featuresByCategory, type FeatureDef } from '../navigation/features';
+import { FEATURE_CATEGORIES, featuresByCategory, featureUnavailableKey, type FeatureDef } from '../navigation/features';
+import { useVoicePlatform } from '../stores/voicePlatformStore';
 
 // 1 行に並べるカードの最大数と、カードの最小幅・列の間隔 (px。間隔は theme.spacing(2))
 const MAX_COLUMNS = 4;
@@ -34,12 +35,22 @@ function responsive<T extends object>(build: (columns: number) => T): Record<str
     return result;
 }
 
-function FeatureCard({ feature, onOpen }: { feature: FeatureDef; onOpen: () => void }) {
+// unavailableKey: その環境で使えない機能の理由 (翻訳キー)。指定すると選べなくし、理由をツールチップで示す
+function FeatureCard({
+    feature,
+    onOpen,
+    unavailableKey,
+}: {
+    feature: FeatureDef;
+    onOpen: () => void;
+    unavailableKey: string | null;
+}) {
     const { t } = useTranslation();
     const Icon = feature.icon;
-    return (
+    const card = (
         <ButtonBase
             onClick={onOpen}
+            disabled={unavailableKey !== null}
             sx={{
                 display: 'flex',
                 flexDirection: 'column',
@@ -55,6 +66,7 @@ function FeatureCard({ feature, onOpen }: { feature: FeatureDef; onOpen: () => v
                 minWidth: 0,
                 transition: 'background-color 0.15s, border-color 0.15s',
                 '&:hover': { bgcolor: 'action.hover', borderColor: 'text.disabled' },
+                '&.Mui-disabled': { opacity: theme => theme.palette.action.disabledOpacity },
             }}
         >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
@@ -87,11 +99,19 @@ function FeatureCard({ feature, onOpen }: { feature: FeatureDef; onOpen: () => v
             </Typography>
         </ButtonBase>
     );
+    if (unavailableKey === null) return card;
+    // 選べないボタンはマウスの操作を受けないため、ツールチップは外側の枠に付ける (枠はグリッドの 1 マスを埋める)
+    return (
+        <Tooltip title={t(unavailableKey)}>
+            <Box sx={{ display: 'flex', minWidth: 0, '& > *': { flexGrow: 1 } }}>{card}</Box>
+        </Tooltip>
+    );
 }
 
 export default function DashboardPage() {
     const { t } = useTranslation();
     const navigate = useGuardedNavigate();
+    const platform = useVoicePlatform();
 
     return (
         <PageContainer sx={{ maxWidth: 1400, mx: 'auto', width: '100%' }}>
@@ -134,6 +154,7 @@ export default function DashboardPage() {
                                         key={feature.id}
                                         feature={feature}
                                         onOpen={() => navigate(feature.route)}
+                                        unavailableKey={featureUnavailableKey(feature, platform)}
                                     />
                                 ))}
                             </Box>

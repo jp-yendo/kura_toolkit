@@ -14,6 +14,7 @@ import {
 } from './installer';
 import { readManifest, updateManifest, type LibraryManifest } from './manifest';
 import { requiredItems } from '../../../shared/voice/requirements';
+import { isFeatureAvailable, separationModelsAvailable } from '../../../shared/voice/availability';
 import { envPythonExecutable, libraryCacheDirOf, libraryPaths, modelPaths } from './paths';
 import { clearReadyModelOverride } from './ready-model-overrides';
 import {
@@ -42,9 +43,11 @@ import {
 import {
     COMPONENT_SPECS,
     componentSpec,
-    componentVariant,
     estimateComponentBytes,
+    isVariantUsable,
     JVNV_MODEL_NAMES,
+    resolveComponentSpec,
+    SEPARATOR_LITE_VERSION,
     MODEL_SPECS,
     readyItemId,
     PYTHON_SPEC,
@@ -60,6 +63,7 @@ import type {
     FeatureReadiness,
     LibraryDownloadResult,
     LibraryItem,
+    LibraryItemGroup,
     LibraryItemResult,
     LibraryItemStatus,
     LibraryProgress,
@@ -110,15 +114,17 @@ function pythonStatus(manifest: LibraryManifest): LibraryItemStatus {
 }
 
 function componentStatus(
-    spec: ComponentSpec,
+    componentSpec: ComponentSpec,
     manifest: LibraryManifest,
     platform: VoicePlatformInfo
 ): LibraryItemStatus {
+    // その環境で使う定義 (PyTorch を使えない環境の分離・加工は軽いパッケージ一式) と照らし合わせる
+    const spec = resolveComponentSpec(componentSpec, platform);
     const entry = manifest.components[spec.id];
     if (!entry) return 'missing';
     if (entry.broken || !fs.existsSync(envPythonExecutable(spec.env))) return 'broken';
     if (spec.source && !fs.existsSync(libraryPaths().source(sourceOwner(spec)))) return 'broken';
-    if (entry.version !== spec.version || entry.variant !== componentVariant(platform)) return 'outdated';
+    if (entry.version !== spec.version || !isVariantUsable(entry.variant, platform)) return 'outdated';
     return 'installed';
 }
 
@@ -137,6 +143,13 @@ function sumSizes(files: SpecFile[]): number | null {
         total += file.size;
     }
     return total > 0 ? total : null;
+}
+
+// その環境で確実に使えない項目か (ダウンロードの画面に出さず、取得もさせない)。PyTorch の配布物が無い環境
+// (Intel 版 Mac・macOS 14 より前の macOS) の、音声変換・読み上げのもの (パッケージ一式・モデル) と分離のモデルが当てはまる
+function isItemHidden(platform: VoicePlatformInfo, group: LibraryItemGroup, kind: LibraryItem['kind']): boolean {
+    if (!platform.supported || separationModelsAvailable(platform)) return false;
+    return group === 'converter' || group === 'tts' || (group === 'separator' && kind === 'model');
 }
 
 function buildItems(platform: VoicePlatformInfo, manifest: LibraryManifest): LibraryItem[] {
@@ -158,13 +171,16 @@ function buildItems(platform: VoicePlatformInfo, manifest: LibraryManifest): Lib
         available: supported,
     });
     for (const id of COMPONENT_ORDER) {
-        const spec = COMPONENT_SPECS.find(item => item.id === id) as ComponentSpec;
+        const spec = resolveComponentSpec(COMPONENT_SPECS.find(item => item.id === id) as ComponentSpec, platform);
+        const group: LibraryItemGroup =
+            spec.env === 'separator' ? 'separator' : spec.env === 'converter' ? 'converter' : 'tts';
+        if (isItemHidden(platform, group, 'component')) continue;
         const trainingOnly = id === 'tts-train';
         const available = supported && (!trainingOnly || platform.ttsTrainingAvailable);
         items.push({
             id: componentItemId(id),
             kind: 'component',
-            group: spec.env === 'separator' ? 'separator' : spec.env === 'converter' ? 'converter' : 'tts',
+            group,
             nameKey: spec.nameKey,
             descriptionKey: spec.descriptionKey,
             sizeBytes: estimateComponentBytes(spec, platform),
@@ -184,6 +200,7 @@ function buildItems(platform: VoicePlatformInfo, manifest: LibraryManifest): Lib
         });
     }
     for (const spec of MODEL_SPECS) {
+        if (isItemHidden(platform, spec.group, 'model')) continue;
         const available = supported && (spec.trainingOnly !== 'tts' || platform.ttsTrainingAvailable);
         items.push({
             id: spec.id,
@@ -205,6 +222,8 @@ function buildItems(platform: VoicePlatformInfo, manifest: LibraryManifest): Lib
             readsLanguages: spec.readsLanguages,
         });
     }
+    // 分離のモデルは、使えない環境では一覧も取得済みのものも出さない
+    if (isItemHidden(platform, 'separator', 'model')) return items;
     const listed = new Set<string>();
     const list = readSeparatorModelList();
     if (list) {
@@ -282,7 +301,11 @@ export async function checkFeature(feature: VoiceFeatureId, extra: string[] = []
     const status = await getLibraryStatus();
     const byId = new Map(status.items.map(item => [item.id, item]));
     const missing = [...requiredItems(feature), ...extra].filter(id => byId.get(id)?.status !== 'installed');
-    return { ready: status.platform.supported && missing.length === 0, missing, platform: status.platform };
+    return {
+        ready: isFeatureAvailable(status.platform, feature) && missing.length === 0,
+        missing,
+        platform: status.platform,
+    };
 }
 
 // パッケージ一式が取得済みで、版がこのアプリの定義と合っているか (更新が必要なものは含めない)
@@ -482,7 +505,8 @@ async function installItem(item: LibraryItem, platform: VoicePlatformInfo, conte
     const component = componentFromItemId(item.id);
     if (component) {
         await installComponent(component, platform, estimateComponentBytes(component, platform), context);
-        if (component.id === 'separator') {
+        // 分離のモデルを使えない環境のパッケージ一式には、モデルの一覧を作るためのライブラリ (audio-separator) が無い
+        if (component.id === 'separator' && separationModelsAvailable(platform)) {
             // 分離モデルの一覧は導入したパッケージから取得する (取得できなければこの項目を失敗とする)
             // (一覧を開いている画面からの同時の作成と、問い合わせを 1 回にまとめる)
             forgetSeparatorModelList();
@@ -682,12 +706,13 @@ function relocateVenv(component: VoiceComponentId, newRoot: string): boolean {
 
 // 移動先 (libraryRoot) の仮想環境が動くかを確かめる。Python が起動して失敗した場合だけ動かない (false) とし、
 // 起動できない場合 (作業ディレクトリが無い・実行環境が足りないなど) は仮想環境の問題ではないため、そのまま失敗させる
-async function verifyVenv(component: VoiceComponentId, libraryRoot: string): Promise<boolean> {
+// probeModule: 読み込んで確かめるモジュール (PyTorch を含めない分離・加工のパッケージ一式では pedalboard)
+async function verifyVenv(component: VoiceComponentId, libraryRoot: string, probeModule: string): Promise<boolean> {
     // 仮想環境の Python が無い (写したときに欠けたなど) 場合は、仮想環境が動かないものとする
     if (!fs.existsSync(envPythonExecutable(component, libraryRoot))) return false;
     const result = await runProcess(
         envPythonExecutable(component, libraryRoot),
-        ['-c', 'import sys, torch; print(sys.prefix)'],
+        ['-c', `import sys, ${probeModule}; print(sys.prefix)`],
         { env: buildPythonEnv(component, {}, libraryRoot) }
     );
     if (result.code === WINDOWS_DLL_NOT_FOUND) throw new Error('VC_RUNTIME_MISSING');
@@ -774,7 +799,10 @@ async function relocateVenvs(newRoot: string): Promise<string[]> {
     for (const spec of specs) {
         let works: boolean;
         try {
-            works = relocated.get(spec.id) === true && (await verifyVenv(spec.env, newRoot));
+            // PyTorch を含めない分離・加工のパッケージ一式 (PyTorch を使えない環境で入れたもの) は pedalboard で確かめる
+            const probeModule =
+                manifest.components[spec.id]?.version === SEPARATOR_LITE_VERSION ? 'pedalboard' : 'torch';
+            works = relocated.get(spec.id) === true && (await verifyVenv(spec.env, newRoot, probeModule));
         } catch (error) {
             verifyError ??= error;
             continue;

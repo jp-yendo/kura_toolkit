@@ -36,6 +36,7 @@ import {
     type SilenceOption,
 } from '@shared/voice/audio-filters';
 import type { SeparationArch } from '@shared/voice/types';
+import { useSeparationModelsUnavailableKey } from '../../stores/voicePlatformStore';
 
 // 声の音の加工の設定欄 (残響・エコーの除去・無音の扱い・ノイズ除去・音量をそろえる)。変換のオプション・学習用の音の
 // フィルター・分岐の「その他」で同じものを使う。どれもチェックすると、その下にスライダーなどを出す
@@ -281,6 +282,8 @@ export function DereverbFields({
 }) {
     const { t } = useTranslation();
     const libraryModels = useDereverbModels();
+    // 分離のモデルを使えない環境では、取得の案内ではなく使えない理由を示す
+    const modelsUnavailableKey = useSeparationModelsUnavailableKey();
     const models = availableModels ?? libraryModels;
     const available = models.length > 0;
     const model = models.find(item => item.filename === value.model) ?? models[0] ?? null;
@@ -306,7 +309,7 @@ export function DereverbFields({
     );
     if (available) return block;
     return (
-        <Tooltip title={t('voice.filters.dereverbModelMissing')}>
+        <Tooltip title={t(modelsUnavailableKey ?? 'voice.filters.dereverbModelMissing')}>
             <Box component='span' sx={{ alignSelf: 'flex-start' }}>
                 {block}
             </Box>
@@ -328,6 +331,8 @@ export function NoiseRemovalFields({
 }) {
     const { t } = useTranslation();
     const libraryModels = useNoiseRemovalModels();
+    // 分離のモデルを使えない環境では、取得の案内ではなく使えない理由を示す
+    const modelsUnavailableKey = useSeparationModelsUnavailableKey();
     const models = availableModels ?? libraryModels;
     const modelAvailable = models.length > 0;
     // モデルが無くなった場合は簡易的に除去する
@@ -365,7 +370,7 @@ export function NoiseRemovalFields({
                     control={<Radio size='small' />}
                     label={t('voice.filters.noiseWavelet')}
                 />
-                <Tooltip title={modelAvailable ? '' : t('voice.filters.noiseModelMissing')}>
+                <Tooltip title={modelAvailable ? '' : t(modelsUnavailableKey ?? 'voice.filters.noiseModelMissing')}>
                     <Box component='span' sx={{ alignSelf: 'flex-start' }}>
                         <FormControlLabel
                             value='model'

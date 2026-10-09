@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-09
+
+### Changed
+
+- macOS: Audio Separation & Processing is no longer limited to macOS 14 or later on Apple Silicon. On Intel Macs and
+  macOS 13 or earlier, the processing that does not use a model (noise removal without a model, silencing the noise
+  in silent parts, matching the volume and effects) can be used. Voice Conversion and Text to Speech still require
+  macOS 14 or later on Apple Silicon.
+- Windows: after the NVIDIA GPU is removed (or is no longer detected), the voice feature packages no longer have to
+  be downloaded again. They keep working on the CPU.
+
+### Fixed
+
+- Audio Normalizer: when FFmpeg cannot be found or cannot be started, analyzing and normalizing now show
+  an error message instead of only marking each file with "!".
+
 ## [0.3.0] - 2026-10-08
 
 ### Added

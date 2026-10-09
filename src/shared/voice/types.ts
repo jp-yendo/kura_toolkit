@@ -68,7 +68,8 @@ export type ExportResult = {
 // 実行環境とライブラリ (ダウンロード・削除)
 // ---------------------------------------------------------------------------
 
-export type VoicePlatformKey = 'win32-x64' | 'darwin-arm64' | 'linux-x64' | 'unsupported';
+export type VoicePlatformKey =
+    'win32-x64' | 'darwin-arm64' | 'darwin-x64' | 'linux-x64' | 'linux-arm64' | 'unsupported';
 
 // PyTorch の CUDA 版の種類 (GPU の世代とドライバーで決める)
 export type CudaFlavor = 'cu130' | 'cu128' | 'cu126';
@@ -86,11 +87,16 @@ export type VoicePlatformInfo = {
     platform: VoicePlatformKey;
     supported: boolean;
     // 非対応の理由 (supported = false の場合)
-    unsupportedReason?: 'os' | 'arch' | 'macosVersion';
+    unsupportedReason?: 'os' | 'arch';
+    // PyTorch を使う処理 (分離のモデル・音声変換・読み上げ) を使えない理由。使える場合は undefined。
+    // アプリが固定している版の PyTorch などに、その環境向けの配布物が無い場合 (Intel 版 Mac、macOS 14 より前の macOS)。
+    // この場合も、PyTorch を使わない分離・加工の処理 (除去・調整のうちモデルを使わないもの・エフェクト) は使える
+    torchUnavailableReason?: 'intelMac' | 'macosVersion';
     gpu: GpuInfo;
     // Windows で Microsoft Visual C++ 再頒布可能パッケージが見つからない
     vcRuntimeMissing: boolean;
-    // 読み上げのモデルの学習ができる環境か (NVIDIA GPU を使える Windows と Linux のみ)
+    // 読み上げのモデルの学習ができる環境か (Windows は NVIDIA GPU を使える場合のみ。macOS・Linux は PyTorch を使える場合。
+    // NVIDIA GPU が無い場合は CPU で学習する)
     ttsTrainingAvailable: boolean;
     libraryDir: string;
     modelDir: string;

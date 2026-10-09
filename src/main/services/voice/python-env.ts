@@ -85,6 +85,14 @@ export function buildPythonEnv(
             KMP_DUPLICATE_LIB_OK: 'TRUE',
         });
     }
+    if (process.platform === 'darwin' && component === 'converter') {
+        // macOS の Applio では、PyTorch と faiss がそれぞれ同梱する OpenMP (libomp) が同じプロセスで動き、
+        // 複数スレッドで処理するとプロセスが落ちる (学習の特徴抽出・インデックスの作成、変換のインデックスの検索)。
+        // Applio 自身が Apple Silicon で設定している値 (rvc/lib/platform.py の platform_config) に合わせる。
+        // Applio (音声変換) は macOS では Apple Silicon でしか動かず、x64 版のアプリでも Python は arm64 版を動かすため、
+        // アプリの CPU の種類 (process.arch) では判定しない
+        env.OMP_NUM_THREADS = '1';
+    }
     if (process.platform === 'win32') {
         // PyTorch の分散処理の初期化 (学習で 1 プロセスでも使われる) が libuv 無しのビルドで失敗するのを避ける
         env.USE_LIBUV = '0';

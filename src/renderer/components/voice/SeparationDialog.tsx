@@ -11,8 +11,10 @@ import SeparationParamsForm from './SeparationParamsForm';
 import SeparationMethodPicker, {
     EMPTY_METHOD_SELECTION,
     hasUnavailableChoice,
+    activePickMode,
     resolveMethod,
     SelectedMethodPanel,
+    useDisabledPickModes,
     type MethodSelection,
 } from './SeparationMethodPicker';
 import { showNotice } from '../../stores/noticeStore';
@@ -85,7 +87,11 @@ export default function SeparationDialog({
         // eslint-disable-next-line react-hooks/exhaustive-deps -- 開いた時点の条件で初期化する
     }, [open]);
 
-    const resolved = resolveMethod(selection, models);
+    // 選べない選び方 (分離のモデルを使えない環境のモデルのタブ)
+    const disabledModes = useDisabledPickModes();
+    const resolved = resolveMethod(selection, models, disabledModes);
+    // 開いているタブ (選べないタブは開かないため、選んだ内容のタブと異なることがある)
+    const activeMode = activePickMode(selection, models, disabledModes);
     const busy = disabled || running;
 
     // プリセットの呼び出し: 方式の選び方 (おすすめ・モデル・除去・調整・エフェクト) と詳細な設定をまとめて戻す
@@ -209,7 +215,7 @@ export default function SeparationDialog({
                     }}
                 >
                     <SectionLabel>{t('voice.separation.selectedTitle')}</SectionLabel>
-                    <SelectedMethodPanel models={models} value={selection} />
+                    <SelectedMethodPanel models={models} value={selection} disabledModes={disabledModes} />
                 </Stack>
             </DialogContent>
             <DialogActions>
@@ -224,9 +230,9 @@ export default function SeparationDialog({
                 >
                     {/* 開いているタブ (その分岐の方式) に合わせた名前にする (除去・調整とエフェクトは分離しないため) */}
                     {t(
-                        selection.mode === 'other'
+                        activeMode === 'other'
                             ? 'voice.separation.runProcess'
-                            : selection.mode === 'effects'
+                            : activeMode === 'effects'
                               ? 'voice.separation.runEffects'
                               : 'voice.separation.run'
                     )}

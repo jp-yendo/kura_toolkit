@@ -1,0 +1,8 @@
+# Pinned dependencies of the separator component for platforms without PyTorch
+# (Intel Macs and macOS earlier than 14). Same versions as separator.lock.txt.
+cffi==2.1.1
+numpy==2.4.6
+pedalboard==0.9.24
+pycparser==3.0
+soundfile==0.14.0
+typing_extensions==4.16.0

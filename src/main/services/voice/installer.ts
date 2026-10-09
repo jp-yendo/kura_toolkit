@@ -10,6 +10,7 @@ import { cachePath } from '../cache-dir';
 import {
     componentVariant,
     COMPONENT_SPECS,
+    resolveComponentSpec,
     MODEL_SPECS,
     PYTHON_SPEC,
     SEPARATOR_MODEL_DIR,
@@ -250,7 +251,8 @@ function readRequirementLines(name: string): string[] {
 // (Linux の PyPI の PyTorch は CUDA のライブラリ一式を含むため)。それ以外 (Windows の CPU・macOS) は PyPI のもの
 function torchFlavor(platform: VoicePlatformInfo): CudaFlavor | 'cpu' | null {
     if (platform.platform === 'win32-x64') return platform.gpu.cudaFlavor ?? null;
-    if (platform.platform === 'linux-x64') return platform.gpu.cudaFlavor ?? 'cpu';
+    if (platform.platform === 'linux-x64' || platform.platform === 'linux-arm64')
+        return platform.gpu.cudaFlavor ?? 'cpu';
     return null;
 }
 
@@ -455,16 +457,19 @@ function setupApplio(): void {
     fs.writeFileSync(config, JSON.stringify(data, null, 2), 'utf-8');
 }
 
-// 導入できたかを、主要なモジュールの読み込みで確かめる
-const VERIFY_IMPORTS: Record<ComponentSpec['id'], string> = {
+// 導入できたかを、主要なモジュールの読み込みで確かめる (requirements のファイル名ごと)
+const VERIFY_IMPORTS: Record<string, string> = {
     separator: 'import torch, onnxruntime, pedalboard, audio_separator.separator',
+    'separator-lite': 'import pedalboard, numpy, soundfile',
     converter: 'import torch, torchaudio, faiss, librosa, pedalboard, soundfile, transformers',
     tts: 'import torch, style_bert_vits2.tts_model, pyopenjtalk',
     'tts-train': 'import torch, torchaudio, librosa, pyloudnorm, pyannote.audio',
 };
 
 async function verifyComponent(spec: ComponentSpec): Promise<void> {
-    const result = await runProcess(envPythonExecutable(spec.env), ['-c', VERIFY_IMPORTS[spec.id]], {
+    const imports = VERIFY_IMPORTS[spec.requirements];
+    if (!imports) throw new Error(`VERIFY_FAILED: no import check for ${spec.requirements}`);
+    const result = await runProcess(envPythonExecutable(spec.env), ['-c', imports], {
         env: buildPythonEnv(spec.env),
         cwd: spec.env === 'converter' ? libraryPaths().source('converter') : undefined,
     });
@@ -473,11 +478,13 @@ async function verifyComponent(spec: ComponentSpec): Promise<void> {
 }
 
 export async function installComponent(
-    spec: ComponentSpec,
+    componentSpec: ComponentSpec,
     platform: VoicePlatformInfo,
     estimate: number,
     context: InstallContext
 ): Promise<void> {
+    // その環境で使う定義 (PyTorch を使えない環境の分離・加工は軽いパッケージ一式) にする
+    const spec = resolveComponentSpec(componentSpec, platform);
     if (!fs.existsSync(pythonExecutable())) throw new Error('PYTHON_MISSING');
     await ensureVenv(spec.env);
     await installSource(spec, context);

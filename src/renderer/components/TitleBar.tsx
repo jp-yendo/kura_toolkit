@@ -9,6 +9,7 @@ import {
     ListItemIcon,
     ListItemText,
     Divider,
+    Tooltip,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
@@ -26,9 +27,12 @@ import {
     FEATURE_CATEGORIES,
     FEATURES,
     featuresByCategory,
+    featureUnavailableKey,
     titleKeyForRoute,
     type FeatureCategory,
+    type FeatureDef,
 } from '../navigation/features';
+import { useVoicePlatform } from '../stores/voicePlatformStore';
 
 type Props = {
     info: AppInfo | undefined;
@@ -57,6 +61,37 @@ export default function TitleBar({ info }: Props) {
     const goTo = (route: string) => {
         closeMenus();
         navigate(route);
+    };
+
+    // 機能の項目。その環境で使えない機能は選べなくし、理由をツールチップで示す
+    // (選べない項目にもマウスの操作を通して、ツールチップを出せるようにする)
+    const platform = useVoicePlatform();
+    const featureItem = (feature: FeatureDef) => {
+        const Icon = feature.icon;
+        const unavailableKey = featureUnavailableKey(feature, platform);
+        const item = (
+            <MenuItem
+                key={feature.id}
+                disabled={unavailableKey !== null}
+                onClick={unavailableKey === null ? () => goTo(feature.route) : undefined}
+                sx={
+                    unavailableKey === null
+                        ? undefined
+                        : { '&.Mui-disabled': { pointerEvents: 'auto', '&:hover': { bgcolor: 'transparent' } } }
+                }
+            >
+                <ListItemIcon>
+                    <Icon fontSize='small' />
+                </ListItemIcon>
+                <ListItemText>{t(feature.titleKey)}</ListItemText>
+            </MenuItem>
+        );
+        if (unavailableKey === null) return item;
+        return (
+            <Tooltip key={feature.id} title={t(unavailableKey)} placement='right'>
+                {item}
+            </Tooltip>
+        );
     };
 
     return (
@@ -135,17 +170,7 @@ export default function TitleBar({ info }: Props) {
 
             {/* カテゴリドロップダウン */}
             <Menu anchorEl={categoryAnchor?.element ?? null} open={categoryAnchor !== null} onClose={closeMenus}>
-                {(categoryAnchor ? featuresByCategory(categoryAnchor.category) : []).map(feature => {
-                    const Icon = feature.icon;
-                    return (
-                        <MenuItem key={feature.id} onClick={() => goTo(feature.route)}>
-                            <ListItemIcon>
-                                <Icon fontSize='small' />
-                            </ListItemIcon>
-                            <ListItemText>{t(feature.titleKey)}</ListItemText>
-                        </MenuItem>
-                    );
-                })}
+                {(categoryAnchor ? featuresByCategory(categoryAnchor.category) : []).map(featureItem)}
             </Menu>
 
             {/* ハンバーガーメニュー */}
@@ -156,17 +181,7 @@ export default function TitleBar({ info }: Props) {
                     </ListItemIcon>
                     <ListItemText>{t('nav.dashboard')}</ListItemText>
                 </MenuItem>
-                {FEATURES.map(feature => {
-                    const Icon = feature.icon;
-                    return (
-                        <MenuItem key={feature.id} onClick={() => goTo(feature.route)}>
-                            <ListItemIcon>
-                                <Icon fontSize='small' />
-                            </ListItemIcon>
-                            <ListItemText>{t(feature.titleKey)}</ListItemText>
-                        </MenuItem>
-                    );
-                })}
+                {FEATURES.map(featureItem)}
                 <Divider />
                 <MenuItem onClick={() => goTo('/settings')}>
                     <ListItemIcon>

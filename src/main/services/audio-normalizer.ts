@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { probeJson } from './ffmpeg/ffprobe';
-import { isCancelledError, runFfmpeg } from './ffmpeg/ffmpeg';
+import { isCancelledError, resolveFfmpegPath, resolveFfprobePath, runFfmpeg } from './ffmpeg/ffmpeg';
 import { emitJobEvent, finishJob, isCancelled, startJob } from './job-manager';
 import { availableEncoders } from './audio-formats';
 import { discardLater, newTempDir } from './work-dir';
@@ -69,6 +69,22 @@ function extractLoudnormJson(stderr: string): Record<string, string> | null {
         }
     }
     return null;
+}
+
+// ffmpeg / ffprobe を使えない (見つからない・起動できない) ことを表すエラーか。ファイルごとの失敗ではないため、
+// 一覧の「!」にせず、処理全体のエラーとして画面に伝える
+function isToolUnavailableError(error: unknown): boolean {
+    if (!(error instanceof Error)) return false;
+    if (error.message === 'FFMPEG_NOT_FOUND' || error.message === 'FFPROBE_NOT_FOUND') return true;
+    // 実行ファイルを起動できなかった (spawn の失敗。実行の権限が無いなど)
+    const syscall = (error as NodeJS.ErrnoException).syscall;
+    return typeof syscall === 'string' && syscall.startsWith('spawn');
+}
+
+// ffmpeg と ffprobe が見つからなければ、処理を始める前に失敗させる
+function ensureTools(): void {
+    if (!resolveFfmpegPath()) throw new Error('FFMPEG_NOT_FOUND');
+    if (!resolveFfprobePath()) throw new Error('FFPROBE_NOT_FOUND');
 }
 
 async function probeAudio(filePath: string, jobId: string): Promise<FfprobeStreamsResult> {
@@ -151,6 +167,7 @@ export async function analyzeFiles(
     files: string[],
     durations: (number | null)[]
 ): Promise<AudioAnalyzeResult> {
+    ensureTools();
     startJob(jobId);
     const items: AudioAnalyzeItem[] = [];
     let cancelled = false;
@@ -199,6 +216,7 @@ export async function analyzeFiles(
                     items.push(item);
                     break;
                 }
+                if (isToolUnavailableError(error)) throw error;
                 item.error = error instanceof Error ? error.message : String(error);
             }
             items.push(item);
@@ -419,6 +437,7 @@ export async function normalizeFiles(
     if (findDuplicatedOutputs(files, options.outputDir, outputFormat).length > 0) {
         throw new Error('DUPLICATE_OUTPUTS');
     }
+    ensureTools();
     startJob(jobId);
     const items: AudioNormalizeItem[] = [];
     let cancelled = false;
@@ -580,6 +599,7 @@ export async function normalizeFiles(
                     items.push(item);
                     break;
                 }
+                if (isToolUnavailableError(error)) throw error;
                 item.error = error instanceof Error ? error.message : String(error);
             }
             items.push(item);

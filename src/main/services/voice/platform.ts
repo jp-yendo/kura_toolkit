@@ -6,16 +6,20 @@ import { getCacheDir, getLibraryDir, getModelDir, getWorkDir, hasNonAscii } from
 import type { CudaFlavor, GpuInfo, VoicePlatformInfo, VoicePlatformKey } from '../../../shared/voice/types';
 
 // 音声機能を動かす環境の判定 (OS・CPU・GPU・Visual C++ 再頒布可能パッケージ)。
-// 対応は Windows (x64)・Apple Silicon の macOS・Linux (x64)。PyTorch が Intel 版 macOS 向けの配布をやめているため、
-// Intel 版 macOS では動かせない。Arm 版の Windows と Linux は、使うライブラリの一部に配布物が無いため対象外。
+// 対応は Windows (x64)・macOS (Apple Silicon・Intel)・Linux (x64・Arm64)。Arm 版の Windows は、使うライブラリの一部
+// (PyTorch・pedalboard・faiss) に配布物が無いため対象外。
+// Intel 版 Mac と macOS 14 より前の macOS では、アプリが固定している版の PyTorch・onnxruntime・faiss に配布物が無いため、
+// PyTorch を使う処理 (分離のモデル・音声変換・読み上げ) は使えない (PyTorch の Intel 版 Mac 向けの配布は 2.2 まで。
+// onnxruntime・faiss・PyTorch 2.14 の macOS 向けの配布物は macOS 14 以上が対象)。
 
 function platformKey(): VoicePlatformKey {
     if (process.platform === 'win32' && process.arch === 'x64') return 'win32-x64';
     if (process.platform === 'linux' && process.arch === 'x64') return 'linux-x64';
+    if (process.platform === 'linux' && process.arch === 'arm64') return 'linux-arm64';
     if (process.platform === 'darwin') {
         // x64 版のアプリを Rosetta で動かしている場合も、Python は arm64 版をそのまま起動できる
         const appleSilicon = process.arch === 'arm64' || os.cpus().some(cpu => cpu.model.includes('Apple'));
-        if (appleSilicon) return 'darwin-arm64';
+        return appleSilicon ? 'darwin-arm64' : 'darwin-x64';
     }
     return 'unsupported';
 }
@@ -27,8 +31,8 @@ function macosMajorVersion(): number | null {
     return Number.isFinite(darwin) ? darwin - 9 : null;
 }
 
-// 対応する最も古い macOS (PyTorch の macOS 向け配布物の要件)
-const MIN_MACOS_MAJOR = 14;
+// PyTorch を使う処理に必要な最も古い macOS (固定している版の onnxruntime・faiss・PyTorch 2.14 の macOS 向け配布物の要件)
+const MIN_MACOS_MAJOR_FOR_TORCH = 14;
 
 let gpuCache: GpuInfo | null = null;
 
@@ -77,7 +81,7 @@ async function detectGpu(refresh = false): Promise<GpuInfo> {
     const key = platformKey();
     if (key === 'darwin-arm64') {
         gpuCache = { kind: 'mps', name: 'Apple Silicon' };
-    } else if (key === 'win32-x64' || key === 'linux-x64') {
+    } else if (key === 'win32-x64' || key === 'linux-x64' || key === 'linux-arm64') {
         gpuCache = await detectNvidiaGpu();
     } else {
         gpuCache = { kind: 'none' };
@@ -104,8 +108,12 @@ export async function getPlatformInfo(refreshGpu = false): Promise<VoicePlatform
     let unsupportedReason: VoicePlatformInfo['unsupportedReason'];
     if (key === 'unsupported') {
         unsupportedReason = ['win32', 'darwin', 'linux'].includes(process.platform) ? 'arch' : 'os';
-    } else if (key === 'darwin-arm64' && (macosMajorVersion() ?? 0) < MIN_MACOS_MAJOR) {
-        unsupportedReason = 'macosVersion';
+    }
+    let torchUnavailableReason: VoicePlatformInfo['torchUnavailableReason'];
+    if (key === 'darwin-x64') {
+        torchUnavailableReason = 'intelMac';
+    } else if (key === 'darwin-arm64' && (macosMajorVersion() ?? 0) < MIN_MACOS_MAJOR_FOR_TORCH) {
+        torchUnavailableReason = 'macosVersion';
     }
     const libraryDir = getLibraryDir();
     const modelDir = getModelDir();
@@ -113,10 +121,16 @@ export async function getPlatformInfo(refreshGpu = false): Promise<VoicePlatform
         platform: key,
         supported: unsupportedReason === undefined,
         unsupportedReason,
-        gpu,
+        torchUnavailableReason,
+        // PyTorch を使えない環境では GPU を使う処理が無い (Apple Silicon でも macOS 14 より前は CPU だけで処理する)
+        gpu: torchUnavailableReason ? { kind: 'none' } : gpu,
         vcRuntimeMissing: isVcRuntimeMissing(),
-        // 読み上げのモデルの学習は、上流が NVIDIA GPU を前提としているため、NVIDIA GPU を使える Windows と Linux でのみ行う
-        ttsTrainingAvailable: (key === 'win32-x64' || key === 'linux-x64') && gpu.kind === 'cuda' && !!gpu.cudaFlavor,
+        // 読み上げのモデルの学習。Windows は NVIDIA GPU を使える場合だけ行う。macOS・Linux は PyTorch を使えれば行う
+        // (上流の学習処理は CUDA を使えなければ CPU で学習する。MPS は使わない)
+        ttsTrainingAvailable:
+            key === 'win32-x64'
+                ? gpu.kind === 'cuda' && !!gpu.cudaFlavor
+                : (key === 'darwin-arm64' || key === 'linux-x64' || key === 'linux-arm64') && !torchUnavailableReason,
         libraryDir,
         modelDir,
         storageNonAscii:

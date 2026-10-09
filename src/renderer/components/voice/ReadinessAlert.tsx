@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { itemLabel } from './libraryItems';
 import { openVoiceLibrary, useVoiceLibraryStore } from '../../stores/voiceLibraryStore';
 import type { FeatureReadiness, LibraryStatus, VoiceFeatureId } from '@shared/voice/types';
+import { featureUnavailableReasonKey } from '@shared/voice/availability';
 
 type ReadinessState = {
     feature: VoiceFeatureId;
@@ -52,11 +53,19 @@ export default function ReadinessAlert({ state }: Props) {
     const { t } = useTranslation();
     const { readiness, status } = state;
     if (!readiness) return null;
-    if (!readiness.platform.supported) {
+    // その環境で使えない機能 (音声機能全体を使えない環境と、ライブラリの配布物が無い機能)
+    const unavailableKey = featureUnavailableReasonKey(readiness.platform, state.feature);
+    if (unavailableKey) {
         return (
             <Alert severity='error'>
-                <AlertTitle>{t('voice.platform.unsupportedTitle')}</AlertTitle>
-                {t(`voice.platform.unsupported.${readiness.platform.unsupportedReason ?? 'os'}`)}
+                <AlertTitle>
+                    {t(
+                        readiness.platform.supported
+                            ? 'voice.platform.featureUnavailableTitle'
+                            : 'voice.platform.unsupportedTitle'
+                    )}
+                </AlertTitle>
+                {t(unavailableKey)}
             </Alert>
         );
     }

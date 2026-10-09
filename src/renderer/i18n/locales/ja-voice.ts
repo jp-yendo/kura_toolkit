@@ -44,9 +44,22 @@ export default {
         unsupportedTitle: 'この環境では音声機能を利用できません',
         unsupported: {
             os: '音声分離・加工、音声変換、読み上げは Windows・macOS・Linux で利用できます。',
-            arch: '音声分離・加工、音声変換、読み上げは 64bit 版 Windows (x64)・Apple Silicon の Mac・64bit 版 Linux (x64) で利用できます。音声機能が使うライブラリが Intel 版 Mac と Arm 版の Windows・Linux に対応していないためです。',
+            arch: '音声分離・加工、音声変換、読み上げは 64bit 版 Windows (x64)・macOS・64bit 版 Linux (x64・Arm64) で利用できます。音声機能が使うライブラリが、この環境向けに配布されていないためです。',
+        },
+        featureUnavailableTitle: 'この環境ではこの機能を利用できません',
+        // 機能ごと使えない理由 (メニュー・ダッシュボード・各画面で示す)
+        torchUnavailable: {
+            intelMac:
+                'Intel 版 Mac では利用できません。この機能が使うライブラリ (PyTorch など) が Intel 版 Mac 向けに配布されていないためです。',
             macosVersion:
-                'macOS 14 (Sonoma) 以降が必要です。音声機能が使うライブラリが macOS 13 以前に対応していないためです。',
+                'macOS 14 (Sonoma) 以降が必要です。この機能が使うライブラリ (PyTorch など) が macOS 13 以前向けに配布されていないためです。',
+        },
+        // 分離のモデル (モデルを使う処理) を使えない理由
+        modelsUnavailable: {
+            intelMac:
+                'Intel 版 Mac では、モデルを使う処理は利用できません。分離のモデルが使うライブラリ (PyTorch など) が Intel 版 Mac 向けに配布されていないためです。',
+            macosVersion:
+                'モデルを使う処理には macOS 14 (Sonoma) 以降が必要です。分離のモデルが使うライブラリ (PyTorch など) が macOS 13 以前向けに配布されていないためです。',
         },
         cuda: 'NVIDIA GPU ({{name}})',
         mps: 'Apple Silicon の GPU',
@@ -493,7 +506,7 @@ export default {
             'ダウンロードしたものは、再度ダウンロードすれば使えるようになります。学習・取り込みした声のモデルはここでは削除されません。',
         removed: '削除しました。',
         removeFailed: '{{count}} 項目を削除できませんでした。',
-        ttsTrainingUnavailable: '読み上げのモデルの学習は、NVIDIA GPU を使える Windows と Linux でのみ行えます。',
+        ttsTrainingUnavailable: 'Windows で読み上げのモデルを学習するには、NVIDIA GPU が必要です。',
         separatorModelNotFound: 'このモデルのファイルが配布元に見つかりません。',
         items: {
             python: 'Python 3.11 本体',
@@ -502,6 +515,8 @@ export default {
             separatorPackages: '音声分離のパッケージ一式',
             separatorPackagesDesc:
                 '音声分離のプログラム (python-audio-separator) と、動作に必要なライブラリ (PyTorch など)、エフェクトに使うライブラリ (pedalboard) の一式です。音声分離・加工と、音声変換の画面での分離に使います。macOS では Xcode Command Line Tools を、Linux では C/C++ のコンパイラー (build-essential など) を、先にインストールしておく必要があります。',
+            separatorLitePackagesDesc:
+                'エフェクトに使うライブラリ (pedalboard) と、音の読み書きに使うライブラリ (numpy・soundfile) の一式です。この環境では、音声分離・加工のうちモデルを使わない処理 (エフェクト・無音部分の雑音を消す) に使います。',
             converterPackages: '音声変換のパッケージ一式',
             converterPackagesDesc:
                 '音声変換 (RVC) のプログラム (Applio) と、動作に必要なライブラリ (PyTorch など) の一式です。音声変換と、変換のモデルの学習に使います。',
@@ -510,7 +525,7 @@ export default {
                 '読み上げのプログラム (Style-Bert-VITS2) と、動作に必要なライブラリ (PyTorch など) の一式です。読み上げに使います。',
             ttsTrainPackages: '読み上げの学習用パッケージ一式',
             ttsTrainPackagesDesc:
-                '読み上げのモデルの学習に追加で必要なプログラムと、声の調子 (スタイル) を計算する話者埋め込みモデルの一式です。読み上げのモデルの学習に使います。NVIDIA GPU を使える Windows と Linux でのみ使えます。',
+                '読み上げのモデルの学習に追加で必要なプログラムと、声の調子 (スタイル) を計算する話者埋め込みモデルの一式です。読み上げのモデルの学習に使います。Windows では NVIDIA GPU が必要です。',
             rmvpe: 'ピッチ抽出モデル (RMVPE)',
             rmvpeDesc:
                 '声の高さ (ピッチ) の動きを推定するモデルです。音声変換の変換と学習で、元の声の抑揚を保つために使います。',
@@ -1263,7 +1278,7 @@ export default {
         openModels: '「声のモデル」を開く',
         ttsUnavailableTitle: 'この環境では読み上げのモデルを学習できません',
         ttsUnavailable:
-            '読み上げのモデルの学習は、NVIDIA GPU を使える Windows と Linux でのみ行えます。そのような環境で学習したモデルを書き出し、ここで取り込めば利用できます。',
+            'Windows で読み上げのモデルを学習するには、NVIDIA GPU が必要です。学習できる環境で学習したモデルを書き出し、ここで取り込めば利用できます。',
         ttsGuide:
             '左の一覧から文を選び、その文を読み上げて録音するか、その 1 文を読み上げた音声ファイルを選択してください。どの文から録っても構わず、読みたくない文は飛ばして構いません。提示した文章は、その音声の書き起こしとしてそのまま使います。複数の文を続けて録ったファイルは、1 文ずつに分けてから選択してください。',
         ttsCustomGuide:
@@ -1320,6 +1335,7 @@ export default {
         VERIFY_FAILED: 'パッケージ一式を正しくインストールできませんでした。再試行してください。({{detail}})',
         DOWNLOAD_FAILED: 'ダウンロードに失敗しました。通信状況を確認して再試行してください。({{detail}})',
         PREREQUISITE_FAILED: '前提となる項目を取得できなかったため、取得しませんでした。',
+        SEPARATION_MODELS_UNAVAILABLE: 'この環境では、分離のモデルを使う処理は利用できません。',
         SEPARATOR_NOT_INSTALLED:
             '音声分離のパッケージ一式がダウンロードされていないか、更新が必要です。「ダウンロード管理」から取得してください。',
         MODEL_NOT_INSTALLED: '必要なモデルがダウンロードされていません。',
@@ -1361,7 +1377,7 @@ export default {
             '英語の読み上げに必要なデータがありません。「英語の言語モデル (DeBERTa)」を取得し直してください。',
         PINYIN_ALIGN_FAILED: 'ピンインで発音を指定した文字の位置を合わせられませんでした。指定を見直してください。',
         IPA_WORD_SPLIT: '「{{detail}}」には発音を指定できません。sub タグで読みを指定してください。',
-        TTS_TRAINING_UNAVAILABLE: '読み上げのモデルの学習は、NVIDIA GPU を使える Windows と Linux でのみ行えます。',
+        TTS_TRAINING_UNAVAILABLE: 'この環境では読み上げのモデルを学習できません。',
         TTS_MODEL_TYPE_LANGUAGE_MISMATCH: 'この言語は、この種類のモデルでは学習できません。',
         TTS_CONFIRMATION_EXPIRED: 'この確認は無効になりました。もう一度音声を作成してください。',
         TRAINING_DATA_TOO_SHORT: '学習用の音声が短すぎます。',

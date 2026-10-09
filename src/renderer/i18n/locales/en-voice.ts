@@ -44,9 +44,22 @@ export default {
         unsupportedTitle: 'Voice features are not available on this system',
         unsupported: {
             os: 'Audio Separation & Processing, Voice Conversion and Text to Speech are available on Windows, macOS and Linux.',
-            arch: 'Audio Separation & Processing, Voice Conversion and Text to Speech are available on 64-bit Windows (x64), Apple Silicon Macs and 64-bit Linux (x64), because the libraries used by the voice features do not support Intel Macs or Arm-based Windows and Linux.',
+            arch: 'Audio Separation & Processing, Voice Conversion and Text to Speech are available on 64-bit Windows (x64), macOS and 64-bit Linux (x64 and Arm64), because the libraries used by the voice features are not distributed for this system.',
+        },
+        featureUnavailableTitle: 'This feature is not available on this system',
+        // Why a whole feature cannot be used (shown in the menus, on the dashboard and on each screen)
+        torchUnavailable: {
+            intelMac:
+                'Not available on Intel Macs, because the libraries this feature uses (PyTorch and others) are not distributed for Intel Macs.',
             macosVersion:
-                'macOS 14 (Sonoma) or later is required, because the libraries used by the voice features do not support macOS 13 or earlier.',
+                'macOS 14 (Sonoma) or later is required, because the libraries this feature uses (PyTorch and others) are not distributed for macOS 13 or earlier.',
+        },
+        // Why the separation models (processing that uses a model) cannot be used
+        modelsUnavailable: {
+            intelMac:
+                'Processing that uses a model is not available on Intel Macs, because the libraries the separation models use (PyTorch and others) are not distributed for Intel Macs.',
+            macosVersion:
+                'Processing that uses a model requires macOS 14 (Sonoma) or later, because the libraries the separation models use (PyTorch and others) are not distributed for macOS 13 or earlier.',
         },
         cuda: 'NVIDIA GPU ({{name}})',
         mps: 'Apple Silicon GPU',
@@ -485,8 +498,7 @@ export default {
             'Downloaded items can be used again after downloading them again. Voice models you trained or imported are not removed here.',
         removed: 'Removed.',
         removeFailed: '{{count}} items could not be removed.',
-        ttsTrainingUnavailable:
-            'Text to Speech model training is only available on Windows and Linux with an NVIDIA GPU.',
+        ttsTrainingUnavailable: 'Training Text to Speech models on Windows requires an NVIDIA GPU.',
         separatorModelNotFound: 'The files of this model were not found at the distribution source.',
         items: {
             python: 'Python 3.11',
@@ -495,6 +507,8 @@ export default {
             separatorPackages: 'Audio Separation package set',
             separatorPackagesDesc:
                 'The Audio Separation program (python-audio-separator), the libraries it needs (PyTorch and others) and the library for the effects (pedalboard). Used for Audio Separation & Processing and for separating on the Voice Conversion screen. The Xcode Command Line Tools on macOS, or a C/C++ compiler (such as build-essential) on Linux, must be installed first.',
+            separatorLitePackagesDesc:
+                'The library for the effects (pedalboard) and the libraries for reading and writing audio (numpy and soundfile). On this system, used for the processing in Audio Separation & Processing that does not use a model (effects and silencing the noise in silent parts).',
             converterPackages: 'Voice Conversion package set',
             converterPackagesDesc:
                 'The Voice Conversion (RVC) program (Applio) and the libraries it needs (PyTorch and others). Used for Voice Conversion and for training its models.',
@@ -503,7 +517,7 @@ export default {
                 'The Text to Speech program (Style-Bert-VITS2) and the libraries it needs (PyTorch and others). Used for Text to Speech.',
             ttsTrainPackages: 'Text to Speech training package set',
             ttsTrainPackagesDesc:
-                'The extra programs needed to train Text to Speech models, and a speaker embedding model that computes the tone (style) of a voice. Used for training Text to Speech models. Available only on Windows and Linux with an NVIDIA GPU.',
+                'The extra programs needed to train Text to Speech models, and a speaker embedding model that computes the tone (style) of a voice. Used for training Text to Speech models. An NVIDIA GPU is required on Windows.',
             rmvpe: 'Pitch extraction model (RMVPE)',
             rmvpeDesc:
                 'Estimates how the pitch of a voice moves. Used in Voice Conversion, for conversion and training, to keep the intonation of the original voice.',
@@ -1262,7 +1276,7 @@ export default {
         openModels: 'Open Voice Models',
         ttsUnavailableTitle: 'Text to Speech models cannot be trained on this system',
         ttsUnavailable:
-            'Text to Speech models can only be trained on Windows and Linux with an NVIDIA GPU. A model trained on such a computer can be exported and then imported here.',
+            'Training Text to Speech models on Windows requires an NVIDIA GPU. A model trained on a computer that can train it can be exported and then imported here.',
         ttsGuide:
             'Choose a sentence in the list on the left, then read it aloud and record it, or select an audio file of that sentence being read. You can start with any sentence and skip sentences you do not want to read. The presented sentence is used as is as the transcript of that audio. Split recordings of several sentences into one file per sentence before selecting them.',
         ttsCustomGuide:
@@ -1317,6 +1331,7 @@ export default {
         VERIFY_FAILED: 'The package set could not be installed correctly. Try again. ({{detail}})',
         DOWNLOAD_FAILED: 'The download failed. Check your connection and try again. ({{detail}})',
         PREREQUISITE_FAILED: 'Skipped because a prerequisite could not be obtained.',
+        SEPARATION_MODELS_UNAVAILABLE: 'Processing that uses a separation model is not available on this system.',
         SEPARATOR_NOT_INSTALLED:
             'The Audio Separation package set has not been downloaded or needs an update. Get it from Downloads.',
         MODEL_NOT_INSTALLED: 'A required model has not been downloaded.',
@@ -1359,8 +1374,7 @@ export default {
         PINYIN_ALIGN_FAILED:
             'The characters with a pinyin pronunciation could not be aligned with the text. Check the pronunciation.',
         IPA_WORD_SPLIT: 'A pronunciation cannot be set for "{{detail}}". Use the sub tag to set its reading.',
-        TTS_TRAINING_UNAVAILABLE:
-            'Text to Speech model training is only available on Windows and Linux with an NVIDIA GPU.',
+        TTS_TRAINING_UNAVAILABLE: 'Text to Speech models cannot be trained on this system.',
         TTS_MODEL_TYPE_LANGUAGE_MISMATCH: 'This language cannot be trained with this type of model.',
         TTS_CONFIRMATION_EXPIRED: 'This confirmation is no longer valid. Create the audio again.',
         TRAINING_DATA_TOO_SHORT: 'The training audio is too short.',

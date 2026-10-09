@@ -38,7 +38,7 @@ Kura Toolkit は、音声・動画・画像の処理とファイルの整理を 
 - 制御タグで、間・話速・音の高さ・音量・読みを指定できます
 - 読み上げた音声を MP3・FLAC・Ogg Vorbis・Opus・AAC・WAV・ALAC で書き出せます
 - 声のモデルのダウンロード・取り込み・書き出しができます
-- 提示される文や好きな文を読み上げた録音・音声ファイルから、自分の声のモデルを作れます (NVIDIA GPU を搭載した Windows・Linux)
+- 提示される文や好きな文を読み上げた録音・音声ファイルから、自分の声のモデルを作れます (Windows は NVIDIA GPU を搭載したもののみ)
 
 ### 音声機能のダウンロード
 
@@ -78,7 +78,27 @@ macOS では、デスクトップ・書類・ダウンロードなどのフォ�
 
 オーディオ正規化・チャプターカット・音声機能 (音声分離・加工、音声変換、読み上げ) には [FFmpeg](https://ffmpeg.org/) が必要です。アプリには含まれていないため、別途インストールしてください。
 
-- 音声変換のキーの変更 (オクターブ単位を除く) と、読み上げで時間を指定した行を話速を上げて収める場合 (既定) には、rubberband を含む FFmpeg が必要です (Windows は winget の Gyan.FFmpeg、macOS は Homebrew の `ffmpeg`、Linux はディストリビューションの `ffmpeg` など)
+音声変換のキーの変更 (オクターブ単位を除く) と読み上げで時間を指定した行を話速を上げて収める場合 (既定) には rubberband を、Ogg Vorbis での保存には libvorbis を含む FFmpeg が必要です。次の方法でインストールすると、どちらも含まれます。
+
+| OS | インストール方法 |
+| --- | --- |
+| Windows | `winget install Gyan.FFmpeg` |
+| macOS | `brew install ffmpeg-full` ([Homebrew](https://brew.sh/))。`ffmpeg` は rubberband・libvorbis を含まず、入っていると `ffmpeg-full` が使われないため、先に `brew uninstall ffmpeg` で削除します |
+| Ubuntu 系 | `sudo apt install ffmpeg` |
+| Debian 系 | `sudo apt install ffmpeg` |
+| RHEL 系 | 次のコマンド (EPEL と RPM Fusion を有効にしてからインストールします) |
+
+```bash
+sudo dnf install epel-release
+sudo dnf config-manager --set-enabled crb
+sudo dnf install https://mirrors.rpmfusion.org/free/el/rpmfusion-free-release-$(rpm -E %rhel).noarch.rpm
+sudo dnf install ffmpeg
+```
+
+RHEL では、1 行目を `sudo dnf install https://dl.fedoraproject.org/pub/epel/epel-release-latest-$(rpm -E %rhel).noarch.rpm` に、2 行目を `sudo subscription-manager repos --enable codeready-builder-for-rhel-$(rpm -E %rhel)-$(arch)-rpms` に置き換えます。
+
+その他に、次のものが必要です。
+
 - 音声機能のダウンロードには、インターネット接続と数 GB の空き容量が必要です
 - Windows: [Microsoft Visual C++ 再頒布可能パッケージ](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist) (x64。音声機能に必要)
 - モデルの学習のための録音には、マイクの使用の許可が必要です (macOS では、求められたときにシステム設定で許可します)
@@ -91,7 +111,7 @@ macOS では、デスクトップ・書類・ダウンロードなどのフォ�
 - macOS 12 (Monterey) 以降
 - Linux (Debian系/RHEL系)
 
-音声分離・加工、音声変換、読み上げは、Windows 10/11 (x64)・Apple Silicon の macOS 14 以降・Linux (x64) で使えます。GPU (Windows と Linux は NVIDIA、macOS は Apple Silicon) があれば GPU を使い、無ければ CPU で処理します。
+音声分離・加工、音声変換、読み上げは、Windows 10/11 (x64)・Apple Silicon の macOS 14 以降・Linux (x64・Arm64) で使えます。Intel 版 Mac と macOS 13 以前では、音声分離・加工のうちモデルを使わない処理 (モデルを使わないノイズ除去・無音部分の雑音を消す・音量をそろえる・エフェクト) だけを使えます。GPU (Windows と Linux は NVIDIA、macOS は Apple Silicon) があれば GPU を使い、無ければ CPU で処理します。
 
 注記: 本プロジェクトは Windows ではコード署名を行っていません。SmartScreen が警告を表示する場合は「詳細情報」→「実行」を選択してください。
 

@@ -53,10 +53,20 @@ export const PYTHON_SPEC = {
             size: 26974674,
             sha256: '0c9fbd0b2ddfbb6877493a650259bf379ee71a91b17f0f5f06dd2dcd52fbcade',
         },
+        'darwin-x64': {
+            url: `${PBS_RELEASE}/cpython-3.11.17%2B20261003-x86_64-apple-darwin-install_only_stripped.tar.gz`,
+            size: 26888478,
+            sha256: 'ba62d0fb634c4e347341a4f3e29d7fb0b27920be6326c614d541c316e4da7693',
+        },
         'linux-x64': {
             url: `${PBS_RELEASE}/cpython-3.11.17%2B20261003-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz`,
             size: 30785899,
             sha256: 'aadcba18994cb8f9ee752aceb31d61e04f75b5d900d76fb575c6fbfabadec434',
+        },
+        'linux-arm64': {
+            url: `${PBS_RELEASE}/cpython-3.11.17%2B20261003-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz`,
+            size: 31111705,
+            sha256: '41f16793d33161dcd9bfa2622332b8af870cfdb4540bd1fdc477f9e6b7c58c26',
         },
     } as Record<Exclude<VoicePlatformKey, 'unsupported'>, DownloadAsset>,
     license: { name: 'PSF-2.0 and others', url: 'https://github.com/astral-sh/python-build-standalone' } as LicenseInfo,
@@ -122,6 +132,9 @@ const PACKAGE_BYTES: Record<ComponentItemId, number> = {
     tts: 520_000_000,
     'tts-train': 380_000_000,
 };
+
+// PyTorch を使えない環境の分離・加工のパッケージ一式の大きさ (配布物の実測値。pedalboard・numpy・soundfile・cffi・pycparser)
+const SEPARATOR_LITE_BYTES = 21_000_000;
 
 const UVR_DATA = 'https://raw.githubusercontent.com/TRvlvr/application_data/main';
 
@@ -236,21 +249,62 @@ export function componentSpec(id: ComponentItemId): ComponentSpec {
     return spec;
 }
 
+// PyTorch を使えない環境 (Intel 版 Mac・macOS 14 より前の macOS) の分離・加工のパッケージ一式。
+// audio-separator は PyTorch を必須とするため入れず、PyTorch を使わない処理 (エフェクト・無音部分の処理) に要るものだけを入れる。
+// 分離のモデルを使わないため、モデルの情報のファイルも取得しない
+export const SEPARATOR_LITE_VERSION = 'separator-lite-1';
+const SEPARATOR_LITE_SPEC: Partial<ComponentSpec> = {
+    version: SEPARATOR_LITE_VERSION,
+    requirements: 'separator-lite',
+    files: [],
+    descriptionKey: 'voice.library.items.separatorLitePackagesDesc',
+    license: { name: 'GPL-3.0', url: 'https://github.com/spotify/pedalboard/blob/master/LICENSE' },
+    sourceInfo: { name: 'pedalboard', url: 'https://github.com/spotify/pedalboard' },
+    credit: undefined,
+};
+
+// その環境で使うパッケージ一式の定義 (PyTorch を使えない環境の分離・加工は、軽いパッケージ一式にする)
+export function resolveComponentSpec(spec: ComponentSpec, platform: VoicePlatformInfo): ComponentSpec {
+    if (spec.id === 'separator' && platform.torchUnavailableReason) return { ...spec, ...SEPARATOR_LITE_SPEC };
+    return spec;
+}
+
+// CUDA 版の PyTorch の種類
+const CUDA_FLAVORS: CudaFlavor[] = ['cu130', 'cu128', 'cu126'];
+
+// CUDA 版の PyTorch を使う環境か (Windows と Linux)
+function usesCudaTorch(platform: VoicePlatformInfo): boolean {
+    return (
+        platform.platform === 'win32-x64' || platform.platform === 'linux-x64' || platform.platform === 'linux-arm64'
+    );
+}
+
 // パッケージ一式の大きさの目安
 export function estimateComponentBytes(spec: ComponentSpec, platform: VoicePlatformInfo): number {
+    const resolved = resolveComponentSpec(spec, platform);
+    if (resolved.requirements === 'separator-lite') return SEPARATOR_LITE_BYTES;
     const torch =
-        spec.id === 'tts-train'
+        resolved.id === 'tts-train'
             ? 0
-            : (platform.platform === 'win32-x64' || platform.platform === 'linux-x64') && platform.gpu.cudaFlavor
+            : usesCudaTorch(platform) && platform.gpu.cudaFlavor
               ? TORCH_CUDA_BYTES[platform.gpu.cudaFlavor]
               : TORCH_CPU_BYTES;
-    return torch + PACKAGE_BYTES[spec.id] + (spec.source?.size ?? 0);
+    return torch + PACKAGE_BYTES[resolved.id] + (resolved.source?.size ?? 0);
 }
 
 // パッケージ一式の版。CUDA 版の種類が変わった場合 (GPU やドライバーの交換) も入れ直しが必要になるため含める
 export function componentVariant(platform: VoicePlatformInfo): string {
-    if (platform.platform === 'win32-x64' || platform.platform === 'linux-x64') return platform.gpu.cudaFlavor ?? 'cpu';
+    if (usesCudaTorch(platform)) return platform.gpu.cudaFlavor ?? 'cpu';
     return platform.platform;
+}
+
+// 導入したときの版 (installed) のパッケージ一式を、今の環境でそのまま使えるか。
+// CUDA 版の PyTorch は NVIDIA GPU が無くても CPU で動くため、GPU を外した (検出されなくなった) 環境では入れ直さない。
+// CPU 版から CUDA 版へ (GPU を足した場合) と、CUDA 版の種類が変わる場合 (GPU の世代に合わないことがある) は入れ直す
+export function isVariantUsable(installed: string | undefined, platform: VoicePlatformInfo): boolean {
+    const current = componentVariant(platform);
+    if (installed === current) return true;
+    return usesCudaTorch(platform) && current === 'cpu' && CUDA_FLAVORS.some(flavor => flavor === installed);
 }
 
 // ---------------------------------------------------------------------------
