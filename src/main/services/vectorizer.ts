@@ -51,7 +51,16 @@ export function loadImagePreview(filePath: string): ImagePreview {
 // 画像ファイルを SVG に変換し、作業ディレクトリのファイルに置く (前の変換結果は片付ける)
 export async function convertImage(filePath: string, params: VectorizeParams): Promise<SvgResult> {
     const buffer = await fs.readFile(filePath);
-    const svg = await vectorize(buffer, toConfig(params));
+    let svg: string;
+    try {
+        svg = await vectorize(buffer, toConfig(params));
+    } catch (error) {
+        // vtracer は値の組み合わせと画像によって変換に失敗する (グラデーション幅 0 で色数の多い画像など。
+        // 理由は「Unknown error occurred」としか返らない)。設定を変えれば変換できることを画面で示すためコードにする
+        throw new Error(`VECTORIZE_FAILED: ${error instanceof Error ? error.message : String(error)}`, {
+            cause: error,
+        });
+    }
     const dir = newTempDir();
     const file = path.join(dir, 'result.svg');
     try {

@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - SVG Converter: conversion settings can be chosen from presets, and your own settings can be saved as presets.
 
+### Fixed
+
+- SVG Converter: when an image cannot be converted with the current settings, the message now says which settings to change.
+
 ## [0.3.1] - 2026-10-09
 
 ### Changed

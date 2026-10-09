@@ -264,6 +264,10 @@ export default {
         converting: '変換中',
         converted: '変換が完了しました。',
         unsupportedImage: '対応していない形式の画像です。',
+        errors: {
+            VECTORIZE_FAILED:
+                'この画像はいまの設定では変換できませんでした。グラデーション幅を 1 以上に上げるか、色精度を下げて、もう一度お試しください。({{detail}})',
+        },
         saved: 'SVG ファイルを保存しました: {{path}}',
         resetToPreset: 'プリセットの値に戻す',
         // 標準のプリセットの名前

@@ -120,7 +120,7 @@ export default function SvgConverterPage() {
             store.setSvg(result);
             showNotice('success', t('svgPage.converted'));
         } catch (error) {
-            showNotice('warning', errorMessage(t, error));
+            showNotice('warning', errorMessage(t, error, ['svgPage.errors']));
         } finally {
             setBusy(false);
         }

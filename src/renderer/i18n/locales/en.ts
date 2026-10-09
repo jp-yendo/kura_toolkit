@@ -264,6 +264,10 @@ export default {
         converting: 'Converting',
         converted: 'Image conversion completed successfully.',
         unsupportedImage: 'This image format is not supported.',
+        errors: {
+            VECTORIZE_FAILED:
+                'This image could not be converted with the current settings. Raise the gradient step to 1 or more, or lower the color precision, and try again. ({{detail}})',
+        },
         saved: 'SVG file saved successfully: {{path}}',
         resetToPreset: 'Reset to the preset value',
         // Names of the built-in presets
