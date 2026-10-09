@@ -18,6 +18,7 @@ import ZoomOutIcon from '@mui/icons-material/ZoomOut';
 import { useTranslation } from 'react-i18next';
 import { errorMessage } from '../../components/common/errorMessage';
 import FileDropZone from '../../components/common/FileDropZone';
+import PresetBar from '../../components/common/PresetBar';
 import ProgressDialog from '../../components/common/ProgressDialog';
 import PageContainer from '../../components/common/PageContainer';
 import SectionLabel from '../../components/common/SectionLabel';
@@ -25,8 +26,9 @@ import SplitPane from '../../components/common/SplitPane';
 import ZoomableImage, { clampScale } from '../../components/common/ZoomableImage';
 import { showNotice } from '../../stores/noticeStore';
 import ResetButton from '../../components/common/ResetButton';
-import { DEFAULT_VECTORIZE_PARAMS, useVectorizerStore } from '../../stores/vectorizerStore';
-import type { VectorizerColorMode, VectorizerHierarchical, VectorizerPathMode } from '@shared/types';
+import { useVectorizerStore } from '../../stores/vectorizerStore';
+import { DEFAULT_VECTORIZE_PARAMS, VECTORIZE_PARAM_RANGES } from '@shared/vectorizer';
+import type { VectorizeParams, VectorizerColorMode, VectorizerHierarchical, VectorizerPathMode } from '@shared/types';
 
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'bmp', 'gif', 'tiff'];
 
@@ -38,12 +40,14 @@ type SliderRowProps = {
     step?: number;
     // 値の表示に用いる小数桁数 (省略時は整数表示)
     decimals?: number;
-    // 初期値 (値の右に初期値に戻すボタンを置く)
+    // 戻す先の値 (値の右に、この値に戻すボタンを置く)
     defaultValue: number;
+    // 戻すボタンのツールチップ (省略時は「初期値に戻す」)
+    resetTitle?: string;
     onChange(value: number): void;
 };
 
-function SliderRow({ label, value, min, max, step, decimals, defaultValue, onChange }: SliderRowProps) {
+function SliderRow({ label, value, min, max, step, decimals, defaultValue, resetTitle, onChange }: SliderRowProps) {
     return (
         <Box>
             <Stack direction='row' sx={{ alignItems: 'center', mb: 0.5 }}>
@@ -53,7 +57,11 @@ function SliderRow({ label, value, min, max, step, decimals, defaultValue, onCha
                         {decimals !== undefined ? value.toFixed(decimals) : value}
                     </Box>
                 </Typography>
-                <ResetButton onClick={() => onChange(defaultValue)} disabled={value === defaultValue} />
+                <ResetButton
+                    onClick={() => onChange(defaultValue)}
+                    disabled={value === defaultValue}
+                    title={resetTitle}
+                />
             </Stack>
             <Slider
                 size='small'
@@ -77,6 +85,11 @@ export default function SvgConverterPage() {
     const [busy, setBusy] = React.useState(false);
     // 変換パラメータは設定ファイルへ保存せず、起動のたびに既定値から始める
     const params = store.params;
+    // プリセットの API (一覧の読み直しは API が変わったときに行うため、同じものを使い続ける)
+    const presetApi = React.useMemo(() => window.kuraToolkit.vectorizer.presets, []);
+    // スライダーの戻すボタンの戻り先は、選択中のプリセットの値 (プリセットを選んでいないときは既定値)
+    const resetBase = store.presetParams ?? DEFAULT_VECTORIZE_PARAMS;
+    const resetTitle = store.presetParams ? t('svgPage.resetToPreset') : undefined;
     // SVG プレビューの表示倍率 (null = 全体表示) と、実際に表示している倍率
     const [previewScale, setPreviewScale] = React.useState<number | null>(null);
     const [previewEffectiveScale, setPreviewEffectiveScale] = React.useState(1);
@@ -247,7 +260,20 @@ export default function SvgConverterPage() {
 
             {/* 右: パラメータと実行 */}
             <Box sx={{ width: 320, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <Box sx={{ overflow: 'auto', flexGrow: 1, pr: 1 }}>
+                {/* 横は隠す (スライダーを最大にすると、つまみの見えない操作範囲が枠の外へはみ出して横スクロールが出るため) */}
+                <Box sx={{ overflowY: 'auto', overflowX: 'hidden', flexGrow: 1, pr: 1 }}>
+                    <Box sx={{ pt: 1, mb: 3 }}>
+                        <PresetBar<VectorizeParams>
+                            id='vectorizer'
+                            api={presetApi}
+                            current={() => store.params}
+                            onApply={preset => store.patchParams(preset)}
+                            disabled={busy}
+                            selectedId={store.presetId}
+                            onSelectedIdChange={store.setPresetId}
+                            onSelectedPresetChange={preset => store.setPresetParams(preset?.params ?? null)}
+                        />
+                    </Box>
                     <SectionLabel>{t('svgPage.clustering')}</SectionLabel>
                     <Stack spacing={2} sx={{ mb: 3 }}>
                         <FormControl size='small' fullWidth>
@@ -280,26 +306,32 @@ export default function SvgConverterPage() {
                         </FormControl>
                         <SliderRow
                             label={t('svgPage.filterSpeckle')}
-                            defaultValue={DEFAULT_VECTORIZE_PARAMS.filterSpeckle}
+                            defaultValue={resetBase.filterSpeckle}
+                            resetTitle={resetTitle}
                             value={params.filterSpeckle}
-                            min={0}
-                            max={128}
+                            min={VECTORIZE_PARAM_RANGES.filterSpeckle.min}
+                            max={VECTORIZE_PARAM_RANGES.filterSpeckle.max}
+                            step={VECTORIZE_PARAM_RANGES.filterSpeckle.step}
                             onChange={value => store.patchParams({ filterSpeckle: value })}
                         />
                         <SliderRow
                             label={t('svgPage.colorPrecision')}
-                            defaultValue={DEFAULT_VECTORIZE_PARAMS.colorPrecision}
+                            defaultValue={resetBase.colorPrecision}
+                            resetTitle={resetTitle}
                             value={params.colorPrecision}
-                            min={1}
-                            max={8}
+                            min={VECTORIZE_PARAM_RANGES.colorPrecision.min}
+                            max={VECTORIZE_PARAM_RANGES.colorPrecision.max}
+                            step={VECTORIZE_PARAM_RANGES.colorPrecision.step}
                             onChange={value => store.patchParams({ colorPrecision: value })}
                         />
                         <SliderRow
                             label={t('svgPage.gradientStep')}
-                            defaultValue={DEFAULT_VECTORIZE_PARAMS.layerDifference}
+                            defaultValue={resetBase.layerDifference}
+                            resetTitle={resetTitle}
                             value={params.layerDifference}
-                            min={0}
-                            max={128}
+                            min={VECTORIZE_PARAM_RANGES.layerDifference.min}
+                            max={VECTORIZE_PARAM_RANGES.layerDifference.max}
+                            step={VECTORIZE_PARAM_RANGES.layerDifference.step}
                             onChange={value => store.patchParams({ layerDifference: value })}
                         />
                     </Stack>
@@ -323,28 +355,33 @@ export default function SvgConverterPage() {
                         </FormControl>
                         <SliderRow
                             label={t('svgPage.cornerThreshold')}
-                            defaultValue={DEFAULT_VECTORIZE_PARAMS.cornerThreshold}
+                            defaultValue={resetBase.cornerThreshold}
+                            resetTitle={resetTitle}
                             value={params.cornerThreshold}
-                            min={0}
-                            max={180}
+                            min={VECTORIZE_PARAM_RANGES.cornerThreshold.min}
+                            max={VECTORIZE_PARAM_RANGES.cornerThreshold.max}
+                            step={VECTORIZE_PARAM_RANGES.cornerThreshold.step}
                             onChange={value => store.patchParams({ cornerThreshold: value })}
                         />
                         <SliderRow
                             label={t('svgPage.segmentLength')}
-                            defaultValue={DEFAULT_VECTORIZE_PARAMS.lengthThreshold}
+                            defaultValue={resetBase.lengthThreshold}
+                            resetTitle={resetTitle}
                             value={params.lengthThreshold}
-                            min={3.5}
-                            max={10}
-                            step={0.1}
+                            min={VECTORIZE_PARAM_RANGES.lengthThreshold.min}
+                            max={VECTORIZE_PARAM_RANGES.lengthThreshold.max}
+                            step={VECTORIZE_PARAM_RANGES.lengthThreshold.step}
                             decimals={1}
                             onChange={value => store.patchParams({ lengthThreshold: value })}
                         />
                         <SliderRow
                             label={t('svgPage.spliceThreshold')}
-                            defaultValue={DEFAULT_VECTORIZE_PARAMS.spliceThreshold}
+                            defaultValue={resetBase.spliceThreshold}
+                            resetTitle={resetTitle}
                             value={params.spliceThreshold}
-                            min={0}
-                            max={180}
+                            min={VECTORIZE_PARAM_RANGES.spliceThreshold.min}
+                            max={VECTORIZE_PARAM_RANGES.spliceThreshold.max}
+                            step={VECTORIZE_PARAM_RANGES.spliceThreshold.step}
                             onChange={value => store.patchParams({ spliceThreshold: value })}
                         />
                     </Stack>

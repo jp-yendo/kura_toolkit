@@ -52,7 +52,8 @@ function useAudioFormats(): AudioFormat[] {
 
 type Choice<T> = { value: T; label: string };
 
-// 選択肢のドロップダウン (defaultValue を渡した欄だけ、その項目に「(既定)」と添える。今は FLAC の圧縮レベルだけ)
+// 選択肢のドロップダウン (defaultValue を渡した欄だけ、その項目に「(既定)」と添える。エンコーダーの既定値を初期値にしている
+// FLAC の圧縮レベルだけ)
 function ChoiceField<T extends string | number>({
     id,
     label,

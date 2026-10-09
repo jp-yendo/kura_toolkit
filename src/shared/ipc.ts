@@ -25,6 +25,7 @@ import type {
     FfmpegDetectResult,
     FileFilter,
     ImagePreview,
+    PresetSaveRequest,
     SvgResult,
     JobEvent,
     SettingsLoadError,
@@ -79,6 +80,14 @@ import type { SilenceOption, TrainingFilterOptions } from './voice/audio-filters
 import type { AudioFormat } from './audio-format';
 
 export type VoicePresetParams = SeparationPresetParams | MixParams;
+
+// プリセットの一覧・保存・名前変更・削除 (いずれも操作の後の一覧を返す)
+export type PresetApi<T> = {
+    list(): Promise<PresetRecord<T>[]>;
+    save(preset: PresetSaveRequest<T>): Promise<PresetRecord<T>[]>;
+    rename(id: string, name: string): Promise<PresetRecord<T>[]>;
+    remove(id: string): Promise<PresetRecord<T>[]>;
+};
 
 // 音声分離・音声変換・読み上げの API
 export type VoiceApi = {
@@ -337,6 +346,8 @@ export type IpcApi = {
         convert(path: string, params: VectorizeParams): Promise<SvgResult>;
         // 変換結果 (resultId) を path へ保存する
         saveSvg(resultId: string, path: string): Promise<void>;
+        // パラメータのプリセット (標準のプリセットの後に利用者のプリセットが並ぶ。操作の後は新しい一覧を返す)
+        presets: PresetApi<VectorizeParams>;
     };
     // クリーンアップ
     cleanup: {

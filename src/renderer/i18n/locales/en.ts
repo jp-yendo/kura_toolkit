@@ -4,6 +4,7 @@ export default {
     appTitle: 'Kura Toolkit',
     common: {
         cancel: 'Cancel',
+        ok: 'OK',
         unsavedTitle: 'Unsaved changes',
         unsavedMessage: 'Unsaved changes will be lost. Leave this screen?',
         discardAndLeave: 'Discard and Leave',
@@ -264,6 +265,39 @@ export default {
         converted: 'Image conversion completed successfully.',
         unsupportedImage: 'This image format is not supported.',
         saved: 'SVG file saved successfully: {{path}}',
+        resetToPreset: 'Reset to the preset value',
+        // Names of the built-in presets
+        presetNames: {
+            general: 'General',
+            bw: 'Black and white',
+            poster: 'Poster',
+            photo: 'Photo',
+            logo: 'Logo / icon',
+            detail: 'Fine detail',
+            pixelArt: 'Pixel art',
+        },
+    },
+    // Parameter presets (shared by the SVG converter and the voice features)
+    presets: {
+        label: 'Preset',
+        none: 'No presets',
+        groupBuiltin: 'Built-in',
+        groupCustom: 'Custom',
+        overwrite: 'Overwrite the selected preset',
+        overwriteConfirm: 'Overwrite the preset "{{name}}" with the current values?',
+        overwriteRun: 'Overwrite',
+        saveNew: 'Save as a new preset',
+        rename: 'Rename',
+        delete: 'Delete preset',
+        deleteConfirm: 'Delete the preset "{{name}}"?',
+        locked: '{{action}} (built-in presets cannot be changed)',
+        name: 'Preset name',
+        saved: 'Preset saved.',
+        errors: {
+            PRESET_BUILTIN: 'Built-in presets cannot be changed. Save as a new preset instead.',
+            PRESET_NAME_REQUIRED: 'Enter a preset name.',
+            DATA_FILE_CORRUPT: 'The preset file could not be read. It may be damaged. ({{detail}})',
+        },
     },
     cleanupPage: {
         targets: 'Cleanup Targets:',

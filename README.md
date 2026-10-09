@@ -55,6 +55,7 @@ Audio Separation & Processing, Voice Conversion and Text to Speech need items (P
 
 - Convert images (PNG, JPEG, BMP, GIF, TIFF) into vector SVG files
 - Adjust the conversion settings and check the result next to the original before saving
+- Choose the settings from presets for the kind of image (such as black and white, photo or pixel art), and save your own settings as presets
 
 ### Tools: Cleanup
 

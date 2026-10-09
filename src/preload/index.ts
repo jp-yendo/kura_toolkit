@@ -50,6 +50,10 @@ const IPC_CHANNELS = {
     VECTORIZER_LOAD_IMAGE: 'vectorizer:loadImage',
     VECTORIZER_CONVERT: 'vectorizer:convert',
     VECTORIZER_SAVE_SVG: 'vectorizer:saveSvg',
+    VECTORIZER_PRESETS_LIST: 'vectorizer:presets:list',
+    VECTORIZER_PRESETS_SAVE: 'vectorizer:presets:save',
+    VECTORIZER_PRESETS_RENAME: 'vectorizer:presets:rename',
+    VECTORIZER_PRESETS_REMOVE: 'vectorizer:presets:remove',
     CLEANUP_GET_ROOTS: 'cleanup:getRoots',
     CLEANUP_GET_CAPABILITIES: 'cleanup:getCapabilities',
     CLEANUP_OPEN_PERMISSION_SETTINGS: 'cleanup:openPermissionSettings',
@@ -256,6 +260,12 @@ const api: IpcApi = {
         },
         async saveSvg(resultId, path) {
             return ipcRenderer.invoke(IPC_CHANNELS.VECTORIZER_SAVE_SVG, resultId, path);
+        },
+        presets: {
+            list: () => ipcRenderer.invoke(IPC_CHANNELS.VECTORIZER_PRESETS_LIST),
+            save: preset => ipcRenderer.invoke(IPC_CHANNELS.VECTORIZER_PRESETS_SAVE, preset),
+            rename: (id, name) => ipcRenderer.invoke(IPC_CHANNELS.VECTORIZER_PRESETS_RENAME, id, name),
+            remove: id => ipcRenderer.invoke(IPC_CHANNELS.VECTORIZER_PRESETS_REMOVE, id),
         },
     },
     cleanup: {

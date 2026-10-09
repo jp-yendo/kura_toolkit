@@ -1,7 +1,8 @@
-import crypto from 'crypto';
 import path from 'path';
 import { getAppRootDir } from '../../../shared/constants';
 import { readJsonFile, writeJsonFile } from './json-file';
+import { removePresetFrom, renamePresetIn, upsertPreset } from '../preset-list';
+import type { PresetSaveRequest } from '../../../shared/types';
 import type { MixParams, PresetKind, PresetRecord, SeparationPresetParams } from '../../../shared/voice/types';
 
 // 分離と合成のパラメーターのプリセット (~/.kura_toolkit/voice-presets/<種類>.json)。
@@ -70,20 +71,9 @@ export function listPresets(kind: PresetKind): PresetRecord<PresetParams>[] {
 }
 
 // 同じ ID があれば上書き、無ければ追加する。初期のプリセットは上書きできない
-export function savePreset(
-    kind: PresetKind,
-    preset: { id?: string; name: string; params: PresetParams }
-): PresetRecord<PresetParams>[] {
+export function savePreset(kind: PresetKind, preset: PresetSaveRequest<PresetParams>): PresetRecord<PresetParams>[] {
     const data = readFile(kind);
-    const id = preset.id ?? crypto.randomUUID();
-    const existing = data.presets.find(item => item.id === id);
-    if (existing) {
-        if (existing.builtin) throw new Error('PRESET_BUILTIN');
-        existing.params = preset.params;
-        if (preset.name) existing.name = preset.name;
-    } else {
-        data.presets.push({ id, name: preset.name, builtin: false, params: preset.params });
-    }
+    upsertPreset(data.presets, preset);
     writeFile(kind, data);
     return data.presets;
 }
@@ -91,20 +81,14 @@ export function savePreset(
 // 初期のプリセットは名前を変えられない
 export function renamePreset(kind: PresetKind, id: string, name: string): PresetRecord<PresetParams>[] {
     const data = readFile(kind);
-    const preset = data.presets.find(item => item.id === id);
-    if (preset) {
-        if (preset.builtin) throw new Error('PRESET_BUILTIN');
-        preset.name = name;
-        writeFile(kind, data);
-    }
+    if (renamePresetIn(data.presets, id, name)) writeFile(kind, data);
     return data.presets;
 }
 
 // 初期のプリセットは削除できない
 export function removePreset(kind: PresetKind, id: string): PresetRecord<PresetParams>[] {
     const data = readFile(kind);
-    if (data.presets.some(item => item.id === id && item.builtin)) throw new Error('PRESET_BUILTIN');
-    data.presets = data.presets.filter(item => item.id !== id);
+    data.presets = removePresetFrom(data.presets, id);
     writeFile(kind, data);
     return data.presets;
 }

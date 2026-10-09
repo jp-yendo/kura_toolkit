@@ -4,6 +4,7 @@ export default {
     appTitle: 'Kura Toolkit',
     common: {
         cancel: 'キャンセル',
+        ok: 'OK',
         unsavedTitle: '保存していない変更があります',
         unsavedMessage: '保存していない変更は失われます。移動しますか？',
         discardAndLeave: '破棄して移動',
@@ -264,6 +265,40 @@ export default {
         converted: '変換が完了しました。',
         unsupportedImage: '対応していない形式の画像です。',
         saved: 'SVG ファイルを保存しました: {{path}}',
+        resetToPreset: 'プリセットの値に戻す',
+        // 標準のプリセットの名前
+        presetNames: {
+            general: '汎用',
+            bw: '白黒',
+            poster: 'ポスター',
+            photo: '写真',
+            logo: 'ロゴ・アイコン',
+            detail: '細部重視',
+            pixelArt: 'ピクセルアート',
+        },
+    },
+    // パラメーターのプリセット (SVG 変換・音声機能で共通)
+    presets: {
+        label: 'プリセット',
+        none: 'プリセットはありません',
+        groupBuiltin: '標準',
+        groupCustom: 'カスタム',
+        overwrite: '選択中のプリセットに上書き保存',
+        overwriteConfirm: 'プリセット「{{name}}」を現在の値で上書きしますか？',
+        overwriteRun: '上書き保存',
+        saveNew: '新しいプリセットとして保存',
+        rename: '名前を変更',
+        delete: 'プリセットを削除',
+        deleteConfirm: 'プリセット「{{name}}」を削除しますか？',
+        locked: '{{action}} (標準のプリセットは変更できません)',
+        name: 'プリセット名',
+        saved: 'プリセットを保存しました。',
+        errors: {
+            PRESET_BUILTIN: '標準のプリセットは変更できません。新しいプリセットとして保存してください。',
+            PRESET_NAME_REQUIRED: 'プリセット名を入力してください。',
+            DATA_FILE_CORRUPT:
+                'プリセットのファイルを読み込めませんでした。ファイルが壊れている可能性があります。({{detail}})',
+        },
     },
     cleanupPage: {
         targets: 'クリーンアップ対象:',

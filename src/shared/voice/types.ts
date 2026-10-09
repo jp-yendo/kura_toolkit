@@ -472,15 +472,7 @@ export type MixRenderRequest = {
 
 export type PresetKind = 'separation' | 'mix';
 
-export type PresetRecord<T> = {
-    id: string;
-    name: string;
-    // 初期のプリセットの表示名 (翻訳キー)。利用者が名前を変えるまでは name の代わりに使う
-    nameKey?: string;
-    // アプリが用意した初期のプリセット
-    builtin: boolean;
-    params: T;
-};
+export type { PresetRecord } from '../types';
 
 // 分離の方式の選び方 (画面の選択の状態)。おすすめから 1 つを選ぶか、モデル (複数可) を選ぶ
 export type SeparationMethodChoice = {

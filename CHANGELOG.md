@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- SVG Converter: conversion settings can be chosen from presets, and your own settings can be saved as presets.
+
 ## [0.3.1] - 2026-10-09
 
 ### Changed

@@ -1,28 +1,5 @@
-import React from 'react';
-import {
-    Button,
-    DialogActions,
-    DialogContent,
-    DialogTitle,
-    FormControl,
-    IconButton,
-    InputLabel,
-    MenuItem,
-    Select,
-    Stack,
-    TextField,
-    Tooltip,
-    Typography,
-} from '@mui/material';
-import SaveIcon from '@mui/icons-material/Save';
-import SaveAsIcon from '@mui/icons-material/SaveAs';
-import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
-import { useTranslation } from 'react-i18next';
-import AppDialog from '../common/AppDialog';
-import { voiceErrorMessage } from './voiceErrors';
-import { showNotice } from '../../stores/noticeStore';
-import type { VoicePresetParams } from '@shared/ipc';
+import CommonPresetBar from '../common/PresetBar';
+import type { PresetApi, VoicePresetParams } from '@shared/ipc';
 import type { PresetKind, PresetRecord } from '@shared/voice/types';
 
 type Props<T extends VoicePresetParams> = {
@@ -35,221 +12,36 @@ type Props<T extends VoicePresetParams> = {
     disabled?: boolean;
 };
 
-type NameDialog = { mode: 'new' | 'rename'; name: string } | null;
-// 確認ダイアログの内容。閉じる間も表示が変わらないよう、開閉とは別に持つ
-type Confirm = { action: 'overwrite' | 'delete'; name: string; open: boolean };
+// 種類ごとの API (一覧の読み直しは API が変わったときに行うため、種類ごとに同じものを使う)
+const apis = new Map<PresetKind, PresetApi<VoicePresetParams>>();
 
-// パラメーターのプリセットの保存・呼び出し・名前変更・削除。
-// アプリに用意されたプリセットは上書き・名前変更・削除ができない (新しいプリセットとしての保存はできる)
-export default function PresetBar<T extends VoicePresetParams>({ kind, filter, current, onApply, disabled }: Props<T>) {
-    const { t } = useTranslation();
-    const [presets, setPresets] = React.useState<PresetRecord<VoicePresetParams>[]>([]);
-    const [selectedId, setSelectedId] = React.useState('');
-    const [nameDialog, setNameDialog] = React.useState<NameDialog>(null);
-    const [confirm, setConfirm] = React.useState<Confirm>({ action: 'overwrite', name: '', open: false });
-
-    React.useEffect(() => {
-        let cancelled = false;
-        window.kuraToolkit.voice.presets
-            .list(kind)
-            .then(list => {
-                if (!cancelled) setPresets(list);
-            })
-            .catch(error => {
-                if (!cancelled) showNotice('error', voiceErrorMessage(t, error), 12000);
-            });
-        return () => {
-            cancelled = true;
+function voicePresetApi(kind: PresetKind): PresetApi<VoicePresetParams> {
+    let api = apis.get(kind);
+    if (!api) {
+        const presets = window.kuraToolkit.voice.presets;
+        api = {
+            list: () => presets.list(kind),
+            save: preset => presets.save(kind, preset),
+            rename: (id, name) => presets.rename(kind, id, name),
+            remove: id => presets.remove(kind, id),
         };
-    }, [kind, t]);
+        apis.set(kind, api);
+    }
+    return api;
+}
 
-    const visible = filter ? presets.filter(filter) : presets;
-    const selected = visible.find(preset => preset.id === selectedId) ?? null;
-    const editable = !!selected && !selected.builtin;
-    const label = (preset: PresetRecord<VoicePresetParams>) =>
-        preset.name || (preset.nameKey ? t(preset.nameKey) : preset.id);
-    // 変更できないプリセットを選んでいる場合は、操作の名前に理由を添える
-    const actionTitle = (action: string) => (selected?.builtin ? t('voice.presets.locked', { action }) : action);
-    const askConfirm = (action: Confirm['action']) => {
-        if (selected) setConfirm({ action, name: label(selected), open: true });
-    };
-    const closeConfirm = () => setConfirm(previous => ({ ...previous, open: false }));
-
-    // プリセットの保存などを行い、失敗した場合は理由を知らせる
-    const update = async (task: () => Promise<PresetRecord<VoicePresetParams>[]>): Promise<boolean> => {
-        try {
-            setPresets(await task());
-            return true;
-        } catch (error) {
-            showNotice('error', voiceErrorMessage(t, error));
-            return false;
-        }
-    };
-
-    const saveNew = async (name: string) => {
-        try {
-            const list = await window.kuraToolkit.voice.presets.save(kind, { name, params: current() });
-            setPresets(list);
-            setSelectedId(list[list.length - 1]?.id ?? '');
-            showNotice('success', t('voice.presets.saved'));
-        } catch (error) {
-            showNotice('error', voiceErrorMessage(t, error));
-        }
-    };
-
-    const overwrite = async () => {
-        if (!editable || !selected) return;
-        const saved = await update(() =>
-            window.kuraToolkit.voice.presets.save(kind, { id: selected.id, name: '', params: current() })
-        );
-        if (saved) showNotice('success', t('voice.presets.saved'));
-    };
-
-    const remove = async () => {
-        if (!editable || !selected) return;
-        if (await update(() => window.kuraToolkit.voice.presets.remove(kind, selected.id))) setSelectedId('');
-    };
-
+// 音声機能 (分離の条件・合成のパラメーター) のプリセット
+export default function PresetBar<T extends VoicePresetParams>({ kind, filter, current, onApply, disabled }: Props<T>) {
     return (
-        <Stack direction='row' spacing={0.5} sx={{ alignItems: 'center' }}>
-            <FormControl size='small' sx={{ flexGrow: 1, minWidth: 0 }} disabled={disabled}>
-                <InputLabel id={`preset-${kind}`}>{t('voice.presets.label')}</InputLabel>
-                <Select
-                    labelId={`preset-${kind}`}
-                    label={t('voice.presets.label')}
-                    value={selected ? selected.id : ''}
-                    onChange={event => setSelectedId(String(event.target.value))}
-                >
-                    {visible.length === 0 && (
-                        <MenuItem value='' disabled>
-                            <Typography variant='body2' color='text.secondary'>
-                                {t('voice.presets.none')}
-                            </Typography>
-                        </MenuItem>
-                    )}
-                    {/* 呼び出しは項目を押したときに行う (選択中のものを選び直しても呼び出せるように。値の変更の通知は、
-                        同じものを選んだときには来ないため) */}
-                    {visible.map(preset => (
-                        <MenuItem key={preset.id} value={preset.id} onClick={() => onApply(preset.params as T)}>
-                            {label(preset)}
-                        </MenuItem>
-                    ))}
-                </Select>
-            </FormControl>
-            <Tooltip title={actionTitle(t('voice.presets.overwrite'))}>
-                <span>
-                    <IconButton
-                        size='small'
-                        aria-label={t('voice.presets.overwrite')}
-                        disabled={disabled || !editable}
-                        onClick={() => askConfirm('overwrite')}
-                    >
-                        <SaveIcon fontSize='small' />
-                    </IconButton>
-                </span>
-            </Tooltip>
-            <Tooltip title={t('voice.presets.saveNew')}>
-                <span>
-                    <IconButton
-                        size='small'
-                        aria-label={t('voice.presets.saveNew')}
-                        disabled={disabled}
-                        onClick={() => setNameDialog({ mode: 'new', name: '' })}
-                    >
-                        <SaveAsIcon fontSize='small' />
-                    </IconButton>
-                </span>
-            </Tooltip>
-            <Tooltip title={actionTitle(t('voice.presets.rename'))}>
-                <span>
-                    <IconButton
-                        size='small'
-                        aria-label={t('voice.presets.rename')}
-                        disabled={disabled || !editable}
-                        onClick={() => selected && setNameDialog({ mode: 'rename', name: label(selected) })}
-                    >
-                        <DriveFileRenameOutlineIcon fontSize='small' />
-                    </IconButton>
-                </span>
-            </Tooltip>
-            <Tooltip title={actionTitle(t('voice.presets.delete'))}>
-                <span>
-                    <IconButton
-                        size='small'
-                        aria-label={t('voice.presets.delete')}
-                        disabled={disabled || !editable}
-                        onClick={() => askConfirm('delete')}
-                    >
-                        <DeleteOutlineIcon fontSize='small' />
-                    </IconButton>
-                </span>
-            </Tooltip>
-
-            <AppDialog open={nameDialog !== null} onClose={() => setNameDialog(null)} maxWidth='xs' fullWidth>
-                <DialogTitle>
-                    {nameDialog?.mode === 'rename' ? t('voice.presets.rename') : t('voice.presets.saveNew')}
-                </DialogTitle>
-                <DialogContent>
-                    <TextField
-                        autoFocus
-                        fullWidth
-                        size='small'
-                        sx={{ mt: 1 }}
-                        label={t('voice.presets.name')}
-                        value={nameDialog?.name ?? ''}
-                        onChange={event =>
-                            setNameDialog(previous => (previous ? { ...previous, name: event.target.value } : previous))
-                        }
-                    />
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setNameDialog(null)}>{t('common.cancel')}</Button>
-                    <Button
-                        variant='contained'
-                        disabled={!nameDialog?.name.trim()}
-                        onClick={async () => {
-                            if (!nameDialog) return;
-                            const name = nameDialog.name.trim();
-                            setNameDialog(null);
-                            if (nameDialog.mode === 'new') await saveNew(name);
-                            else if (editable && selected)
-                                await update(() => window.kuraToolkit.voice.presets.rename(kind, selected.id, name));
-                        }}
-                    >
-                        {t('voice.common.ok')}
-                    </Button>
-                </DialogActions>
-            </AppDialog>
-
-            <AppDialog open={confirm.open} onClose={closeConfirm} maxWidth='xs' fullWidth>
-                <DialogTitle>
-                    {confirm.action === 'overwrite' ? t('voice.presets.overwrite') : t('voice.presets.delete')}
-                </DialogTitle>
-                <DialogContent>
-                    <Typography variant='body2' sx={{ lineHeight: 1.6 }}>
-                        {t(
-                            confirm.action === 'overwrite'
-                                ? 'voice.presets.overwriteConfirm'
-                                : 'voice.presets.deleteConfirm',
-                            { name: confirm.name }
-                        )}
-                    </Typography>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={closeConfirm}>{t('common.cancel')}</Button>
-                    <Button
-                        variant='contained'
-                        color={confirm.action === 'overwrite' ? 'warning' : 'error'}
-                        onClick={() => {
-                            closeConfirm();
-                            if (confirm.action === 'overwrite') void overwrite();
-                            else void remove();
-                        }}
-                    >
-                        {confirm.action === 'overwrite' ? t('voice.presets.overwriteRun') : t('voice.presets.delete')}
-                    </Button>
-                </DialogActions>
-            </AppDialog>
-        </Stack>
+        <CommonPresetBar<VoicePresetParams>
+            id={kind}
+            api={voicePresetApi(kind)}
+            filter={filter}
+            current={current}
+            // 一覧は種類ごとのファイルなので、選んだプリセットはこの種類の値を持つ
+            onApply={params => onApply(params as T)}
+            disabled={disabled}
+            errorKeyPrefixes={['voice.errors']}
+        />
     );
 }
