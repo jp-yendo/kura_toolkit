@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-10-10
+
 ### Added
 
 - SVG Converter: presets, resizing and background removal before converting, grayscale conversion, path optimization, and cancelling a conversion.

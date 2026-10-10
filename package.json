@@ -1,6 +1,6 @@
 {
   "name": "kura-toolkit",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Kura Toolkit - integrated desktop utilities for audio, video, image and file cleanup",
   "main": "dist/main/index.js",
   "engines": {
