@@ -29,11 +29,12 @@ function builtin(id: string, nameKey: string, params: Partial<VectorizeParams>):
 }
 
 // 標準のプリセット。名前は renderer で翻訳するため翻訳キーで持つ。
-// 汎用は vtracer の既定値 (DEFAULT_VECTORIZE_PARAMS)。白黒・ポスター・写真は vtracer の公式のプリセット (bw / poster / photo) と同じ値
+// 汎用は既定値 (DEFAULT_VECTORIZE_PARAMS。色精度 8 のほかは vtracer の既定値)。白黒・ポスター・写真は vtracer の公式のプリセット
+// (bw / poster / photo) と同じ値
 // (白黒では色精度・階調・階層は使われない。ピクセルアートのモード none ではコーナー・セグメント長・スプライスは使われない)
 const BUILTIN_PRESETS: PresetRecord<VectorizeParams>[] = [
     { ...builtin('general', 'svgPage.presetNames.general', {}), id: INITIAL_VECTORIZE_PRESET_ID },
-    builtin('bw', 'svgPage.presetNames.bw', { colorMode: 'binary' }),
+    builtin('bw', 'svgPage.presetNames.bw', { colorMode: 'binary', colorPrecision: 6 }),
     builtin('poster', 'svgPage.presetNames.poster', { colorPrecision: 8 }),
     builtin('photo', 'svgPage.presetNames.photo', {
         filterSpeckle: 10,
@@ -72,8 +73,8 @@ function numberIn(value: unknown, key: keyof typeof VECTORIZE_PARAM_RANGES): num
     return Math.min(range.max, Math.max(range.min, value));
 }
 
-// ファイルの値を今のパラメータの形にする (欠けた値は既定値、範囲外は範囲に収め、知らない項目は除く)
-function normalizeParams(value: unknown): VectorizeParams {
+// 受け取った値を今のパラメータの形にする (欠けた値は既定値、範囲外は範囲に収め、知らない項目は除く)
+export function normalizeVectorizeParams(value: unknown): VectorizeParams {
     const raw = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
     return {
         colorMode: pick(raw.colorMode, ['color', 'binary'], DEFAULT_VECTORIZE_PARAMS.colorMode),
@@ -110,13 +111,18 @@ function readCustomPresets(): PresetRecord<VectorizeParams>[] {
             id: preset.id,
             name: typeof preset.name === 'string' ? preset.name : '',
             builtin: false,
-            params: normalizeParams(preset.params),
+            params: normalizeVectorizeParams(preset.params),
         }));
+}
+
+// 標準のプリセット (定義の写し)
+export function builtinVectorizerPresets(): PresetRecord<VectorizeParams>[] {
+    return structuredClone(BUILTIN_PRESETS);
 }
 
 // 標準のプリセットの後に利用者のプリセットを並べる
 function readAll(): PresetRecord<VectorizeParams>[] {
-    return [...structuredClone(BUILTIN_PRESETS), ...readCustomPresets()];
+    return [...builtinVectorizerPresets(), ...readCustomPresets()];
 }
 
 // 利用者のプリセットだけを書く
@@ -134,7 +140,7 @@ export function saveVectorizerPreset(preset: PresetSaveRequest<VectorizeParams>)
     const name = preset.name.trim();
     if (!preset.id && !name) throw new Error('PRESET_NAME_REQUIRED');
     const presets = readAll();
-    upsertPreset(presets, { id: preset.id, name, params: normalizeParams(preset.params) });
+    upsertPreset(presets, { id: preset.id, name, params: normalizeVectorizeParams(preset.params) });
     writeCustom(presets);
     return presets;
 }

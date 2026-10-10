@@ -50,6 +50,7 @@ export default {
         dropHint: 'Drag & drop files here\nor click to select',
     },
     jobPhases: {
+        waitPrevious: 'Waiting for the previous run to finish',
         prepare: 'Preparing',
         decodeInput: 'Loading the audio',
         loadModel: 'Loading the model',
@@ -75,6 +76,18 @@ export default {
             train: 'Training',
             index: 'Building the index',
             finalize: 'Finishing the model',
+        },
+        svg: {
+            load: 'Loading the image',
+            background: 'Removing the background',
+            trace: 'Vectorizing',
+            optimize: 'Optimizing the paths',
+        },
+        svgAuto: {
+            preprocess: 'Preprocessing',
+            trial: 'Trying settings',
+            select: 'Selecting candidates',
+            refine: 'Refining the paths',
         },
     },
     jobPhasesCounted: {
@@ -130,6 +143,10 @@ export default {
         svgConverter: {
             title: 'SVG Converter',
             desc: 'Convert images into vector SVG files and save them. Adjust the settings and compare the result with the original image.',
+        },
+        svgAuto: {
+            title: 'SVG Auto Converter',
+            desc: 'Search conversion settings automatically to create the SVG closest to the original image. Compare it side by side with the original in detail before saving.',
         },
         cleanup: {
             title: 'Cleanup',
@@ -236,11 +253,34 @@ export default {
     svgPage: {
         dropHint: 'Drag & drop an image here\nor click to select a file',
         original: 'Original Image',
+        imageSize: '{{width}} × {{height}} px',
+        reselectImage: 'Change',
         preview: 'SVG Preview',
+        svgStats: '{{paths}} paths / {{size}}',
+        sync: 'Sync zoom and position',
+        backdrop: 'Background',
+        backdrops: {
+            checker: 'Checker',
+            white: 'White',
+            black: 'Black',
+        },
         zoomIn: 'Zoom in',
         zoomOut: 'Zoom out',
         actualSize: 'Actual size (100%)',
         fitToWindow: 'Fit to window',
+        preprocess: 'Preprocessing',
+        longSide: 'Image Long Side Size',
+        upscale: 'Upscaling Method',
+        upscaleNearest: 'Nearest neighbor',
+        upscaleBilinear: 'Bilinear',
+        removeBackground: 'Remove background',
+        backgroundTolerance: 'Tolerance',
+        speckArea: 'Remove Small Specks',
+        grayscale: 'Convert in grayscale',
+        recolor: 'Restore colors after vectorizing',
+        output: 'Output',
+        optimize: 'Optimize paths',
+        pathPrecision: 'Coordinate Precision',
         clustering: 'Clustering',
         curveFitting: 'Curve Fitting',
         colorMode: 'Color Mode',
@@ -267,6 +307,16 @@ export default {
         errors: {
             VECTORIZE_FAILED:
                 'This image could not be converted with the current settings. Raise the gradient step to 1 or more, or lower the color precision, and try again. ({{detail}})',
+            IMAGE_READ_FAILED:
+                'The image could not be read. The file may be damaged or in an unsupported format. ({{detail}})',
+            NOTHING_TO_TRACE:
+                'Nothing remains to convert after removing the background. Lower the tolerance or turn off Remove background.',
+            NO_OPAQUE_PIXEL: 'The image has no opaque parts.',
+        },
+        // Errors when converting in grayscale
+        grayscaleErrors: {
+            VECTORIZE_FAILED:
+                'This image could not be converted in grayscale. Raise the filter speckle, or turn off "Convert in grayscale", and try again. ({{detail}})',
         },
         saved: 'SVG file saved successfully: {{path}}',
         resetToPreset: 'Reset to the preset value',
@@ -279,6 +329,57 @@ export default {
             logo: 'Logo / icon',
             detail: 'Fine detail',
             pixelArt: 'Pixel art',
+        },
+    },
+    svgAutoPage: {
+        search: 'Search',
+        trials: 'Trials',
+        trialsHint:
+            'The maximum number of conversions to try. More trials take longer and are more likely to find good settings.',
+        start: 'Start',
+        // Counts within a step
+        stepCount: {
+            preprocess: '{{current}} / {{total}}',
+            trial: 'Trial {{current}} / {{total}}',
+            select: 'Candidate {{current}} / {{total}}',
+            refine: 'Adjustment {{current}} / {{total}}',
+        },
+        bestSoFar: 'Best fidelity so far: {{fidelity}}',
+        bestSoFarNone: 'Best fidelity so far: -',
+        done: 'Automatic conversion completed successfully.',
+        incomplete: 'The process stopped partway. The results found so far are shown.',
+        versions: 'Versions',
+        trialSummary: 'Tried {{trials}} conversions.',
+        trialSummaryFailed: 'Tried {{trials}} conversions ({{failures}} of them could not be converted).',
+        trialVersion: 'Candidate {{rank}}',
+        refineVersion: 'Refined',
+        tuned: 'Searched settings',
+        grayLevels: '{{count}} levels',
+        best: 'Best',
+        // Refinement adjustments
+        adjustments: {
+            recolor: 'Recolor',
+            smallShapes: 'Remove small shapes',
+            mergeColors: 'Merge similar colors',
+            simplify: 'Reduce points',
+        },
+        metrics: 'Fidelity {{fidelity}} / {{paths}} paths / {{size}}',
+        backToSettings: 'Back to Settings',
+        discardConfirm: 'Discard the results and go back to the settings? Discarded results cannot be restored.',
+        discard: 'Discard and Go Back',
+        switchImage: 'Switch Image',
+        switchImageConfirm: 'Switching the image discards the current results. Discarded results cannot be restored.',
+        discardAndSwitch: 'Discard and Switch',
+        errors: {
+            VECTORIZE_FAILED:
+                'This image could not be converted with any settings. Change the preprocessing settings and try again. ({{detail}})',
+            SVG_RESULT_GONE: 'The result could not be found. Convert the image again.',
+            SVG_AUTO_BUSY: 'An automatic conversion is already running. Try again after it finishes.',
+        },
+        // Errors when converting in grayscale
+        grayscaleErrors: {
+            VECTORIZE_FAILED:
+                'This image could not be converted in grayscale. Turn off "Convert in grayscale" and try again. ({{detail}})',
         },
     },
     // Parameter presets (shared by the SVG converter and the voice features)

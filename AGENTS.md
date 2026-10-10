@@ -69,6 +69,7 @@ CRITICAL: You MUST read [README.md](README.md) BEFORE taking any action.
 - Reports must describe findings in words, never by numbered item codes assigned during a session. State clearly what decision, if any, is being requested.
 - Remove code, comments, variables, tests and helper scripts that are no longer needed, without leaving traces. Temporary verification scripts placed in `scripts/` must be deleted once their purpose is served.
 - **`src/main/` MUST NOT import from `src/renderer/`**. i18n is renderer-only.
+- Each feature MUST be self-contained. Keep temporary files only under the work directory (`newTempDir()` / `sessionDir()`), release them with `discardLater()` (deleted in batch later; leftovers are removed at next startup), and register a handler in `stores/featureWork.ts` that resets the feature's state and discards its files when the user leaves the feature.
 - When adding or changing user-visible text, update all locale files under `src/renderer/i18n/locales/`.
 - When making notable changes, update `CHANGELOG.md` following the [Keep a Changelog](https://keepachangelog.com/) format. Entries must be written in English. `CHANGELOG.md` is for end users: describe each change concisely from the user's perspective (what they can now do or what visibly changes), not the implementation. Do NOT include internal details such as file paths, IPC channel/function names, internal data structures, or code-level mechanics. Record those developer-facing details in `Documents/システム仕様.md` instead.
 </development_rules>

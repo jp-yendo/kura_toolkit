@@ -80,7 +80,7 @@ export default function ProgressDialog({
     const hasDetails = details !== undefined;
     // 高さを固定して、行数が増えても減ってもダイアログの大きさが変わらないようにする
     const detailHeight = detailAreaHeight(details?.length ?? 0);
-    // ボタンが 1 つも無い場合はアクション行自体を出さない (SVG 変換、チャプター解析中)
+    // ボタンが 1 つも無い場合 (取り消せない処理) はアクション行自体を出さない
     const hasActions = hasDetails || onCancel !== undefined;
 
     return (

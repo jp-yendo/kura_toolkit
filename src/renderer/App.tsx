@@ -11,6 +11,7 @@ import SettingsPage from './pages/SettingsPage';
 import AudioNormalizerPage from './pages/audio/AudioNormalizerPage';
 import ChapterCutPage from './pages/video/ChapterCutPage';
 import SvgConverterPage from './pages/image/SvgConverterPage';
+import SvgAutoPage from './pages/image/SvgAutoPage';
 import CleanupPage from './pages/tools/CleanupPage';
 import SeparationPage from './pages/voice/SeparationPage';
 import ConversionPage from './pages/voice/ConversionPage';
@@ -111,6 +112,7 @@ export default function App() {
                             <Route path='/audio/normalizer' element={<AudioNormalizerPage />} />
                             <Route path='/video/chapter-cut' element={<ChapterCutPage />} />
                             <Route path='/image/svg-converter' element={<SvgConverterPage />} />
+                            <Route path='/image/svg-auto' element={<SvgAutoPage />} />
                             <Route path='/tools/cleanup' element={<CleanupPage />} />
                             <Route path='/audio/separation' element={<SeparationPage />} />
                             <Route path='/audio/conversion' element={<ConversionPage />} />

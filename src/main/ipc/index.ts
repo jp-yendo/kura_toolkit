@@ -6,6 +6,7 @@ import { registerJobIpcHandlers } from './jobs';
 import { registerAudioIpcHandlers } from './audio';
 import { registerChapterIpcHandlers } from './chapter';
 import { registerVectorizerIpcHandlers } from './vectorizer';
+import { registerSvgAutoIpcHandlers } from './svg-auto';
 import { registerCleanupIpcHandlers } from './cleanup';
 import { registerVoiceIpcHandlers } from './voice';
 import { registerStorageIpcHandlers } from './storage';
@@ -29,6 +30,7 @@ export function registerIpcHandlers() {
     registerAudioIpcHandlers();
     registerChapterIpcHandlers();
     registerVectorizerIpcHandlers();
+    registerSvgAutoIpcHandlers();
     registerCleanupIpcHandlers();
     // 音声分離・音声変換・読み上げ
     registerVoiceIpcHandlers();

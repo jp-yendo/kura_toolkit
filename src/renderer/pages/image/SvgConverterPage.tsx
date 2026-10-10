@@ -1,109 +1,53 @@
 import React from 'react';
-import {
-    Box,
-    Button,
-    FormControl,
-    IconButton,
-    InputLabel,
-    MenuItem,
-    Select,
-    Slider,
-    Stack,
-    Tooltip,
-    Typography,
-} from '@mui/material';
-import FitScreenIcon from '@mui/icons-material/FitScreen';
-import ZoomInIcon from '@mui/icons-material/ZoomIn';
-import ZoomOutIcon from '@mui/icons-material/ZoomOut';
+import { Box, Button, FormControl, InputLabel, MenuItem, Select, Stack } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { errorMessage } from '../../components/common/errorMessage';
-import FileDropZone from '../../components/common/FileDropZone';
 import PresetBar from '../../components/common/PresetBar';
 import ProgressDialog from '../../components/common/ProgressDialog';
-import PageContainer from '../../components/common/PageContainer';
 import SectionLabel from '../../components/common/SectionLabel';
-import SplitPane from '../../components/common/SplitPane';
-import ZoomableImage, { clampScale } from '../../components/common/ZoomableImage';
+import FileDropZone from '../../components/common/FileDropZone';
+import PageContainer from '../../components/common/PageContainer';
+import CompareViewer from '../../components/image/CompareViewer';
+import { ImageDropPage, useImageInput } from '../../components/image/imageInput';
+import ImageSourceBar from '../../components/image/ImageSourceBar';
+import OutputFields from '../../components/image/OutputFields';
+import PreprocessFields from '../../components/image/PreprocessFields';
+import { SliderRow } from '../../components/image/SettingRows';
+import { formatBytes } from '../../components/voice/voiceFormat';
+import { useJobRunner } from '../../hooks/useJobRunner';
 import { showNotice } from '../../stores/noticeStore';
-import ResetButton from '../../components/common/ResetButton';
 import { useVectorizerStore } from '../../stores/vectorizerStore';
 import { DEFAULT_VECTORIZE_PARAMS, VECTORIZE_PARAM_RANGES } from '@shared/vectorizer';
-import type { VectorizeParams, VectorizerColorMode, VectorizerHierarchical, VectorizerPathMode } from '@shared/types';
+import type {
+    VectorizeParams,
+    VectorizeRequest,
+    VectorizerColorMode,
+    VectorizerHierarchical,
+    VectorizerPathMode,
+} from '@shared/types';
 
-const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'bmp', 'gif', 'tiff'];
-
-type SliderRowProps = {
-    label: string;
-    value: number;
-    min: number;
-    max: number;
-    step?: number;
-    // 値の表示に用いる小数桁数 (省略時は整数表示)
-    decimals?: number;
-    // 戻す先の値 (値の右に、この値に戻すボタンを置く)
-    defaultValue: number;
-    // 戻すボタンのツールチップ (省略時は「初期値に戻す」)
-    resetTitle?: string;
-    onChange(value: number): void;
-};
-
-function SliderRow({ label, value, min, max, step, decimals, defaultValue, resetTitle, onChange }: SliderRowProps) {
-    return (
-        <Box>
-            <Stack direction='row' sx={{ alignItems: 'center', mb: 0.5 }}>
-                <Typography variant='body2' color='text.secondary' sx={{ flexGrow: 1 }}>
-                    {label}:{' '}
-                    <Box component='span' sx={{ color: 'text.primary', fontWeight: 600 }}>
-                        {decimals !== undefined ? value.toFixed(decimals) : value}
-                    </Box>
-                </Typography>
-                <ResetButton
-                    onClick={() => onChange(defaultValue)}
-                    disabled={value === defaultValue}
-                    title={resetTitle}
-                />
-            </Stack>
-            <Slider
-                size='small'
-                value={value}
-                min={min}
-                max={max}
-                step={step ?? 1}
-                onChange={(_event, newValue) => onChange(newValue as number)}
-            />
-        </Box>
-    );
-}
-
+// 画像を選ぶまでは画面全体を画像の受け皿にする。選んだ後は、左に設定 (先頭に画像の名前と選び直すボタン)、右に元画像と
+// SVG の上下の比較を置き、画面のどこへドロップしても画像を切り替える
 export default function SvgConverterPage() {
     const { t } = useTranslation();
-    const imageFilters = [
-        { name: t('common.fileTypes.image'), extensions: IMAGE_EXTENSIONS },
-        { name: t('common.fileTypes.all'), extensions: ['*'] },
-    ];
     const store = useVectorizerStore();
-    const [busy, setBusy] = React.useState(false);
-    // 変換パラメータは設定ファイルへ保存せず、起動のたびに既定値から始める
+    const { job, run, cancel } = useJobRunner();
+    const busy = job !== null;
+    // 変換パラメータ・前処理・出力は設定ファイルへ保存せず、起動のたびに既定値から始める
     const params = store.params;
+    const preprocess = store.preprocess;
+    const output = store.output;
+    // グレースケールで変換するときは白黒で変換するため、カラー・階層・色精度・グラデーション幅は使わない
+    const grayscale = preprocess.grayscale;
     // プリセットの API (一覧の読み直しは API が変わったときに行うため、同じものを使い続ける)
     const presetApi = React.useMemo(() => window.kuraToolkit.vectorizer.presets, []);
     // スライダーの戻すボタンの戻り先は、選択中のプリセットの値 (プリセットを選んでいないときは既定値)
     const resetBase = store.presetParams ?? DEFAULT_VECTORIZE_PARAMS;
     const resetTitle = store.presetParams ? t('svgPage.resetToPreset') : undefined;
-    // SVG プレビューの表示倍率 (null = 全体表示) と、実際に表示している倍率
-    const [previewScale, setPreviewScale] = React.useState<number | null>(null);
-    const [previewEffectiveScale, setPreviewEffectiveScale] = React.useState(1);
 
     const svgUrl = store.svg?.url ?? null;
 
-    // 変換し直したら全体表示へ戻す
-    React.useEffect(() => {
-        setPreviewScale(null);
-    }, [svgUrl]);
-
-    const loadImage = async (paths: string[]) => {
-        const imagePath = paths[0];
-        if (!imagePath) return;
+    const loadImage = async (imagePath: string) => {
         try {
             const preview = await window.kuraToolkit.vectorizer.loadImage(imagePath);
             store.setImage(imagePath, preview.url);
@@ -111,18 +55,25 @@ export default function SvgConverterPage() {
             showNotice('warning', errorMessage(t, error));
         }
     };
+    const imageInput = useImageInput(imagePath => void loadImage(imagePath), busy);
 
     const runVectorize = async () => {
-        if (!store.imagePath) return;
-        setBusy(true);
+        const imagePath = store.imagePath;
+        if (!imagePath) return;
+        const request: VectorizeRequest = { params, preprocess, output };
         try {
-            const result = await window.kuraToolkit.vectorizer.convert(store.imagePath, params);
-            store.setSvg(result);
+            const result = await run(t('svgPage.converting'), jobId =>
+                window.kuraToolkit.vectorizer.convert(jobId, imagePath, request)
+            );
+            if (result.cancelled || !result.svg) return;
+            store.setSvg(result.svg);
             showNotice('success', t('svgPage.converted'));
         } catch (error) {
-            showNotice('warning', errorMessage(t, error, ['svgPage.errors']));
-        } finally {
-            setBusy(false);
+            // グレースケールの変換の失敗は、グレースケールで使う設定を案内する
+            const prefixes = request.preprocess.grayscale
+                ? ['svgPage.grayscaleErrors', 'svgPage.errors']
+                : ['svgPage.errors'];
+            showNotice('warning', errorMessage(t, error, prefixes));
         }
     };
 
@@ -146,120 +97,30 @@ export default function SvgConverterPage() {
         }
     };
 
-    // SVG プレビューの見出しに置くズーム操作。Tooltip は無効時も出すため span で包む
-    const zoomControls = (
-        <Stack direction='row' spacing={0.5} sx={{ alignItems: 'center' }}>
-            <Tooltip title={t('svgPage.zoomOut')}>
-                <span>
-                    <IconButton
-                        size='small'
-                        disabled={!svgUrl}
-                        onClick={() => setPreviewScale(clampScale(previewEffectiveScale / 1.25))}
-                    >
-                        <ZoomOutIcon fontSize='small' />
-                    </IconButton>
-                </span>
-            </Tooltip>
-            <Tooltip title={t('svgPage.actualSize')}>
-                <span>
-                    <Button
-                        size='small'
-                        color='inherit'
-                        disabled={!svgUrl}
-                        onClick={() => setPreviewScale(1)}
-                        sx={{ minWidth: 60 }}
-                    >
-                        {Math.round(previewEffectiveScale * 100)}%
-                    </Button>
-                </span>
-            </Tooltip>
-            <Tooltip title={t('svgPage.zoomIn')}>
-                <span>
-                    <IconButton
-                        size='small'
-                        disabled={!svgUrl}
-                        onClick={() => setPreviewScale(clampScale(previewEffectiveScale * 1.25))}
-                    >
-                        <ZoomInIcon fontSize='small' />
-                    </IconButton>
-                </span>
-            </Tooltip>
-            <Tooltip title={t('svgPage.fitToWindow')}>
-                <span>
-                    <IconButton size='small' disabled={!svgUrl} onClick={() => setPreviewScale(null)}>
-                        <FitScreenIcon fontSize='small' />
-                    </IconButton>
-                </span>
-            </Tooltip>
-        </Stack>
-    );
+    // 画像を選ぶまでは画面全体を画像の受け皿にする (ドロップ・クリックで選ぶ)
+    if (!store.imagePath || !store.imageUrl) {
+        return (
+            <PageContainer sx={{ height: '100%' }}>
+                <FileDropZone
+                    onFiles={imageInput.deliver}
+                    filters={imageInput.filters}
+                    hint={t('svgPage.dropHint')}
+                    sx={{ flexGrow: 1, minHeight: 240 }}
+                />
+            </PageContainer>
+        );
+    }
 
     return (
-        <PageContainer sx={{ flexDirection: 'row', height: '100%', minHeight: 0 }}>
-            {/* 左: 画像入力とプレビュー (間の仕切りをドラッグして高さを配分できる) */}
-            <SplitPane
-                sx={{ flexGrow: 1, minWidth: 0 }}
-                top={
-                    <>
-                        <SectionLabel>
-                            {store.imagePath ? (
-                                <Box
-                                    component='span'
-                                    sx={{
-                                        display: 'block',
-                                        maxWidth: 640,
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis',
-                                        whiteSpace: 'nowrap',
-                                    }}
-                                >
-                                    {store.imagePath}
-                                </Box>
-                            ) : (
-                                t('svgPage.original')
-                            )}
-                        </SectionLabel>
-                        <FileDropZone
-                            onFiles={loadImage}
-                            filters={imageFilters}
-                            accept={IMAGE_EXTENSIONS}
-                            onRejected={() => showNotice('warning', t('svgPage.unsupportedImage'))}
-                            hint={t('svgPage.dropHint')}
-                            sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}
-                        >
-                            {store.imageUrl ? (
-                                <Box
-                                    component='img'
-                                    src={store.imageUrl}
-                                    alt={t('svgPage.original')}
-                                    sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-                                />
-                            ) : undefined}
-                        </FileDropZone>
-                    </>
-                }
-                bottom={
-                    <>
-                        <SectionLabel action={zoomControls}>{t('svgPage.preview')}</SectionLabel>
-                        <ZoomableImage
-                            src={svgUrl}
-                            alt={t('svgPage.preview')}
-                            scale={previewScale}
-                            onScaleChange={setPreviewScale}
-                            onEffectiveScaleChange={setPreviewEffectiveScale}
-                            placeholder={
-                                <Typography variant='body2' color='text.secondary'>
-                                    {t('svgPage.preview')}
-                                </Typography>
-                            }
-                            sx={{ flex: 1, minHeight: 0 }}
-                        />
-                    </>
-                }
-            />
-
-            {/* 右: パラメータと実行 */}
+        <ImageDropPage input={imageInput} sx={{ flexDirection: 'row', height: '100%', minHeight: 0 }}>
+            {/* 左: 選んだ画像・前処理・パラメータ・出力と実行 */}
             <Box sx={{ width: 320, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <ImageSourceBar
+                    path={store.imagePath}
+                    url={store.imageUrl}
+                    onReselect={() => void imageInput.choose()}
+                    disabled={busy}
+                />
                 {/* 横は隠す (スライダーを最大にすると、つまみの見えない操作範囲が枠の外へはみ出して横スクロールが出るため) */}
                 <Box sx={{ overflowY: 'auto', overflowX: 'hidden', flexGrow: 1, pr: 1 }}>
                     <Box sx={{ pt: 1, mb: 3 }}>
@@ -274,36 +135,46 @@ export default function SvgConverterPage() {
                             onSelectedPresetChange={preset => store.setPresetParams(preset?.params ?? null)}
                         />
                     </Box>
+                    <SectionLabel>{t('svgPage.preprocess')}</SectionLabel>
+                    <Box sx={{ mb: 3 }}>
+                        <PreprocessFields value={preprocess} onChange={store.patchPreprocess} />
+                    </Box>
                     <SectionLabel>{t('svgPage.clustering')}</SectionLabel>
                     <Stack spacing={2} sx={{ mb: 3 }}>
-                        <FormControl size='small' fullWidth>
-                            <InputLabel id='color-mode-label'>{t('svgPage.colorMode')}</InputLabel>
-                            <Select
-                                labelId='color-mode-label'
-                                label={t('svgPage.colorMode')}
-                                value={params.colorMode}
-                                onChange={event =>
-                                    store.patchParams({ colorMode: event.target.value as VectorizerColorMode })
-                                }
-                            >
-                                <MenuItem value='color'>{t('svgPage.colorModeColor')}</MenuItem>
-                                <MenuItem value='binary'>{t('svgPage.colorModeBinary')}</MenuItem>
-                            </Select>
-                        </FormControl>
-                        <FormControl size='small' fullWidth>
-                            <InputLabel id='hierarchical-label'>{t('svgPage.hierarchical')}</InputLabel>
-                            <Select
-                                labelId='hierarchical-label'
-                                label={t('svgPage.hierarchical')}
-                                value={params.hierarchical}
-                                onChange={event =>
-                                    store.patchParams({ hierarchical: event.target.value as VectorizerHierarchical })
-                                }
-                            >
-                                <MenuItem value='stacked'>{t('svgPage.hierarchicalStacked')}</MenuItem>
-                                <MenuItem value='cutout'>{t('svgPage.hierarchicalCutout')}</MenuItem>
-                            </Select>
-                        </FormControl>
+                        {!grayscale && (
+                            <>
+                                <FormControl size='small' fullWidth>
+                                    <InputLabel id='color-mode-label'>{t('svgPage.colorMode')}</InputLabel>
+                                    <Select
+                                        labelId='color-mode-label'
+                                        label={t('svgPage.colorMode')}
+                                        value={params.colorMode}
+                                        onChange={event =>
+                                            store.patchParams({ colorMode: event.target.value as VectorizerColorMode })
+                                        }
+                                    >
+                                        <MenuItem value='color'>{t('svgPage.colorModeColor')}</MenuItem>
+                                        <MenuItem value='binary'>{t('svgPage.colorModeBinary')}</MenuItem>
+                                    </Select>
+                                </FormControl>
+                                <FormControl size='small' fullWidth>
+                                    <InputLabel id='hierarchical-label'>{t('svgPage.hierarchical')}</InputLabel>
+                                    <Select
+                                        labelId='hierarchical-label'
+                                        label={t('svgPage.hierarchical')}
+                                        value={params.hierarchical}
+                                        onChange={event =>
+                                            store.patchParams({
+                                                hierarchical: event.target.value as VectorizerHierarchical,
+                                            })
+                                        }
+                                    >
+                                        <MenuItem value='stacked'>{t('svgPage.hierarchicalStacked')}</MenuItem>
+                                        <MenuItem value='cutout'>{t('svgPage.hierarchicalCutout')}</MenuItem>
+                                    </Select>
+                                </FormControl>
+                            </>
+                        )}
                         <SliderRow
                             label={t('svgPage.filterSpeckle')}
                             defaultValue={resetBase.filterSpeckle}
@@ -314,30 +185,34 @@ export default function SvgConverterPage() {
                             step={VECTORIZE_PARAM_RANGES.filterSpeckle.step}
                             onChange={value => store.patchParams({ filterSpeckle: value })}
                         />
-                        <SliderRow
-                            label={t('svgPage.colorPrecision')}
-                            defaultValue={resetBase.colorPrecision}
-                            resetTitle={resetTitle}
-                            value={params.colorPrecision}
-                            min={VECTORIZE_PARAM_RANGES.colorPrecision.min}
-                            max={VECTORIZE_PARAM_RANGES.colorPrecision.max}
-                            step={VECTORIZE_PARAM_RANGES.colorPrecision.step}
-                            onChange={value => store.patchParams({ colorPrecision: value })}
-                        />
-                        <SliderRow
-                            label={t('svgPage.gradientStep')}
-                            defaultValue={resetBase.layerDifference}
-                            resetTitle={resetTitle}
-                            value={params.layerDifference}
-                            min={VECTORIZE_PARAM_RANGES.layerDifference.min}
-                            max={VECTORIZE_PARAM_RANGES.layerDifference.max}
-                            step={VECTORIZE_PARAM_RANGES.layerDifference.step}
-                            onChange={value => store.patchParams({ layerDifference: value })}
-                        />
+                        {!grayscale && (
+                            <>
+                                <SliderRow
+                                    label={t('svgPage.colorPrecision')}
+                                    defaultValue={resetBase.colorPrecision}
+                                    resetTitle={resetTitle}
+                                    value={params.colorPrecision}
+                                    min={VECTORIZE_PARAM_RANGES.colorPrecision.min}
+                                    max={VECTORIZE_PARAM_RANGES.colorPrecision.max}
+                                    step={VECTORIZE_PARAM_RANGES.colorPrecision.step}
+                                    onChange={value => store.patchParams({ colorPrecision: value })}
+                                />
+                                <SliderRow
+                                    label={t('svgPage.gradientStep')}
+                                    defaultValue={resetBase.layerDifference}
+                                    resetTitle={resetTitle}
+                                    value={params.layerDifference}
+                                    min={VECTORIZE_PARAM_RANGES.layerDifference.min}
+                                    max={VECTORIZE_PARAM_RANGES.layerDifference.max}
+                                    step={VECTORIZE_PARAM_RANGES.layerDifference.step}
+                                    onChange={value => store.patchParams({ layerDifference: value })}
+                                />
+                            </>
+                        )}
                     </Stack>
 
                     <SectionLabel>{t('svgPage.curveFitting')}</SectionLabel>
-                    <Stack spacing={2}>
+                    <Stack spacing={2} sx={{ mb: 3 }}>
                         <FormControl size='small' fullWidth>
                             <InputLabel id='fit-mode-label'>{t('svgPage.mode')}</InputLabel>
                             <Select
@@ -385,6 +260,9 @@ export default function SvgConverterPage() {
                             onChange={value => store.patchParams({ spliceThreshold: value })}
                         />
                     </Stack>
+
+                    <SectionLabel>{t('svgPage.output')}</SectionLabel>
+                    <OutputFields value={output} onChange={store.patchOutput} />
                 </Box>
 
                 <Button variant='contained' onClick={runVectorize} disabled={!store.imagePath || busy}>
@@ -395,7 +273,32 @@ export default function SvgConverterPage() {
                 </Button>
             </Box>
 
-            <ProgressDialog open={busy} title={t('svgPage.converting')} />
-        </PageContainer>
+            {/* 右: 元画像と SVG の上下の比較 */}
+            <CompareViewer
+                originalUrl={store.imageUrl}
+                svgUrl={svgUrl}
+                svgInfo={
+                    store.svg
+                        ? t('svgPage.svgStats', {
+                              paths: store.svg.pathCount.toLocaleString(),
+                              size: formatBytes(store.svg.bytes),
+                          })
+                        : undefined
+                }
+                backdrop={store.backdrop}
+                onBackdropChange={store.setBackdrop}
+                sync={store.sync}
+                onSyncChange={store.setSync}
+                sx={{ flexGrow: 1, minWidth: 0 }}
+            />
+
+            <ProgressDialog
+                open={busy}
+                title={job?.title ?? ''}
+                percent={job?.percent}
+                status={job?.status}
+                onCancel={cancel}
+            />
+        </ImageDropPage>
     );
 }

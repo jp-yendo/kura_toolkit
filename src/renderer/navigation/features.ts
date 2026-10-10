@@ -2,6 +2,7 @@ import type { SvgIconComponent } from '@mui/icons-material';
 import GraphicEqIcon from '@mui/icons-material/GraphicEq';
 import ContentCutIcon from '@mui/icons-material/ContentCut';
 import PolylineIcon from '@mui/icons-material/Polyline';
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import CleaningServicesIcon from '@mui/icons-material/CleaningServices';
 import CallSplitIcon from '@mui/icons-material/CallSplit';
 import RecordVoiceOverIcon from '@mui/icons-material/RecordVoiceOver';
@@ -86,6 +87,15 @@ export const FEATURES: FeatureDef[] = [
         color: FEATURE_COLORS.image,
         titleKey: 'features.svgConverter.title',
         descKey: 'features.svgConverter.desc',
+    },
+    {
+        id: 'svgAuto',
+        category: 'image',
+        route: '/image/svg-auto',
+        icon: AutoFixHighIcon,
+        color: FEATURE_COLORS.image,
+        titleKey: 'features.svgAuto.title',
+        descKey: 'features.svgAuto.desc',
     },
     {
         id: 'cleanup',

@@ -24,9 +24,12 @@ releaseInfo:
 
     -
 
-# ネイティブモジュール (.node) は asar 内からロードできないため展開する
+# ネイティブモジュール (.node) と、それが読み込む共有ライブラリ (sharp の libvips) は asar 内からロードできないため展開する
 asarUnpack:
   - "**/node_modules/@neplex/**"
+  - "**/node_modules/sharp/**"
+  - "**/node_modules/@img/**"
+  - "**/node_modules/@resvg/**"
 
 # 音声機能の Python 補助スクリプトと、外部から取り込んだデータ (学習用の読み上げ文とそのライセンス)。
 # 仮想環境の Python から直接読むため asar に入れない

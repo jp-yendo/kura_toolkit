@@ -6,6 +6,7 @@ import { IPC_CHANNELS } from '../shared/constants';
 import { initializeUpdater, scheduleStartupCheck, isInstallingUpdate } from './services/updater';
 import { applySavedTheme, getSettings, initializeSearchThreads, updateSettings } from './services/settings';
 import { cancelAllJobs, setJobWindow, waitForJobsToFinish } from './services/job-manager';
+import { hasRunningImageWorkers, waitForImageWorkers } from './services/worker-job';
 import { registerMediaProtocol, registerMediaSchemePrivileges } from './services/media-protocol';
 import { removeLeftoverWorkFiles } from './services/work-dir';
 import { removeExpiredCache } from './services/cache-dir';
@@ -187,6 +188,9 @@ app.whenReady().then(async () => {
 // 待つのは QUIT_WAIT_MS まで (終わらない場合も終える)。片付けの一覧のものと、強制終了などで片付けられなかったものは、
 // 次の起動時に消す
 const QUIT_WAIT_MS = 10_000;
+// 画像の処理のワーカーが変換ライブラリの呼び出しを終えるのを待つ時間 (後片付けは済んでいるため、短くして終える。
+// 終わらなければ quit で強制終了する)
+const IMAGE_WORKER_QUIT_WAIT_MS = 2_000;
 let quitPrepared = false;
 let quitPreparing = false;
 
@@ -196,6 +200,7 @@ async function prepareQuit(): Promise<void> {
         (async () => {
             await waitForJobsToFinish(QUIT_WAIT_MS);
             await stopAllWorkersAndWait().catch(error => console.warn('failed to stop the Python workers', error));
+            await waitForImageWorkers(IMAGE_WORKER_QUIT_WAIT_MS);
         })(),
         new Promise(resolve => setTimeout(resolve, QUIT_WAIT_MS)),
     ]);
@@ -235,6 +240,16 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 // 次の起動時に消す
 app.on('will-quit', () => {
     stopAllWorkers();
+});
+
+// 画像の処理のワーカー (SVG 変換・SVG 自動変換) が、取り消した後も変換ライブラリの呼び出しの途中で残っているときは、
+// プロセスを強制終了する。変換ライブラリの呼び出しは途中で止められず、プロセスの終了 (app.exit を含む) はその呼び出しが
+// 終わるまで待たされるため (検証: 写真の変換の途中で 66 秒待たされた)。後片付けは済んでいるため、残ったものは
+// 次の起動時に消える
+app.on('quit', () => {
+    if (isInstallingUpdate() || !hasRunningImageWorkers()) return;
+    console.warn('image workers are still running; terminating the process');
+    process.kill(process.pid, 'SIGKILL');
 });
 
 app.on('window-all-closed', () => {

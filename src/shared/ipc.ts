@@ -26,7 +26,6 @@ import type {
     FileFilter,
     ImagePreview,
     PresetSaveRequest,
-    SvgResult,
     JobEvent,
     SettingsLoadError,
     SettingsUpdateResult,
@@ -35,8 +34,12 @@ import type {
     StorageMoveDecisions,
     StorageMovePlan,
     StorageMoveResult,
+    SvgAutoJobResult,
+    SvgAutoRequest,
     UpdateState,
+    VectorizeJobResult,
     VectorizeParams,
+    VectorizeRequest,
 } from './types';
 import type { TtsModelType, VoiceLanguage } from './voice/languages';
 import type {
@@ -343,11 +346,24 @@ export type IpcApi = {
     // 画像 SVG 変換
     vectorizer: {
         loadImage(path: string): Promise<ImagePreview>;
-        convert(path: string, params: VectorizeParams): Promise<SvgResult>;
+        // 変換する (ジョブ。進み具合を知らせ、取り消せる)
+        convert(jobId: string, path: string, request: VectorizeRequest): Promise<VectorizeJobResult>;
         // 変換結果 (resultId) を path へ保存する
         saveSvg(resultId: string, path: string): Promise<void>;
+        // 変換結果を片付ける
+        discard(): Promise<void>;
         // パラメータのプリセット (標準のプリセットの後に利用者のプリセットが並ぶ。操作の後は新しい一覧を返す)
         presets: PresetApi<VectorizeParams>;
+    };
+    // SVG 自動変換
+    svgAuto: {
+        loadImage(path: string): Promise<ImagePreview>;
+        // 設定を探して変換し、版の一覧を返す (ジョブ。進み具合を知らせ、取り消せる)。前の結果は片付ける
+        start(jobId: string, path: string, request: SvgAutoRequest): Promise<SvgAutoJobResult>;
+        // 版 (versionId) を path へ保存する
+        save(versionId: string, path: string): Promise<void>;
+        // 結果 (版のファイル) を片付ける
+        discard(): Promise<void>;
     };
     // クリーンアップ
     cleanup: {

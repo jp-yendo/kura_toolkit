@@ -272,6 +272,47 @@ export type VectorizeParams = {
     spliceThreshold: number;
 };
 
+// 元画像が画像の長辺のサイズより小さいときの拡大の方法 (縮小は常に lanczos3)
+export type VectorizerUpscale = 'nearest' | 'bilinear';
+
+// 変換の前処理 (プリセットに含めず、パラメータと同じくストアにだけ持つ)
+export type VectorizePreprocess = {
+    // 変換の前に、比率を保って長辺をこの大きさ (px) にそろえる (縮小も拡大もする)
+    longSide: number;
+    upscale: VectorizerUpscale;
+    // 縁からつながる、縁の色に近い領域を透明にする
+    removeBackground: boolean;
+    // 背景の色との色差 (Lab) がこれ未満の画素を背景とみなす (0 は背景の色と一致する画素だけ)
+    backgroundTolerance: number;
+    // 背景を除いた後に残る、面積 (px) がこれ未満の不透明な点を透明にする (0 は除かない)
+    speckArea: number;
+    // 明るさのしきい値ごとに白黒で変換し、灰色で重ねる
+    grayscale: boolean;
+    // グレースケールで変換した形ごとに、元画像の色を付け直す
+    recolor: boolean;
+};
+
+// 変換した SVG の出力 (プリセットに含めず、パラメータと同じくストアにだけ持つ)
+export type VectorizeOutput = {
+    // 変換した SVG を最適化する
+    optimize: boolean;
+    // 座標の小数点以下の桁数
+    pathPrecision: number;
+};
+
+// 変換の要求 (パラメータ・前処理・出力)
+export type VectorizeRequest = {
+    params: VectorizeParams;
+    preprocess: VectorizePreprocess;
+    output: VectorizeOutput;
+};
+
+// 変換の結果。取り消したときは svg が null で cancelled が true
+export type VectorizeJobResult = {
+    svg: SvgResult | null;
+    cancelled: boolean;
+};
+
 export type ImagePreview = {
     // 表示用の URL (kura-media://)
     url: string;
@@ -284,6 +325,68 @@ export type SvgResult = {
     id: string;
     // 表示用の URL (kura-media://)
     url: string;
+    // SVG の path 要素の数と、ファイルの大きさ (バイト)
+    pathCount: number;
+    bytes: number;
+};
+
+// ---------------------------------------------------------------------------
+// SVG 自動変換
+// ---------------------------------------------------------------------------
+
+// 自動変換の要求。前処理と出力は SVG 変換と同じ。trials は変換を試す回数の上限
+export type SvgAutoRequest = {
+    preprocess: VectorizePreprocess;
+    output: VectorizeOutput;
+    trials: number;
+};
+
+// 補正の調整 (recolor: 色の付け直し、smallShapes: 小さな形の除去、mergeColors: 近い色の統合、simplify: 点の削減)
+export type SvgAutoAdjustment = 'recolor' | 'smallShapes' | 'mergeColors' | 'simplify';
+
+// 版の出どころ。trial は試行の候補 (再現度の順位 rank (1 から)。グレースケールで変換したときは段階の数 grayLevels)、
+// refine は最良の候補に補正の調整を順に採ったもの (adjustments は採った調整。採った順)
+export type SvgAutoVersionSource =
+    { kind: 'trial'; rank: number; grayLevels: number | null } | { kind: 'refine'; adjustments: SvgAutoAdjustment[] };
+
+// 自動変換の版 (main が作業ディレクトリに置いた SVG ファイル)
+export type SvgAutoVersion = {
+    // 保存のときに渡す識別子
+    id: string;
+    // 表示用の URL (kura-media://)
+    url: string;
+    source: SvgAutoVersionSource;
+    // 再現度 (0-1)
+    fidelity: number;
+    // SVG の path 要素の数と、ファイルの大きさ (バイト)
+    pathCount: number;
+    bytes: number;
+    // 設定が標準のプリセットの値のままのときは、そのプリセットの名前の翻訳キー (探索で値を変えたときは null)
+    presetNameKey: string | null;
+};
+
+// 自動変換の結果。版は試行の候補 (再現度の高い順) の後に補正の版 (採った順) が並ぶ
+export type SvgAutoResult = {
+    versions: SvgAutoVersion[];
+    // 最も再現度の高い版 (同じならファイルの小さいもの)
+    bestId: string;
+    // 変換を試した回数と、そのうち変換できなかった回数
+    trials: number;
+    failures: number;
+    // 処理が途中で終わり (メモリ不足など)、それまでに得た版だけを返したか
+    incomplete: boolean;
+};
+
+// 自動変換のジョブの結果。取り消したときは result が null で cancelled が true
+export type SvgAutoJobResult = {
+    result: SvgAutoResult | null;
+    cancelled: boolean;
+};
+
+// 自動変換の進み具合の知らせに添える値 (JobEvent.payload)
+export type SvgAutoProgressPayload = {
+    // これまでに得た最も高い再現度 (まだ無いときは null)
+    bestFidelity: number | null;
 };
 
 // ---------------------------------------------------------------------------

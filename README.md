@@ -54,8 +54,24 @@ Audio Separation & Processing, Voice Conversion and Text to Speech need items (P
 ### Image: SVG Converter
 
 - Convert images (PNG, JPEG, BMP, GIF, TIFF) into vector SVG files
+- Before converting, scale the image to the processing size, remove the background, and remove small specks
+- Convert in grayscale, and also restore the colors of the original image after vectorizing
+- Optimize the paths and choose the coordinate precision
 - Adjust the conversion settings and check the result next to the original before saving
 - Choose the settings from presets for the kind of image (such as black and white, photo or pixel art), and save your own settings as presets
+
+### Image: SVG Auto Converter
+
+- The conversion settings are tried automatically, and images (PNG, JPEG, BMP, GIF, TIFF) are converted into the SVG closest to the original image
+- The converted result is tidied up while staying close to the original image, by removing small shapes, merging similar colors and reducing the points of the outlines
+- Choose the number of trials (more trials take longer and are more likely to find good settings)
+- Before converting, scale the image to the processing size, remove the background, and remove small specks
+- Convert in grayscale, and also restore the colors of the original image after vectorizing
+- Optimize the paths and choose the coordinate precision
+- Check the steps and the remaining time during the conversion, or cancel it
+- Compare the original image and the SVG side by side in detail, with zoom and position kept in sync on both sides (choose a checker, white or black background)
+- Switch between the top results of the trials and the tidied-up results, and save the chosen one as an SVG file
+- Open the settings of the chosen result in the SVG Converter to adjust them further
 
 ### Tools: Cleanup
 
@@ -214,6 +230,8 @@ See [Documents/システム仕様.md](Documents/システム仕様.md) for the d
 - **i18next**
 - **Vite**
 - **@neplex/vectorizer** (VTracer)
+- **sharp** (libvips)
+- **resvg** (@resvg/resvg-js)
 - **Python 3.11** (python-build-standalone), downloaded on demand for the voice features
 - **PyTorch**, **audio-separator**, **Applio**, **Style-Bert-VITS2** (sync-dev-org fork), **pedalboard**
 
@@ -230,6 +248,8 @@ Copyright (C) 2026 jp-yendo
 This project is released under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0).
 
 FFmpeg is not bundled with the app; it is invoked as an external process installed in the user's environment. Therefore the license of the FFmpeg build itself (GPL/LGPL) does not affect the distribution of this app.
+
+sharp (Apache-2.0), used by the SVG Converter and the SVG Auto Converter, uses libvips (LGPL-3.0). libvips is included in the distribution as library files separate from sharp (in `@img/sharp-libvips-*` on macOS and Linux, and in `@img/sharp-win32-*` on Windows) and is loaded dynamically by the app. resvg (@resvg/resvg-js) is licensed under MPL-2.0, and @neplex/vectorizer under MIT.
 
 ### Third-Party Components
 

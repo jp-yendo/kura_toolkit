@@ -14,8 +14,7 @@ type ChapterState = {
     // 切り出しモードの出力ファイル名 (空文字 = チャプター名から自動生成)。
     // ディレクトリは含まず、出力先は outputDir が決める
     outputName: string;
-    // 出力設定。設定ファイルには保存しないため、起動のたびに既定値へ戻る
-    // (空文字 = 入力と同じディレクトリ)
+    // 出力設定。設定ファイルには保存しない (空文字 = 入力と同じディレクトリ)
     outputDir: string;
     accurate: boolean;
     logs: string[];
@@ -29,9 +28,25 @@ type ChapterState = {
     toggleBoundary(index: number): void;
     appendLog(line: string): void;
     clearLogs(): void;
+    // 初めの状態に戻す (別の機能へ移ったとき)
+    reset(): void;
 };
 
-export const useChapterStore = create<ChapterState>((set, get) => ({
+type ChapterData = Pick<
+    ChapterState,
+    | 'input'
+    | 'probe'
+    | 'mode'
+    | 'fromIndex'
+    | 'toIndex'
+    | 'boundaries'
+    | 'outputName'
+    | 'outputDir'
+    | 'accurate'
+    | 'logs'
+>;
+
+const INITIAL_STATE: ChapterData = {
     input: null,
     probe: null,
     mode: 'cut',
@@ -42,6 +57,10 @@ export const useChapterStore = create<ChapterState>((set, get) => ({
     outputDir: '',
     accurate: false,
     logs: [],
+};
+
+export const useChapterStore = create<ChapterState>((set, get) => ({
+    ...INITIAL_STATE,
     setInput(input, probe) {
         // 出力先ディレクトリと accurate はファイルを変えても引き継ぐ (出力ファイル名のみ入力ごとに破棄)
         set({ input, probe, fromIndex: 0, toIndex: -1, boundaries: [], outputName: '', logs: [] });
@@ -77,5 +96,8 @@ export const useChapterStore = create<ChapterState>((set, get) => ({
     },
     clearLogs() {
         set({ logs: [] });
+    },
+    reset() {
+        set(INITIAL_STATE);
     },
 }));

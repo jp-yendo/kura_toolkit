@@ -14,6 +14,14 @@ export const FEATURE_COLORS = {
 
 export type FeatureColorKey = keyof typeof FEATURE_COLORS;
 
+// 透過した画像を確かめる背景 (市松・白・黒)。画像の色を見比べるためのもので、テーマのライト/ダークによらず同じ色にする
+export const IMAGE_BACKDROP_COLORS = {
+    checkerLight: '#ffffff',
+    checkerDark: '#cccccc',
+    white: '#ffffff',
+    black: '#000000',
+} as const;
+
 export function createAppTheme(mode: 'light' | 'dark'): Theme {
     const isDark = mode === 'dark';
 

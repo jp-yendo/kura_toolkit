@@ -1,6 +1,10 @@
+import { useAudioStore } from './audioStore';
+import { useChapterStore } from './chapterStore';
 import { useConversionStore } from './conversionStore';
 import { useConversionSeparationStore, useSeparationWorkStore } from './separationWorkStore';
+import { useSvgAutoStore } from './svgAutoStore';
 import { timedSnapshot, useTtsStore } from './ttsStore';
+import { useVectorizerStore } from './vectorizerStore';
 
 // メニューの機能ごとの作業。同じ機能の中 (機能のタブの移動など) では作業を残し、別の機能へ移ったときに、
 // 前の機能の作業 (作業ディレクトリに置いた入力・候補など) を破棄する
@@ -16,6 +20,13 @@ function discardWork(workKey: string): void {
 
 // 作業を持つ機能の、作業の破棄
 const LEAVE_HANDLERS: Record<string, () => void> = {
+    // 音量の正規化・チャプターカットは、選んだファイルと結果・設定を初めの状態に戻す (一時ファイルは処理ごとに片付く)
+    'audio/normalizer': () => {
+        useAudioStore.getState().clearFiles();
+    },
+    'video/chapter-cut': () => {
+        useChapterStore.getState().reset();
+    },
     'audio/separation': () => {
         const separation = useSeparationWorkStore.getState();
         discardWork(separation.workKey);
@@ -31,6 +42,14 @@ const LEAVE_HANDLERS: Record<string, () => void> = {
         const tts = useTtsStore.getState();
         discardWork(tts.workKey);
         tts.clearWork();
+    },
+    // SVG 変換・SVG 自動変換は、画像・変換結果・設定のすべてを初めの状態に戻す
+    'image/svg-converter': () => {
+        void window.kuraToolkit.vectorizer.discard();
+        useVectorizerStore.getState().reset();
+    },
+    'image/svg-auto': () => {
+        useSvgAutoStore.getState().reset();
     },
 };
 

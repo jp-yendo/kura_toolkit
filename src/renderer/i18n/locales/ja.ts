@@ -50,6 +50,7 @@ export default {
         dropHint: 'ここにファイルをドラッグ&ドロップ\nまたはクリックして選択',
     },
     jobPhases: {
+        waitPrevious: '前の処理が終わるのを待っています',
         prepare: '準備をしています',
         decodeInput: '音声を読み込んでいます',
         loadModel: 'モデルを読み込んでいます',
@@ -75,6 +76,18 @@ export default {
             train: '学習しています',
             index: 'インデックスを作成しています',
             finalize: 'モデルを仕上げています',
+        },
+        svg: {
+            load: '画像を読み込んでいます',
+            background: '背景を除いています',
+            trace: 'ベクター化しています',
+            optimize: 'パスを最適化しています',
+        },
+        svgAuto: {
+            preprocess: '前処理をしています',
+            trial: '設定を試しています',
+            select: '候補を選んでいます',
+            refine: 'パスを補正しています',
         },
     },
     jobPhasesCounted: {
@@ -130,6 +143,10 @@ export default {
         svgConverter: {
             title: 'SVG 変換',
             desc: '画像をベクター形式の SVG に変換して保存します。設定を変えながら、元の画像と並べて仕上がりを確かめられます。',
+        },
+        svgAuto: {
+            title: 'SVG 自動変換',
+            desc: '変換の設定を自動で探し、元の画像に最も近い SVG を作ります。元の画像と並べて細部まで比べてから保存できます。',
         },
         cleanup: {
             title: 'クリーンアップ',
@@ -236,11 +253,34 @@ export default {
     svgPage: {
         dropHint: 'ここに画像をドラッグ&ドロップ\nまたはクリックして選択',
         original: '元画像',
+        imageSize: '{{width}} × {{height}} px',
+        reselectImage: '選び直す',
         preview: 'SVG プレビュー',
+        svgStats: 'パス {{paths}} ・ {{size}}',
+        sync: '拡大と位置を同期',
+        backdrop: '背景',
+        backdrops: {
+            checker: '市松',
+            white: '白',
+            black: '黒',
+        },
         zoomIn: '拡大',
         zoomOut: '縮小',
         actualSize: '実寸で表示 (100%)',
         fitToWindow: '全体を表示',
+        preprocess: '前処理',
+        longSide: '画像の長辺のサイズ',
+        upscale: '拡大の方法',
+        upscaleNearest: '最近傍',
+        upscaleBilinear: '双線形',
+        removeBackground: '背景を除く',
+        backgroundTolerance: '許容範囲',
+        speckArea: '小さな点を除く',
+        grayscale: 'グレースケールで変換する',
+        recolor: 'ベクター化後に色を再現する',
+        output: '出力',
+        optimize: 'パスを最適化する',
+        pathPrecision: '座標の精度',
         clustering: 'クラスタリング',
         curveFitting: 'カーブフィッティング',
         colorMode: 'カラーモード',
@@ -267,6 +307,16 @@ export default {
         errors: {
             VECTORIZE_FAILED:
                 'この画像はいまの設定では変換できませんでした。グラデーション幅を 1 以上に上げるか、色精度を下げて、もう一度お試しください。({{detail}})',
+            IMAGE_READ_FAILED:
+                '画像を読み込めませんでした。ファイルが壊れているか、対応していない形式の可能性があります。({{detail}})',
+            NOTHING_TO_TRACE:
+                '背景を除くと、変換するものが残りません。許容範囲を下げるか、背景を除くをオフにしてください。',
+            NO_OPAQUE_PIXEL: '画像に不透明な部分がありません。',
+        },
+        // グレースケールで変換したときのエラー
+        grayscaleErrors: {
+            VECTORIZE_FAILED:
+                'この画像はグレースケールでは変換できませんでした。スペックル除去を上げるか、「グレースケールで変換する」をオフにして、もう一度お試しください。({{detail}})',
         },
         saved: 'SVG ファイルを保存しました: {{path}}',
         resetToPreset: 'プリセットの値に戻す',
@@ -279,6 +329,56 @@ export default {
             logo: 'ロゴ・アイコン',
             detail: '細部重視',
             pixelArt: 'ピクセルアート',
+        },
+    },
+    svgAutoPage: {
+        search: '探索',
+        trials: '試す回数',
+        trialsHint: '変換を試す回数の上限です。多いほど時間がかかり、良い設定が見つかりやすくなります。',
+        start: '開始',
+        // 手順の中の回数
+        stepCount: {
+            preprocess: '{{current}} / {{total}}',
+            trial: '試行 {{current}} / {{total}}',
+            select: '候補 {{current}} / {{total}}',
+            refine: '調整 {{current}} / {{total}}',
+        },
+        bestSoFar: 'これまでの最も高い再現度: {{fidelity}}',
+        bestSoFarNone: 'これまでの最も高い再現度: -',
+        done: '自動変換が完了しました。',
+        incomplete: '処理が途中で止まりました。それまでに得た結果を表示しています。',
+        versions: '版',
+        trialSummary: '{{trials}} 回の変換を試しました。',
+        trialSummaryFailed: '{{trials}} 回の変換を試しました (うち {{failures}} 回は変換できませんでした)。',
+        trialVersion: '候補 {{rank}}',
+        refineVersion: '補正',
+        tuned: '探索した設定',
+        grayLevels: '{{count}} 段階',
+        best: '最も高い',
+        // 補正の調整
+        adjustments: {
+            recolor: '色の付け直し',
+            smallShapes: '小さな形の除去',
+            mergeColors: '近い色の統合',
+            simplify: '点の削減',
+        },
+        metrics: '再現度 {{fidelity}} ・ パス {{paths}} ・ {{size}}',
+        backToSettings: '設定に戻る',
+        discardConfirm: '結果を破棄して設定に戻りますか？破棄した結果は元に戻せません。',
+        discard: '破棄して戻る',
+        switchImage: '画像を切り替える',
+        switchImageConfirm: '画像を切り替えると、今の結果を破棄します。破棄した結果は元に戻せません。',
+        discardAndSwitch: '破棄して切り替える',
+        errors: {
+            VECTORIZE_FAILED:
+                'どの設定でもこの画像を変換できませんでした。前処理の設定を変えて、もう一度お試しください。({{detail}})',
+            SVG_RESULT_GONE: '結果が見つかりません。もう一度変換してください。',
+            SVG_AUTO_BUSY: '自動変換を実行中です。終わってから、もう一度お試しください。',
+        },
+        // グレースケールで変換したときのエラー
+        grayscaleErrors: {
+            VECTORIZE_FAILED:
+                'この画像はグレースケールでは変換できませんでした。「グレースケールで変換する」をオフにして、もう一度お試しください。({{detail}})',
         },
     },
     // パラメーターのプリセット (SVG 変換・音声機能で共通)

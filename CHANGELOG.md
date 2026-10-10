@@ -9,11 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- SVG Converter: conversion settings can be chosen from presets, and your own settings can be saved as presets.
+- SVG Converter: presets, resizing and background removal before converting, grayscale conversion, path optimization, and cancelling a conversion.
+- SVG Auto Converter, which finds conversion settings automatically.
+- SVG Converter: a number box next to each slider for typing an exact value.
+
+### Changed
+
+- SVG Converter: the default color precision is higher.
+- SVG Converter: choose the image first, then switch it with the Change button or by dropping another image anywhere.
+- SVG Converter: the original and the result are shown one above the other, zoom together with the mouse wheel, and show the path count and file size.
 
 ### Fixed
 
 - SVG Converter: when an image cannot be converted with the current settings, the message now says which settings to change.
+- SVG Converter, Audio Normalizer and Chapter Cut: moving to another feature now clears the chosen files and results, like other features.
 
 ## [0.3.1] - 2026-10-09
 

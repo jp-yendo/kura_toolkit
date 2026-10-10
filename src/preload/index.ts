@@ -50,10 +50,15 @@ const IPC_CHANNELS = {
     VECTORIZER_LOAD_IMAGE: 'vectorizer:loadImage',
     VECTORIZER_CONVERT: 'vectorizer:convert',
     VECTORIZER_SAVE_SVG: 'vectorizer:saveSvg',
+    VECTORIZER_DISCARD: 'vectorizer:discard',
     VECTORIZER_PRESETS_LIST: 'vectorizer:presets:list',
     VECTORIZER_PRESETS_SAVE: 'vectorizer:presets:save',
     VECTORIZER_PRESETS_RENAME: 'vectorizer:presets:rename',
     VECTORIZER_PRESETS_REMOVE: 'vectorizer:presets:remove',
+    SVG_AUTO_LOAD_IMAGE: 'svgAuto:loadImage',
+    SVG_AUTO_START: 'svgAuto:start',
+    SVG_AUTO_SAVE: 'svgAuto:save',
+    SVG_AUTO_DISCARD: 'svgAuto:discard',
     CLEANUP_GET_ROOTS: 'cleanup:getRoots',
     CLEANUP_GET_CAPABILITIES: 'cleanup:getCapabilities',
     CLEANUP_OPEN_PERMISSION_SETTINGS: 'cleanup:openPermissionSettings',
@@ -255,17 +260,34 @@ const api: IpcApi = {
         async loadImage(path) {
             return ipcRenderer.invoke(IPC_CHANNELS.VECTORIZER_LOAD_IMAGE, path);
         },
-        async convert(path, params) {
-            return ipcRenderer.invoke(IPC_CHANNELS.VECTORIZER_CONVERT, path, params);
+        async convert(jobId, path, request) {
+            return ipcRenderer.invoke(IPC_CHANNELS.VECTORIZER_CONVERT, jobId, path, request);
         },
         async saveSvg(resultId, path) {
             return ipcRenderer.invoke(IPC_CHANNELS.VECTORIZER_SAVE_SVG, resultId, path);
+        },
+        async discard() {
+            return ipcRenderer.invoke(IPC_CHANNELS.VECTORIZER_DISCARD);
         },
         presets: {
             list: () => ipcRenderer.invoke(IPC_CHANNELS.VECTORIZER_PRESETS_LIST),
             save: preset => ipcRenderer.invoke(IPC_CHANNELS.VECTORIZER_PRESETS_SAVE, preset),
             rename: (id, name) => ipcRenderer.invoke(IPC_CHANNELS.VECTORIZER_PRESETS_RENAME, id, name),
             remove: id => ipcRenderer.invoke(IPC_CHANNELS.VECTORIZER_PRESETS_REMOVE, id),
+        },
+    },
+    svgAuto: {
+        async loadImage(path) {
+            return ipcRenderer.invoke(IPC_CHANNELS.SVG_AUTO_LOAD_IMAGE, path);
+        },
+        async start(jobId, path, request) {
+            return ipcRenderer.invoke(IPC_CHANNELS.SVG_AUTO_START, jobId, path, request);
+        },
+        async save(versionId, path) {
+            return ipcRenderer.invoke(IPC_CHANNELS.SVG_AUTO_SAVE, versionId, path);
+        },
+        async discard() {
+            return ipcRenderer.invoke(IPC_CHANNELS.SVG_AUTO_DISCARD);
         },
     },
     cleanup: {

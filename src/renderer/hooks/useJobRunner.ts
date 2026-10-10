@@ -7,7 +7,7 @@ import type { JobEvent, JobPhase } from '@shared/types';
 const ETA_MIN_ELAPSED_SEC = 3;
 
 // 今の段階と、残り時間の見積もりに使う値
-type PhaseState = JobPhase & {
+export type PhaseState = JobPhase & {
     // 段階が始まった時刻 (ms) と、そのときの進み具合
     startedAt: number;
     startFraction: number;
@@ -60,16 +60,24 @@ function phaseStatus(t: TFunction, phase: PhaseState, now: number): string {
         phase.step !== undefined && phase.steps !== undefined
             ? t('jobPhaseStep', { step: phase.step, steps: phase.steps, text: label })
             : label;
+    const remaining = phaseRemaining(t, phase, now);
+    return remaining ? `${text}  ${remaining}` : text;
+}
+
+// 段階の残り時間の表記 (「残り 約 …」)。段階が始まってからの経過時間と進み具合から見積もる。
+// 見積もれない間 (進み具合が分からない・始まった直後・進んでいない・終わった) は undefined
+export function phaseRemaining(t: TFunction, phase: PhaseState, now: number): string | undefined {
     const elapsed = (now - phase.startedAt) / 1000;
     const done = (phase.fraction ?? 0) - phase.startFraction;
-    if (phase.fraction === undefined || phase.fraction >= 1 || done <= 0 || elapsed < ETA_MIN_ELAPSED_SEC) return text;
+    if (phase.fraction === undefined || phase.fraction >= 1 || done <= 0 || elapsed < ETA_MIN_ELAPSED_SEC)
+        return undefined;
     const remaining = (elapsed / done) * (1 - phase.fraction);
-    return `${text}  ${t('jobEta.left', { time: formatEta(t, remaining) })}`;
+    return t('jobEta.left', { time: formatEta(t, remaining) });
 }
 
 // 新しい段階の通知を反映する。段階や手順が変わったとき、または同じ段階で進み具合が戻ったとき (アンサンブルの次の
 // モデルなど) は、そこから見積もり直す (回数が変わるだけ (学習の回数) では見積もり直さない)
-function nextPhase(previous: PhaseState | undefined, phase: JobPhase): PhaseState {
+export function nextPhase(previous: PhaseState | undefined, phase: JobPhase): PhaseState {
     const restart =
         !previous ||
         previous.id !== phase.id ||
