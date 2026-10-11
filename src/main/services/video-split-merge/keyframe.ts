@@ -1,4 +1,5 @@
 import { probeJson } from '../ffmpeg/ffprobe';
+import type { VideoCutBoundary } from '../../../shared/types';
 
 // キーフレーム探索
 
@@ -229,21 +230,18 @@ export async function isH264Idr(
     return h264NalTypes(dumpBytes(packet.data)).includes(5);
 }
 
-// キーフレーム (表示の時刻 keyframe) から写し始めても、そこから正しくデコードできるかを返す。
+// キーフレーム (表示の時刻 keyframe) から写した映像を、別の映像の後ろにつないでも正しくデコードできるかを返す。
 // - H.264 は IDR だけができる (isH264Idr)
 // - 先行フレーム (open GOP) を持つものはできない (先行フレームは前の GOP を参照し、先行フレームだけを捨てても、後ろの
-//   フレームが前の GOP のフレームを参照の一覧に持つ)。ただし fileStart (写した映像がファイルの最初になる) の HEVC は
-//   できる (ファイルの最初のキーフレームに付く先行フレーム (RASL) は、デコーダーが規格どおり捨てる)
+//   フレームが前の GOP のフレームを参照の一覧に持つ)
 export async function decodableFrom(
     input: string,
     streamIndex: number,
     codec: string | undefined,
     keyframe: number,
-    fileStart: boolean,
     jobId?: string
 ): Promise<boolean> {
     if (codec === 'h264' && !(await isH264Idr(input, streamIndex, keyframe, jobId))) return false;
-    if (fileStart && codec === 'hevc') return true;
     return !(await hasLeadingFrames(input, streamIndex, keyframe, jobId));
 }
 
@@ -358,6 +356,33 @@ export async function findCopyEnd(
     }
     if (lastDecode === null) return { decodeEnd: target, displayEnd: target };
     return { decodeEnd: decodeCutAfter(packets, lastDecode, end), displayEnd: end };
+}
+
+// チャプターの境界 time で、後ろの範囲に入る最初のフレームの表示の時刻を返す。境界をまたぐフレームは rule で決めた範囲に入れる
+// (VideoCutBoundary)。境界がフレームの区切りにある場合はどれも同じになる (チャプターの時刻のミリ秒への丸めは FRAME_TOLERANCE
+// で吸収する)。後ろにフレームが無ければ time
+export async function boundaryFrame(
+    input: string,
+    streamIndex: number,
+    time: number,
+    rule: VideoCutBoundary,
+    jobId?: string
+): Promise<number> {
+    if (time <= FRAME_TOLERANCE) return time;
+    const frames = (await readTimedPackets(input, streamIndex, time, jobId)).sort((a, b) => a.pts - b.pts);
+    for (let i = 0; i < frames.length; i++) {
+        const begin = frames[i].pts;
+        // 表示の終わり (次のフレームの始まり)
+        const finish = i + 1 < frames.length ? frames[i + 1].pts : begin + frames[i].duration;
+        const later =
+            rule === 'earlier'
+                ? begin >= time - FRAME_TOLERANCE
+                : rule === 'later'
+                  ? finish > time + FRAME_TOLERANCE
+                  : (begin + finish) / 2 >= time;
+        if (later) return begin;
+    }
+    return time;
 }
 
 // ストリームコピーで写すのをやめても表示が途切れない位置のうち、from より後ろ・target 以前で最も遅いものを返す (無ければ null)。

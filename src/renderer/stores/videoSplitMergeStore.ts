@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { VideoCutMethod, VideoProbeResult } from '@shared/types';
+import type { VideoCutBoundary, VideoCutMethod, VideoProbeResult } from '@shared/types';
 import type { MergeOutputFormat } from '@shared/video-merge';
 
 // 表示している画面 (ファイルを選ぶ画面・チャプターで分割する画面・結合する画面)
@@ -47,6 +47,8 @@ type VideoSplitMergeState = {
     outputDir: string;
     // 切り出し・分割の方法
     cutMethod: VideoCutMethod;
+    // チャプターの境界をまたぐフレームを入れる範囲
+    cutBoundary: VideoCutBoundary;
     // 結合するファイル (並べた順に結合する)
     mergeItems: MergeItem[];
     // 結合部にチャプターを付ける
@@ -63,6 +65,7 @@ type VideoSplitMergeState = {
     setOutputName(outputName: string): void;
     setOutputDir(outputDir: string): void;
     setCutMethod(method: VideoCutMethod): void;
+    setCutBoundary(boundary: VideoCutBoundary): void;
     setMode(mode: SplitMode): void;
     setFromIndex(index: number): void;
     setToIndex(index: number): void;
@@ -95,6 +98,7 @@ type VideoSplitMergeData = Pick<
     | 'outputName'
     | 'outputDir'
     | 'cutMethod'
+    | 'cutBoundary'
     | 'mergeItems'
     | 'mergeChapters'
     | 'mergeReencode'
@@ -114,6 +118,7 @@ const INITIAL_STATE: VideoSplitMergeData = {
     outputName: '',
     outputDir: '',
     cutMethod: 'lossless',
+    cutBoundary: 'earlier',
     mergeItems: [],
     mergeChapters: false,
     mergeReencode: false,
@@ -148,6 +153,9 @@ export const useVideoSplitMergeStore = create<VideoSplitMergeState>((set, get) =
     },
     setCutMethod(method) {
         set({ cutMethod: method });
+    },
+    setCutBoundary(boundary) {
+        set({ cutBoundary: boundary });
     },
     setMode(mode) {
         set({ mode });

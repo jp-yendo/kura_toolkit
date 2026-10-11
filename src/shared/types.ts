@@ -244,6 +244,10 @@ export type VideoProbeResult = {
 // 再エンコードして指定の位置で切る、reencode = 映像・音声を再エンコードして指定の位置で切る
 export type VideoCutMethod = 'lossless' | 'smart' | 'reencode';
 
+// チャプターの境界をまたぐフレーム (境界より前に表示が始まり、後ろで終わるもの) を入れる範囲。
+// earlier = 前の範囲、later = 後ろの範囲、longer = 境界の前後で長く表示される側の範囲
+export type VideoCutBoundary = 'earlier' | 'later' | 'longer';
+
 export type VideoCutRequest = {
     input: string;
     // チャプター配列の添字で指定
@@ -251,6 +255,7 @@ export type VideoCutRequest = {
     // null = 最終チャプターまで
     toIndex: number | null;
     method: VideoCutMethod;
+    boundary: VideoCutBoundary;
     // null = 入力と同じディレクトリ
     outputDir: string | null;
     // 出力ファイル名の明示指定 (null = チャプター名から自動生成)。
@@ -263,6 +268,7 @@ export type VideoSplitRequest = {
     // このチャプター添字の直前で分割する
     boundaryIndexes: number[];
     method: VideoCutMethod;
+    boundary: VideoCutBoundary;
     outputDir: string | null;
 };
 
@@ -283,13 +289,7 @@ export type VideoSplitNotice =
     | { kind: 'data'; codec: string }
     | { kind: 'coverArt' }
     // 再エンコードで、同じ形式で書けない音声を別の形式で書く
-    | { kind: 'audioConverted'; codec: string; to: string }
-    // ロスレスで、範囲が外側へ広がる (キーフレームの位置で切るため)。ranges は該当する範囲ごとの、最初のチャプターの番号
-    // (1 からの連番) と、前・後ろへ広がるフレームの数
-    | { kind: 'losslessExtended'; ranges: Array<{ chapter: number; before: number; after: number }> }
-    // ロスレスで、範囲の始まりのキーフレームからは正しくデコードできない (前の映像を参照する)。chapters は該当する範囲の
-    // 最初のチャプターの番号 (1 からの連番)
-    | { kind: 'uncleanStart'; chapters: number[] };
+    | { kind: 'audioConverted'; codec: string; to: string };
 
 // 結合する 1 ファイル
 export type VideoMergeItem = {

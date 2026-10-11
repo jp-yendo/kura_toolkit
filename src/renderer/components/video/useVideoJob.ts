@@ -17,8 +17,10 @@ type RunningJob = {
 export function useVideoJob() {
     const { t } = useTranslation();
     const [job, setJob] = React.useState<RunningJob | null>(null);
-    // 処理の前の解析・確認の最中 (取り消せないため、進捗ダイアログに中止のボタンを出さない)
-    const [loading, setLoading] = React.useState(false);
+    // 処理の前の読み込み・確認の最中か (取り消せないため、進捗ダイアログに中止のボタンを出さない)
+    const [preparing, setPreparing] = React.useState(false);
+    // 進捗ダイアログの題名 (何をしているか)。閉じる間に空にならないよう、次に始めるまで残す
+    const [title, setTitle] = React.useState('');
     const [resultOutputs, setResultOutputs] = React.useState<string[] | null>(null);
     // 完了ダイアログ内でログを開いているか (実行のたびに閉じた状態から始める)
     const [logOpen, setLogOpen] = React.useState(false);
@@ -48,11 +50,13 @@ export function useVideoJob() {
     // 全体の進み具合は処理する長さに比例するため、そこから残り時間を見積もる (再エンコードは時間がかかる)
     const remaining = useRemainingTime(activeJobId ?? null, job?.percent);
 
-    // 処理を実行し、終わったら出力したファイルを完了ダイアログで示す (キャンセルした場合は示さない)
-    const runJob = async (execute: (jobId: string) => Promise<VideoJobResult>) => {
+    // 処理を実行し、終わったら出力したファイルを完了ダイアログで示す (キャンセルした場合は示さない)。
+    // title は進捗ダイアログの題名 (何をしているか)
+    const runJob = async (title: string, execute: (jobId: string) => Promise<VideoJobResult>) => {
         const jobId = crypto.randomUUID();
         useVideoSplitMergeStore.getState().clearLogs();
         setLogOpen(false);
+        setTitle(title);
         setJob({ jobId });
         try {
             const result = await execute(jobId);
@@ -72,9 +76,13 @@ export function useVideoJob() {
 
     return {
         job,
-        loading,
-        setLoading,
-        busy: job !== null || loading,
+        // 処理の前の読み込み・確認を始める (title は進捗ダイアログの題名) か、終える (null)
+        setActivity: (activity: string | null) => {
+            setPreparing(activity !== null);
+            if (activity !== null) setTitle(activity);
+        },
+        busy: job !== null || preparing,
+        title,
         runJob,
         cancel,
         remaining,
@@ -85,4 +93,4 @@ export function useVideoJob() {
     };
 }
 
-export type VideoJobControls = Pick<ReturnType<typeof useVideoJob>, 'busy' | 'setLoading' | 'runJob'>;
+export type VideoJobControls = Pick<ReturnType<typeof useVideoJob>, 'busy' | 'setActivity' | 'runJob'>;

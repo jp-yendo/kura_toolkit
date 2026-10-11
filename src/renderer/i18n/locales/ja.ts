@@ -221,6 +221,12 @@ export default {
             smart: 'スマートカット',
             reencode: '再エンコード',
         },
+        cutBoundary: '境界をまたぐフレーム',
+        cutBoundaries: {
+            earlier: '前の動画に入れる',
+            later: '後ろの動画に入れる',
+            longer: '長く表示される側に入れる',
+        },
         cutMethodHints: {
             lossless:
                 '再エンコードせずに切ります。始まりは直前のキーフレームから、終わりは表示に要るフレームまでになります。',
@@ -232,7 +238,11 @@ export default {
         outputFileHint:
             '出力先ディレクトリの中に作成します。空欄の場合はチャプター名から自動で決定し、拡張子を省略した場合は入力と同じ拡張子を付けます。',
         run: '実行',
-        running: '処理中',
+        loadingVideo: '動画を読み込んでいます',
+        checkingVideo: '動画を確認しています',
+        cutting: '切り出しています',
+        splitting: '分割しています',
+        merging: '結合しています',
         splitHint: 'チェックしたチャプターの直前で分割します。',
         noChapters: 'チャプター情報が見つかりませんでした。',
         invalidRange: '開始チャプターが終了チャプターより後になっています。',
@@ -320,13 +330,6 @@ export default {
         splitNoticeTitle: '実行前の確認',
         splitNoticeMessage: 'このまま実行すると、次のようになります。',
         splitAudioConverted: '音声 ({{codec}}) は同じ形式で書き出せないため、{{to}} で書き出します',
-        splitLosslessExtended:
-            'ロスレスはキーフレームの位置で切るため、次の範囲は隣のチャプターのフレームを含みます: {{ranges}}',
-        splitExtendedBoth: '#{{chapter}} (前に {{before}} フレーム・後ろに {{after}} フレーム)',
-        splitExtendedBefore: '#{{chapter}} (前に {{before}} フレーム)',
-        splitExtendedAfter: '#{{chapter}} (後ろに {{after}} フレーム)',
-        splitUncleanStart:
-            'チャプター {{chapters}} から始まる部分は、始まりのキーフレームが前の映像を参照するため、再生ソフトによっては始まりの映像が乱れることがあります (スマートカット・再エンコードでは起きません)',
         splitNoticeRun: 'このまま実行',
         needTwoFiles: '2 つ以上のファイルを追加してください。',
         noMediaStreams: '映像も音声も含まれていないファイルがあります。',

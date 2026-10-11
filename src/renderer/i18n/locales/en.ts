@@ -221,6 +221,12 @@ export default {
             smart: 'Smart cut',
             reencode: 'Re-encode',
         },
+        cutBoundary: 'Frame across a boundary',
+        cutBoundaries: {
+            earlier: 'Put in the earlier part',
+            later: 'Put in the later part',
+            longer: 'Put where it is shown longer',
+        },
         cutMethodHints: {
             lossless:
                 'Cuts without re-encoding. The cut starts at the keyframe before the position and ends after the frames needed for display.',
@@ -232,7 +238,11 @@ export default {
         outputFileHint:
             'The file is created in the output directory. If empty, the name is generated from the chapter labels; if the extension is omitted, the one of the input file is used.',
         run: 'Run',
-        running: 'Processing',
+        loadingVideo: 'Loading the video',
+        checkingVideo: 'Checking the video',
+        cutting: 'Cutting',
+        splitting: 'Splitting',
+        merging: 'Merging',
         splitHint: 'The file is split right before each checked chapter.',
         noChapters: 'No chapters found in the file.',
         invalidRange: 'The start chapter is after the end chapter.',
@@ -322,13 +332,6 @@ export default {
         splitNoticeTitle: 'Before You Continue',
         splitNoticeMessage: 'If you continue, the following applies.',
         splitAudioConverted: 'Audio ({{codec}}) cannot be written in the same format, so it is written as {{to}}',
-        splitLosslessExtended:
-            'Lossless cuts at keyframes, so these parts include frames of the neighboring chapters: {{ranges}}',
-        splitExtendedBoth: '#{{chapter}} ({{before}} frames before, {{after}} frames after)',
-        splitExtendedBefore: '#{{chapter}} ({{before}} frames before)',
-        splitExtendedAfter: '#{{chapter}} ({{after}} frames after)',
-        splitUncleanStart:
-            'The parts starting at chapter {{chapters}} begin at a keyframe that refers to earlier frames, so their first frames may be distorted in some players (this does not happen with Smart cut or Re-encode)',
         splitNoticeRun: 'Continue',
         needTwoFiles: 'Please add two or more files.',
         noMediaStreams: 'A file contains neither video nor audio.',

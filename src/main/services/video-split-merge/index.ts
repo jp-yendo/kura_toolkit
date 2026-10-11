@@ -2,8 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { emitJobEvent, finishJob, isCancelled, startJob } from '../job-manager';
 import { isCancelledError } from '../ffmpeg/ffmpeg';
-import { findVideoStreamIndex, probeVideoFile, probeChapters, probeMedia, type FfStream } from './probe';
-import { countFrames, decodableFrom, findCopyEnd, findKeyframeBefore } from './keyframe';
+import { probeVideoFile, probeChapters, probeMedia, type FfStream } from './probe';
 import { defaultOutputPath, namedOutputPath, rangeLabels, resolveSubtitleFriendlyOutput } from './naming';
 import { cutRange } from './cut';
 import { mergeFiles } from './merge';
@@ -139,40 +138,12 @@ function noticesOf(
     return losses;
 }
 
-// ロスレスで切り出したときの各範囲の様子を調べ、知らせることを返す:
-// - 範囲が外側へ広がるもの (始まりが直前のキーフレームへ、終わりが表示に要るフレームまで) と、広がるフレームの数
-// - 始まり (直前のキーフレーム) から正しくデコードできないもの
-async function losslessNotices(input: string, streams: FfStream[], ranges: RangeBounds[]): Promise<VideoSplitNotice[]> {
-    const index = findVideoStreamIndex(streams);
-    if (index === null) return [];
-    const codec = streams.find(stream => stream.index === index)?.codec_name;
-    const extended: Array<{ chapter: number; before: number; after: number }> = [];
-    const unclean: number[] = [];
-    for (const { chapter, start, end } of ranges) {
-        const keyframe = await findKeyframeBefore(input, index, start);
-        const copyEnd = await findCopyEnd(input, index, end);
-        const before = await countFrames(input, index, keyframe.time, start);
-        const after = await countFrames(input, index, end, copyEnd.displayEnd);
-        if (before > 0 || after > 0) extended.push({ chapter, before, after });
-        if (!(await decodableFrom(input, index, codec, keyframe.time, true))) unclean.push(chapter);
-    }
-    const notices: VideoSplitNotice[] = [];
-    if (extended.length > 0) notices.push({ kind: 'losslessExtended', ranges: extended });
-    if (unclean.length > 0) notices.push({ kind: 'uncleanStart', chapters: unclean });
-    return notices;
-}
-
-// 切り出す範囲 (最初のチャプターの番号と、元の始まり・終わりの時刻)
-type RangeBounds = { chapter: number; start: number; end: number };
-
 // 出力パスのうち既に存在するものと、実行前に知らせることを調べる
 async function checkExisting(
-    input: string,
     requested: string,
     outputs: string[],
     streams: FfStream[],
-    method: VideoCutMethod,
-    ranges: RangeBounds[]
+    method: VideoCutMethod
 ): Promise<VideoOutputCheck> {
     const accurate = method === 'reencode';
     const existing = outputs.filter(output => {
@@ -189,38 +160,30 @@ async function checkExisting(
         outputs,
         existing,
         containerChange: from && to && from !== to ? { from, to } : null,
-        notices: outputs.length > 0 ? await notices() : [],
+        notices:
+            outputs.length > 0
+                ? noticesOf(streams, outputs[0], accurate, accurate ? await availableEncoders() : null)
+                : [],
     };
-
-    async function notices(): Promise<VideoSplitNotice[]> {
-        const found = noticesOf(streams, outputs[0], accurate, accurate ? await availableEncoders() : null);
-        if (method === 'lossless') found.push(...(await losslessNotices(input, streams, ranges)));
-        return found;
-    }
 }
 
 // 切り出しの出力先を実行前に調べる (上書き確認に使う)
 export async function videoCheckCut(request: VideoCutRequest): Promise<VideoOutputCheck> {
     const chapters = await probeChapters(request.input);
     const media = await probeMedia(request.input);
-    const { first, last, output } = planCut(request, chapters, media.streams);
-    return checkExisting(request.input, request.outputName || request.input, [output], media.streams, request.method, [
-        { chapter: first + 1, start: chapters[first].start, end: chapters[last].end },
-    ]);
+    const { output } = planCut(request, chapters, media.streams);
+    return checkExisting(request.outputName || request.input, [output], media.streams, request.method);
 }
 
 // 分割の出力先を実行前に調べる (上書き確認に使う)
 export async function videoCheckSplit(request: VideoSplitRequest): Promise<VideoOutputCheck> {
     const chapters = await probeChapters(request.input);
     const media = await probeMedia(request.input);
-    const { ranges, outputs } = planSplit(request, chapters, media.streams);
     return checkExisting(
         request.input,
-        request.input,
-        outputs,
+        planSplit(request, chapters, media.streams).outputs,
         media.streams,
-        request.method,
-        ranges.map(([first, last]) => ({ chapter: first + 1, start: chapters[first].start, end: chapters[last].end }))
+        request.method
     );
 }
 
@@ -242,6 +205,7 @@ export async function videoCut(jobId: string, request: VideoCutRequest): Promise
             last,
             output,
             method: request.method,
+            boundary: request.boundary,
             jobId,
             log: line => emitLog(jobId, line),
             onProgress: percent => emitJobEvent({ jobId, kind: 'progress', percent }),
@@ -298,6 +262,7 @@ export async function videoSplit(jobId: string, request: VideoSplitRequest): Pro
                 last,
                 output: outputs[number],
                 method: request.method,
+                boundary: request.boundary,
                 jobId,
                 log: line => emitLog(jobId, line),
                 onProgress: percent =>

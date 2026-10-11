@@ -41,6 +41,7 @@ import { isChapterTrack } from '@shared/video-merge';
 import { codecLabel } from '@shared/video-codecs';
 import type {
     MediaStreamInfo,
+    VideoCutBoundary,
     VideoCutMethod,
     VideoCutRequest,
     VideoOutputCheck,
@@ -49,6 +50,7 @@ import type {
 } from '@shared/types';
 
 const CUT_METHODS: VideoCutMethod[] = ['lossless', 'smart', 'reencode'];
+const CUT_BOUNDARIES: VideoCutBoundary[] = ['earlier', 'later', 'longer'];
 
 // 実行前に知らせることの文言
 function noticeText(t: TFunction, notice: VideoSplitNotice): string {
@@ -59,25 +61,6 @@ function noticeText(t: TFunction, notice: VideoSplitNotice): string {
             return t('videoSplitMergePage.splitLossCoverArt');
         case 'audioConverted':
             return t('videoSplitMergePage.splitAudioConverted', { codec: notice.codec, to: codecLabel(notice.to) });
-        case 'losslessExtended':
-            return t('videoSplitMergePage.splitLosslessExtended', {
-                ranges: notice.ranges
-                    .map(range =>
-                        t(
-                            range.before > 0 && range.after > 0
-                                ? 'videoSplitMergePage.splitExtendedBoth'
-                                : range.before > 0
-                                  ? 'videoSplitMergePage.splitExtendedBefore'
-                                  : 'videoSplitMergePage.splitExtendedAfter',
-                            range
-                        )
-                    )
-                    .join(', '),
-            });
-        case 'uncleanStart':
-            return t('videoSplitMergePage.splitUncleanStart', {
-                chapters: notice.chapters.map(chapter => `#${chapter}`).join(', '),
-            });
     }
 }
 
@@ -114,7 +97,7 @@ type Props = {
 export default function SplitView({ jobs, onFile }: Props) {
     const { t } = useTranslation();
     const store = useVideoSplitMergeStore();
-    const { busy, setLoading, runJob } = jobs;
+    const { busy, setActivity, runJob } = jobs;
     // 上書きになる出力パスの一覧 (null = 確認ダイアログを出さない)
     const [overwriteTargets, setOverwriteTargets] = React.useState<string[] | null>(null);
     // 出力コンテナが変わる場合の確認 (null = 確認ダイアログを出さない)
@@ -144,6 +127,7 @@ export default function SplitView({ jobs, onFile }: Props) {
         fromIndex: store.fromIndex,
         toIndex: store.toIndex >= 0 ? store.toIndex : null,
         method: store.cutMethod,
+        boundary: store.cutBoundary,
         outputDir: store.outputDir || null,
         outputName: store.outputName || null,
     });
@@ -151,6 +135,7 @@ export default function SplitView({ jobs, onFile }: Props) {
         input,
         boundaryIndexes: store.boundaries,
         method: store.cutMethod,
+        boundary: store.cutBoundary,
         outputDir: store.outputDir || null,
     });
 
@@ -166,7 +151,7 @@ export default function SplitView({ jobs, onFile }: Props) {
         }
         // 既に同名のファイルがある場合は、取り消せないため実行前に確認する
         const input = store.input;
-        setLoading(true);
+        setActivity(t('videoSplitMergePage.checkingVideo'));
         let check;
         try {
             check =
@@ -177,7 +162,7 @@ export default function SplitView({ jobs, onFile }: Props) {
             showNotice('warning', formatError(error));
             return;
         } finally {
-            setLoading(false);
+            setActivity(null);
         }
         // 字幕の形式の都合で出力コンテナが変わる場合は、拡張子が変わる旨を先に確認する
         if (check.containerChange) {
@@ -204,7 +189,7 @@ export default function SplitView({ jobs, onFile }: Props) {
         if (!store.input || !store.probe) return;
         const input = store.input;
         const mode = store.mode;
-        await runJob(jobId =>
+        await runJob(t(mode === 'cut' ? 'videoSplitMergePage.cutting' : 'videoSplitMergePage.splitting'), jobId =>
             mode === 'cut'
                 ? window.kuraToolkit.videoSplitMerge.cut(jobId, buildCutRequest(input))
                 : window.kuraToolkit.videoSplitMerge.split(jobId, buildSplitRequest(input))
@@ -436,20 +421,44 @@ export default function SplitView({ jobs, onFile }: Props) {
                         )}
 
                         <Box>
-                            <RadioGroup
-                                row
-                                value={store.cutMethod}
-                                onChange={event => store.setCutMethod(event.target.value as VideoCutMethod)}
+                            {/* 方法のラジオの右に境界をまたぐフレームの選択を並べる (幅が足りなければ折り返す) */}
+                            <Stack
+                                direction='row'
+                                useFlexGap
+                                sx={{ alignItems: 'center', flexWrap: 'wrap', columnGap: 3, rowGap: 1 }}
                             >
-                                {CUT_METHODS.map(method => (
-                                    <FormControlLabel
-                                        key={method}
-                                        value={method}
-                                        control={<Radio />}
-                                        label={t(`videoSplitMergePage.cutMethods.${method}`)}
-                                    />
-                                ))}
-                            </RadioGroup>
+                                <RadioGroup
+                                    row
+                                    value={store.cutMethod}
+                                    onChange={event => store.setCutMethod(event.target.value as VideoCutMethod)}
+                                >
+                                    {CUT_METHODS.map(method => (
+                                        <FormControlLabel
+                                            key={method}
+                                            value={method}
+                                            control={<Radio />}
+                                            label={t(`videoSplitMergePage.cutMethods.${method}`)}
+                                        />
+                                    ))}
+                                </RadioGroup>
+                                <FormControl size='small' sx={{ minWidth: 260 }}>
+                                    <InputLabel id='cut-boundary-label'>
+                                        {t('videoSplitMergePage.cutBoundary')}
+                                    </InputLabel>
+                                    <Select
+                                        labelId='cut-boundary-label'
+                                        label={t('videoSplitMergePage.cutBoundary')}
+                                        value={store.cutBoundary}
+                                        onChange={event => store.setCutBoundary(event.target.value as VideoCutBoundary)}
+                                    >
+                                        {CUT_BOUNDARIES.map(boundary => (
+                                            <MenuItem key={boundary} value={boundary}>
+                                                {t(`videoSplitMergePage.cutBoundaries.${boundary}`)}
+                                            </MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                            </Stack>
                             <Typography variant='body2' color='text.secondary' sx={{ lineHeight: 1.6 }}>
                                 {t(`videoSplitMergePage.cutMethodHints.${store.cutMethod}`)}
                             </Typography>
@@ -476,7 +485,7 @@ export default function SplitView({ jobs, onFile }: Props) {
                 </DialogActions>
             </AppDialog>
 
-            {/* 実行前に知らせること (出力に含められないもの・形式を変えて書く音声・ロスレスで広がる範囲など) がある場合の確認 */}
+            {/* 実行前に知らせること (出力に含められないもの・形式を変えて書く音声) がある場合の確認 */}
             <AppDialog open={lossCheck !== null} onClose={() => setLossCheck(null)} maxWidth='sm' fullWidth>
                 <DialogTitle>{t('videoSplitMergePage.splitNoticeTitle')}</DialogTitle>
                 <DialogContent>

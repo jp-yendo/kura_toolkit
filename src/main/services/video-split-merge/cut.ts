@@ -6,8 +6,10 @@ import {
     findAudioPacketStart,
     findCopyEnd,
     findKeyframeBefore,
+    boundaryFrame,
     countFrames,
     firstFrameFrom,
+    hasLeadingFrames,
     FRAME_TOLERANCE,
 } from './keyframe';
 import { smartCutVideo } from './smart-cut';
@@ -27,7 +29,7 @@ import { hdrArgs } from './hdr';
 import { streamMetadataArgs } from './stream-metadata';
 import { shiftTimecode } from './timecode';
 import { HDR_METADATA_ENCODERS, VIDEO_ENCODERS } from '../../../shared/video-codecs';
-import type { ChapterInfo, VideoCutMethod } from '../../../shared/types';
+import type { ChapterInfo, VideoCutBoundary, VideoCutMethod } from '../../../shared/types';
 import { newTempDir, produceFile, discardLater } from '../work-dir';
 
 // チャプター範囲の切り抜き本体
@@ -43,6 +45,7 @@ export type CutRangeOptions = {
     last: number;
     output: string;
     method: VideoCutMethod;
+    boundary: VideoCutBoundary;
     jobId: string;
     // 加工情報の表示用ログ
     log: (line: string) => void;
@@ -85,22 +88,26 @@ async function probeOutputShift(outputPath: string, jobId: string): Promise<{ sh
 // 指定チャプター範囲をひとつ切り抜く共通処理。
 // cut / split は範囲の指定方式が異なるだけで、ここからは同一処理となる。
 export async function cutRange(options: CutRangeOptions): Promise<void> {
-    const { inputPath, chapters, streams, first, last, output, method, jobId, log } = options;
+    const { inputPath, chapters, streams, first, last, output, method, boundary, jobId, log } = options;
     const accurate = method === 'reencode';
 
     if (path.resolve(output) === path.resolve(inputPath)) {
         throw new Error('OUTPUT_EQUALS_INPUT');
     }
 
-    // 範囲は開始チャプターの先頭から終了チャプターの末尾まで
-    const start = chapters[first].start;
-    const end = chapters[last].end;
+    // 範囲は開始チャプターの先頭から終了チャプターの末尾まで。境界をまたぐフレームを入れる範囲を boundary で決め、
+    // 範囲の始まり・終わりを、範囲に入る最初のフレーム・次の範囲に入る最初のフレームの表示の時刻にする (隣り合う範囲は
+    // 同じ境界を同じ規則で置き換えるため、どのフレームも一方だけに入る)
+    const videoIndex = findVideoStreamIndex(streams);
+    const resolve = (time: number) =>
+        videoIndex !== null ? boundaryFrame(inputPath, videoIndex, time, boundary, jobId) : Promise.resolve(time);
+    const start = await resolve(chapters[first].start);
+    const end = await resolve(chapters[last].end);
 
     // まず映像の範囲を決め、音声・字幕などはその範囲に合わせて取り出す (映像と必ずそろえるため)。
     // 再エンコード・スマートカットは指定どおりの範囲。
     // ロスレスは指定どおりに切れないところを外側へ広げる: 始まりは直前のキーフレームへ、終わりは指定より前に表示される
     // フレームをすべて正しく表示できるところまで
-    const videoIndex = findVideoStreamIndex(streams);
     let actualStart = start;
     // 入力側・出力側の -ss に渡す位置と、-to に渡す位置。再エンコード・スマートカットは FRAME_TOLERANCE だけ手前にずらす
     // (ffmpeg は境界ちょうどのフレームを含めるかが時刻の丸めで変わるため。範囲に含めるフレームの規則は FRAME_TOLERANCE)。
@@ -110,11 +117,21 @@ export async function cutRange(options: CutRangeOptions): Promise<void> {
     let videoDecodeEnd = end - FRAME_TOLERANCE;
     // 映像の終わり (表示上の元の時刻)
     let rangeEnd = end;
+    // ロスレスで、始まりのキーフレームの先行フレームを捨てるか
+    let dropLeading = false;
     if (method === 'lossless' && videoIndex !== null) {
         const keyframe = await findKeyframeBefore(inputPath, videoIndex, start, jobId);
         actualStart = keyframe.time;
         inputStart = keyframe.time;
         outputStart = copyStartSeek(keyframe);
+        // HEVC の open GOP の区切り (CRA) の先行フレームは、デコードの順でキーフレームの後ろにあり、表示はキーフレームより前
+        // (前のチャプターの終わり) になる。写すと前のチャプターのフレームが入り、映像の始まりがキーフレームより前になって
+        // 音声などとずれるため捨てる (HEVC の規格では、先行フレームはキーフレームより後ろのフレームから参照されない)
+        const codec = streams.find(stream => stream.index === videoIndex)?.codec_name;
+        if (codec === 'hevc' && (await hasLeadingFrames(inputPath, videoIndex, keyframe.time, jobId))) {
+            dropLeading = true;
+            log(`leading frames: dropped (before ${formatTime(keyframe.time)})`);
+        }
         const copyEnd = await findCopyEnd(inputPath, videoIndex, end, jobId);
         rangeEnd = copyEnd.displayEnd;
         videoDecodeEnd = copyEnd.decodeEnd;
@@ -259,6 +276,12 @@ export async function cutRange(options: CutRangeOptions): Promise<void> {
         }
         if (separateAudio) pass1.push('-map', '-0:a');
         pass1.push(...codecArgs);
+        if (dropLeading) {
+            // 最初に届くパケット (始まりのキーフレーム) より前に表示されるパケットを捨てる。フィルタに渡る時刻は ffmpeg が
+            // ずらした後の値のため、元の時刻ではなく最初のパケットの時刻 (startpts) と比べる。drop の式は 0 以外のときに
+            // 捨てる。フィルタの区切り (,) を使えないため、lt() の代わりに ceil((startpts - pts) / 10^15) (前なら 1) で書く
+            pass1.push('-bsf:v', 'noise=drop=ceil((startpts-pts)/1000000000000000)');
+        }
         if (accurate && mainVideoIndex !== null) {
             // 再エンコードの映像の終わりは -to だけに任せず、範囲に含まれるフレームの数で止める (-to は境界ちょうどの
             // フレームを含めるかが時刻の基準と丸めで変わり、隣の範囲と 1 フレーム重なることがある)

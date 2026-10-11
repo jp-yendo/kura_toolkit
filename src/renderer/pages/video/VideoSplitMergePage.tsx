@@ -27,13 +27,13 @@ export default function VideoSplitMergePage() {
     const screen = useVideoSplitMergeStore(state => state.screen);
     const logs = useVideoSplitMergeStore(state => state.logs);
     const jobs = useVideoJob();
-    const { setLoading } = jobs;
+    const { setActivity } = jobs;
 
     // チャプターで分割するファイルを読み込む (チャプターの無いファイルは受け付けない)
     const loadSplit = async (paths: string[]) => {
         const input = paths[0];
         if (!input) return;
-        setLoading(true);
+        setActivity(t('videoSplitMergePage.loadingVideo'));
         try {
             const probe = await window.kuraToolkit.videoSplitMerge.probe(input);
             if (probe.chapters.length === 0) {
@@ -44,7 +44,7 @@ export default function VideoSplitMergePage() {
         } catch (error) {
             showNotice('warning', videoErrorMessage(t, error));
         } finally {
-            setLoading(false);
+            setActivity(null);
         }
     };
 
@@ -59,7 +59,7 @@ export default function VideoSplitMergePage() {
             if (paths.length > 0) showNotice('warning', t('videoSplitMergePage.unsupportedFile'));
             return;
         }
-        setLoading(true);
+        setActivity(t('videoSplitMergePage.loadingVideo'));
         const entries: Array<{ input: string; probe: VideoProbeResult }> = [];
         const failed: string[] = [];
         try {
@@ -76,7 +76,7 @@ export default function VideoSplitMergePage() {
                 }
             }
         } finally {
-            setLoading(false);
+            setActivity(null);
         }
         if (entries.length > 0) useVideoSplitMergeStore.getState().addMergeItems(entries);
         if (failed.length > 0) {
@@ -92,7 +92,7 @@ export default function VideoSplitMergePage() {
 
             <ProgressDialog
                 open={jobs.busy}
-                title={t('videoSplitMergePage.running')}
+                title={jobs.title}
                 percent={jobs.job?.percent}
                 current={jobs.job?.current}
                 total={jobs.job?.total}

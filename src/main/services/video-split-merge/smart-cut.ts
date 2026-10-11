@@ -101,7 +101,7 @@ export async function smartCutVideo(options: SmartCutOptions): Promise<void> {
     // 正しくデコードできる (decodableFrom) 最初のもの。始まりからそこまでを再エンコードする
     let copyFrom: number | null = null;
     for (const keyframe of startIsKeyframe ? [before.time, ...inside] : inside) {
-        if (await decodableFrom(inputPath, index, video.codec_name, keyframe, false, jobId)) {
+        if (await decodableFrom(inputPath, index, video.codec_name, keyframe, jobId)) {
             copyFrom = keyframe;
             break;
         }

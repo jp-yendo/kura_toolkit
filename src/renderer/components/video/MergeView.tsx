@@ -278,7 +278,9 @@ export default function MergeView({ jobs, onAdd }: Props) {
             }
         }
         setPending(null);
-        await runJob(jobId => window.kuraToolkit.videoSplitMerge.merge(jobId, request));
+        await runJob(t('videoSplitMergePage.merging'), jobId =>
+            window.kuraToolkit.videoSplitMerge.merge(jobId, request)
+        );
     };
 
     const merge = async () => {
@@ -736,7 +738,9 @@ export default function MergeView({ jobs, onAdd }: Props) {
                         onClick={() => {
                             if (!pending) return;
                             setPending(null);
-                            void runJob(jobId => window.kuraToolkit.videoSplitMerge.merge(jobId, pending.request));
+                            void runJob(t('videoSplitMergePage.merging'), jobId =>
+                                window.kuraToolkit.videoSplitMerge.merge(jobId, pending.request)
+                            );
                         }}
                     >
                         {t('videoSplitMergePage.overwriteRun')}
