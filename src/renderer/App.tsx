@@ -9,7 +9,7 @@ import NotificationArea from './components/common/NotificationArea';
 import DashboardPage from './pages/DashboardPage';
 import SettingsPage from './pages/SettingsPage';
 import AudioNormalizerPage from './pages/audio/AudioNormalizerPage';
-import ChapterCutPage from './pages/video/ChapterCutPage';
+import VideoSplitMergePage from './pages/video/VideoSplitMergePage';
 import SvgConverterPage from './pages/image/SvgConverterPage';
 import SvgAutoPage from './pages/image/SvgAutoPage';
 import CleanupPage from './pages/tools/CleanupPage';
@@ -110,7 +110,7 @@ export default function App() {
                         <Routes>
                             <Route path='/' element={<DashboardPage />} />
                             <Route path='/audio/normalizer' element={<AudioNormalizerPage />} />
-                            <Route path='/video/chapter-cut' element={<ChapterCutPage />} />
+                            <Route path='/video/split-merge' element={<VideoSplitMergePage />} />
                             <Route path='/image/svg-converter' element={<SvgConverterPage />} />
                             <Route path='/image/svg-auto' element={<SvgAutoPage />} />
                             <Route path='/tools/cleanup' element={<CleanupPage />} />

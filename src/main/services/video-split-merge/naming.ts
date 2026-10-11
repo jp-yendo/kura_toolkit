@@ -18,7 +18,7 @@ export function resolveSubtitleFriendlyOutput(outputPath: string, streams: FfStr
     return `${outputPath.slice(0, outputPath.length - extension.length)}.mkv`;
 }
 
-// 出力ファイル名の生成 (元: cut-chapter.py の sanitize_for_filename / default_output_path)
+// 出力ファイル名の生成
 
 // 出力ファイル名の可搬性のため、全 OS で Windows の制約を適用する
 // eslint-disable-next-line no-control-regex
@@ -63,9 +63,22 @@ export function sanitizeForFilename(value: string): string {
     return result;
 }
 
-// ファイル名用ラベルを返す (タイトルがあればタイトル、なければ id)
-export function chapterLabel(chapter: ChapterInfo): string {
-    return chapter.title ? chapter.title : chapter.id;
+// チャプターの番号 (1 からの連番) を返す
+function chapterNumber(chapter: ChapterInfo): string {
+    return String(chapter.index + 1);
+}
+
+// ファイル名用ラベルを返す (タイトルがあればタイトル、なければ番号)
+function chapterLabel(chapter: ChapterInfo): string {
+    return chapter.title ? chapter.title : chapterNumber(chapter);
+}
+
+// チャプターの範囲 (first から last まで) を表すファイル名の部品を返す: 最初のチャプターの番号、最初のチャプターのラベル、
+// 最後のチャプターのラベル (範囲が 1 つのチャプターだけなら最後のラベルは付けない)
+export function rangeLabels(chapters: ChapterInfo[], first: number, last: number): string[] {
+    const labels = [chapterNumber(chapters[first]), chapterLabel(chapters[first])];
+    if (last !== first) labels.push(chapterLabel(chapters[last]));
+    return labels;
 }
 
 // 出力先ディレクトリ (未指定なら入力と同一ディレクトリ) を返す。
@@ -73,17 +86,12 @@ function outputDirectory(inputPath: string, outputDir: string | null): string {
     return outputDir || path.dirname(path.resolve(inputPath));
 }
 
-// [入力ファイル名]-[fromラベル]-[toラベル].[拡張子] を生成する。
+// [入力ファイル名]-[ラベル]-[ラベル]….[拡張子] を生成する (ラベルは渡した順に並べる)。
 // outputDir が指定されていればそこへ、なければ入力と同一ディレクトリに出力する。
-export function defaultOutputPath(
-    inputPath: string,
-    fromLabel: string,
-    toLabel: string,
-    outputDir: string | null
-): string {
+export function defaultOutputPath(inputPath: string, labels: string[], outputDir: string | null): string {
     const ext = path.extname(inputPath);
     const base = path.basename(inputPath, ext);
-    const name = `${base}-${sanitizeForFilename(fromLabel)}-${sanitizeForFilename(toLabel)}${ext}`;
+    const name = `${[base, ...labels.map(sanitizeForFilename)].join('-')}${ext}`;
     return path.join(outputDirectory(inputPath, outputDir), name);
 }
 

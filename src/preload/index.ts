@@ -42,11 +42,14 @@ const IPC_CHANNELS = {
     AUDIO_CHECK_OUTPUTS: 'audio:checkOutputs',
     AUDIO_FORMATS: 'audio:formats',
     AUDIO_PROBE: 'audio:probe',
-    CHAPTER_PROBE: 'chapter:probe',
-    CHAPTER_CUT: 'chapter:cut',
-    CHAPTER_SPLIT: 'chapter:split',
-    CHAPTER_CHECK_CUT: 'chapter:checkCut',
-    CHAPTER_CHECK_SPLIT: 'chapter:checkSplit',
+    VIDEO_SPLIT_MERGE_PROBE: 'videoSplitMerge:probe',
+    VIDEO_SPLIT_MERGE_CUT: 'videoSplitMerge:cut',
+    VIDEO_SPLIT_MERGE_SPLIT: 'videoSplitMerge:split',
+    VIDEO_SPLIT_MERGE_CHECK_CUT: 'videoSplitMerge:checkCut',
+    VIDEO_SPLIT_MERGE_CHECK_SPLIT: 'videoSplitMerge:checkSplit',
+    VIDEO_SPLIT_MERGE_MERGE: 'videoSplitMerge:merge',
+    VIDEO_SPLIT_MERGE_CAPABILITIES: 'videoSplitMerge:capabilities',
+    VIDEO_SPLIT_MERGE_CHECK_OUTPUT: 'videoSplitMerge:checkOutput',
     VECTORIZER_LOAD_IMAGE: 'vectorizer:loadImage',
     VECTORIZER_CONVERT: 'vectorizer:convert',
     VECTORIZER_SAVE_SVG: 'vectorizer:saveSvg',
@@ -239,21 +242,30 @@ const api: IpcApi = {
             return ipcRenderer.invoke(IPC_CHANNELS.AUDIO_FORMATS);
         },
     },
-    chapter: {
+    videoSplitMerge: {
         async probe(input) {
-            return ipcRenderer.invoke(IPC_CHANNELS.CHAPTER_PROBE, input);
+            return ipcRenderer.invoke(IPC_CHANNELS.VIDEO_SPLIT_MERGE_PROBE, input);
         },
         async cut(jobId, request) {
-            return ipcRenderer.invoke(IPC_CHANNELS.CHAPTER_CUT, jobId, request);
+            return ipcRenderer.invoke(IPC_CHANNELS.VIDEO_SPLIT_MERGE_CUT, jobId, request);
         },
         async split(jobId, request) {
-            return ipcRenderer.invoke(IPC_CHANNELS.CHAPTER_SPLIT, jobId, request);
+            return ipcRenderer.invoke(IPC_CHANNELS.VIDEO_SPLIT_MERGE_SPLIT, jobId, request);
         },
         async checkCut(request) {
-            return ipcRenderer.invoke(IPC_CHANNELS.CHAPTER_CHECK_CUT, request);
+            return ipcRenderer.invoke(IPC_CHANNELS.VIDEO_SPLIT_MERGE_CHECK_CUT, request);
         },
         async checkSplit(request) {
-            return ipcRenderer.invoke(IPC_CHANNELS.CHAPTER_CHECK_SPLIT, request);
+            return ipcRenderer.invoke(IPC_CHANNELS.VIDEO_SPLIT_MERGE_CHECK_SPLIT, request);
+        },
+        async merge(jobId, request) {
+            return ipcRenderer.invoke(IPC_CHANNELS.VIDEO_SPLIT_MERGE_MERGE, jobId, request);
+        },
+        async capabilities() {
+            return ipcRenderer.invoke(IPC_CHANNELS.VIDEO_SPLIT_MERGE_CAPABILITIES);
+        },
+        async checkOutput(output) {
+            return ipcRenderer.invoke(IPC_CHANNELS.VIDEO_SPLIT_MERGE_CHECK_OUTPUT, output);
         },
     },
     vectorizer: {

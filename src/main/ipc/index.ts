@@ -4,7 +4,7 @@ import { registerDialogIpcHandlers } from './dialog';
 import { registerFileIpcHandlers } from './files';
 import { registerJobIpcHandlers } from './jobs';
 import { registerAudioIpcHandlers } from './audio';
-import { registerChapterIpcHandlers } from './chapter';
+import { registerVideoSplitMergeIpcHandlers } from './video-split-merge';
 import { registerVectorizerIpcHandlers } from './vectorizer';
 import { registerSvgAutoIpcHandlers } from './svg-auto';
 import { registerCleanupIpcHandlers } from './cleanup';
@@ -28,7 +28,7 @@ export function registerIpcHandlers() {
 
     // 機能別ハンドラ
     registerAudioIpcHandlers();
-    registerChapterIpcHandlers();
+    registerVideoSplitMergeIpcHandlers();
     registerVectorizerIpcHandlers();
     registerSvgAutoIpcHandlers();
     registerCleanupIpcHandlers();

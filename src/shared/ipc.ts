@@ -10,11 +10,14 @@ import type {
     AudioNormalizerSettings,
     AudioOutputCheck,
     AudioOutputFormat,
-    ChapterCutRequest,
-    ChapterJobResult,
-    ChapterOutputCheck,
-    ChapterProbeResult,
-    ChapterSplitRequest,
+    VideoCutRequest,
+    VideoJobResult,
+    VideoOutputCheck,
+    VideoProbeResult,
+    VideoSplitRequest,
+    VideoMergeCapabilities,
+    VideoMergeOutputCheck,
+    VideoMergeRequest,
     CleanupCapabilities,
     CleanupItem,
     CleanupRemoveResult,
@@ -334,14 +337,20 @@ export type IpcApi = {
         // known: 使っている ffmpeg のエンコーダーを調べられたか (調べられなければ、すべての形式)
         formats(): Promise<{ formats: AudioFormat[]; known: boolean }>;
     };
-    // チャプターカット
-    chapter: {
-        probe(input: string): Promise<ChapterProbeResult>;
-        cut(jobId: string, request: ChapterCutRequest): Promise<ChapterJobResult>;
-        split(jobId: string, request: ChapterSplitRequest): Promise<ChapterJobResult>;
+    // 動画分割・結合
+    videoSplitMerge: {
+        probe(input: string): Promise<VideoProbeResult>;
+        cut(jobId: string, request: VideoCutRequest): Promise<VideoJobResult>;
+        split(jobId: string, request: VideoSplitRequest): Promise<VideoJobResult>;
         // 実行前の出力先チェック (生成される出力パスと、そのうち上書きになるもの)
-        checkCut(request: ChapterCutRequest): Promise<ChapterOutputCheck>;
-        checkSplit(request: ChapterSplitRequest): Promise<ChapterOutputCheck>;
+        checkCut(request: VideoCutRequest): Promise<VideoOutputCheck>;
+        checkSplit(request: VideoSplitRequest): Promise<VideoOutputCheck>;
+        // 複数のファイルを並べた順に 1 つのファイルへ結合する
+        merge(jobId: string, request: VideoMergeRequest): Promise<VideoJobResult>;
+        // 使っている ffmpeg にあるエンコーダとフィルタ
+        capabilities(): Promise<VideoMergeCapabilities>;
+        // 結合の出力先のフォルダがあるか・同じ名前のファイルが既にあるか
+        checkOutput(output: string): Promise<VideoMergeOutputCheck>;
     };
     // 画像 SVG 変換
     vectorizer: {

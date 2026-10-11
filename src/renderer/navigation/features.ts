@@ -1,6 +1,6 @@
 import type { SvgIconComponent } from '@mui/icons-material';
 import GraphicEqIcon from '@mui/icons-material/GraphicEq';
-import ContentCutIcon from '@mui/icons-material/ContentCut';
+import MovieEditIcon from '@mui/icons-material/MovieEdit';
 import PolylineIcon from '@mui/icons-material/Polyline';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import CleaningServicesIcon from '@mui/icons-material/CleaningServices';
@@ -71,13 +71,13 @@ export const FEATURES: FeatureDef[] = [
         voiceFeature: 'tts',
     },
     {
-        id: 'chapterCut',
+        id: 'videoSplitMerge',
         category: 'video',
-        route: '/video/chapter-cut',
-        icon: ContentCutIcon,
+        route: '/video/split-merge',
+        icon: MovieEditIcon,
         color: FEATURE_COLORS.video,
-        titleKey: 'features.chapterCut.title',
-        descKey: 'features.chapterCut.desc',
+        titleKey: 'features.videoSplitMerge.title',
+        descKey: 'features.videoSplitMerge.desc',
     },
     {
         id: 'svgConverter',

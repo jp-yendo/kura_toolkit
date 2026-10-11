@@ -44,12 +44,19 @@ Kura Toolkit is a desktop application that brings together audio, video and imag
 
 Audio Separation & Processing, Voice Conversion and Text to Speech need items (Python, packages and models) that are downloaded from within the app. Open "Downloads" on each screen and choose what to download. The download size is shown beforehand.
 
-### Video: Chapter Cut
+### Video: Video Split & Merge
 
 - Show the chapters of a video and the details of the file (its video, audio and other streams)
 - Cut out a range of chapters
 - Split a video into several files at the chosen chapters
-- Choose to work quickly without re-encoding, or to re-encode and cut exactly at the chapter positions
+- Choose how to cut: lossless (fast, without re-encoding; the cut widens to the nearest keyframes), smart cut (cuts at the exact chapter positions and re-encodes only the parts around them) or re-encode (re-encodes the video and audio and cuts exactly at the chapter positions)
+- Merge several videos into one file in the order they are listed
+- Choose the format of the merged video from the original format, MP4, MKV, WebM, MOV, AVI and MPEG-TS (the original format only when all files are in the same format)
+- Choose the video and audio codecs when re-encoding videos whose codecs differ (codecs that cannot hold the channel count and so on of the videos are not offered)
+- Change the order of the videos to merge by dragging them or with the arrow buttons
+- Add named chapters at the joins (names in the form "Chapter 1" are renumbered from the top when the videos are reordered)
+- Videos of the same format (codec, resolution and so on) are merged quickly without re-encoding, and videos of different formats are re-encoded (the resolution, bitrate, color standard and so on follow the largest among the videos; when HDR and SDR videos are merged, the SDR videos are converted to HDR)
+- All video and audio tracks, track roles (commentary, hearing impaired and so on), subtitles (with their styles), all cover art, attachments, the original chapters, the timecode, video properties such as HDR, rotation and transparency, and the offset between video and audio are kept (anything the output format cannot hold is shown before merging)
 
 ### Image: SVG Converter
 
@@ -93,7 +100,7 @@ The following can be set.
 
 ### Required External Tools
 
-Audio Normalizer, Chapter Cut and the voice features (Audio Separation & Processing, Voice Conversion, Text to Speech) require [FFmpeg](https://ffmpeg.org/). It is not included with the app, so install it separately.
+Audio Normalizer, Video Split & Merge and the voice features (Audio Separation & Processing, Voice Conversion, Text to Speech) require [FFmpeg](https://ffmpeg.org/). It is not included with the app, so install it separately.
 
 Changing the key in Voice Conversion (except by whole octaves) and timed rows in Text to Speech that are sped up to fit their time (the default) need an FFmpeg build that includes rubberband, and saving as Ogg Vorbis needs one that includes libvorbis. Installing it as below includes both.
 

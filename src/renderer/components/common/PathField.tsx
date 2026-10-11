@@ -11,6 +11,8 @@ type Props = {
     // 参照ボタンで選ぶもの (ツールチップと読み上げの名前を「フォルダ選択」「ファイル選択」にする)
     browse: 'folder' | 'file';
     helperText?: string;
+    // 入力の誤りを示す (枠と補足の文を誤りの色にする)
+    error?: boolean;
     disabled?: boolean;
     size?: 'small' | 'medium';
 };
@@ -23,6 +25,7 @@ export default function PathField({
     onBrowse,
     browse,
     helperText,
+    error,
     disabled,
     size = 'small',
 }: Props) {
@@ -35,6 +38,7 @@ export default function PathField({
             label={label}
             value={value}
             helperText={helperText}
+            error={error}
             disabled={disabled}
             onChange={event => onChange(event.target.value)}
             slotProps={{

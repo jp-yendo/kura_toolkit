@@ -16,6 +16,11 @@ type Options = {
     disabled?: boolean;
 };
 
+// ファイルのドラッグか (一覧の行の並べ替えなど、ファイル以外のドラッグには反応しないため)
+function isFileDrag(event: React.DragEvent): boolean {
+    return Array.from(event.dataTransfer.types).includes('Files');
+}
+
 // ファイルのドラッグ&ドロップ。要素に渡す handlers と、ドラッグ中か (強調の表示用) を返す。中の要素に出入りするたびに
 // dragenter / dragleave が届くため、数を数えて外に出たときだけ強調を消す
 export function useFileDrop({ onFiles, accept, allowDirectories, multiple, onRejected, disabled }: Options) {
@@ -49,20 +54,24 @@ export function useFileDrop({ onFiles, accept, allowDirectories, multiple, onRej
 
     const handlers = {
         onDragEnter: (event: React.DragEvent) => {
+            if (!isFileDrag(event)) return;
             event.preventDefault();
             if (disabled) return;
             depth.current += 1;
             setDragOver(true);
         },
         onDragOver: (event: React.DragEvent) => {
+            if (!isFileDrag(event)) return;
             event.preventDefault();
             if (disabled) event.dataTransfer.dropEffect = 'none';
         },
-        onDragLeave: () => {
+        onDragLeave: (event: React.DragEvent) => {
+            if (!isFileDrag(event)) return;
             depth.current = Math.max(0, depth.current - 1);
             if (depth.current === 0) setDragOver(false);
         },
         onDrop: (event: React.DragEvent) => {
+            if (!isFileDrag(event)) return;
             event.preventDefault();
             depth.current = 0;
             setDragOver(false);

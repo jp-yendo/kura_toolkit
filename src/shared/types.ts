@@ -161,18 +161,18 @@ export type AudioNormalizeResult = {
 };
 
 // ---------------------------------------------------------------------------
-// チャプターカット
+// 動画分割・結合
 // ---------------------------------------------------------------------------
 
 export type ChapterInfo = {
-    // ffprobe が返すチャプター id (文字列化)
-    id: string;
-    // チャプター配列内の添字
+    // チャプター配列内の添字 (利用者に示す番号は index + 1)
     index: number;
     // 秒
     start: number;
     end: number;
     title: string;
+    // チャプターのタグ (タイトル・言語など。title も含む)
+    tags: Record<string, string>;
 };
 
 export type MediaStreamKind = 'video' | 'audio' | 'subtitle' | 'other';
@@ -205,23 +205,52 @@ export type MediaStreamInfo = {
     bitrateKbps: number | null;
     language: string | null;
     title: string | null;
+    // 以下は結合で、そのままつなげられるか・引き継ぎ方を決めるために使う (分からないものは null)
+    profile: string | null;
+    // 色の規格 (色域・伝達特性・行列・範囲)
+    colorPrimaries: string | null;
+    colorTransfer: string | null;
+    colorSpace: string | null;
+    colorRange: string | null;
+    // 画素の縦横比 (例: "32:27")
+    sampleAspectRatio: string | null;
+    // インターレース ("progressive" / "tt" / "bb" / "tb" / "bt")
+    fieldOrder: string | null;
+    // 回転の角度 (0・90・180・270)
+    rotation: number;
+    // 音声の 1 標本のビット数と標本の形式
+    bitsPerSample: number | null;
+    sampleFormat: string | null;
+    // コーデックの初期化データの CRC32 (添付ファイルでは中身の CRC32)
+    extradataHash: string | null;
+    // 添付ファイルのファイル名
+    fileName: string | null;
+    // タイムコード (映像・タイムコード用のトラックのタグ)
+    timecode: string | null;
 };
 
-export type ChapterProbeResult = {
+export type VideoProbeResult = {
+    // チャプターが無いファイルでは空
     chapters: ChapterInfo[];
     formatName: string;
     durationSec: number | null;
     hasVideo: boolean;
     streams: MediaStreamInfo[];
+    // ファイル全体のメタ情報 (タイトル・作者など)
+    formatTags: Record<string, string>;
 };
 
-export type ChapterCutRequest = {
+// 切り出し・分割の方法。lossless = 再エンコードしない (始まりは直前のキーフレーム)、smart = キーフレームで切れない部分だけを
+// 再エンコードして指定の位置で切る、reencode = 映像・音声を再エンコードして指定の位置で切る
+export type VideoCutMethod = 'lossless' | 'smart' | 'reencode';
+
+export type VideoCutRequest = {
     input: string;
     // チャプター配列の添字で指定
     fromIndex: number;
     // null = 最終チャプターまで
     toIndex: number | null;
-    accurate: boolean;
+    method: VideoCutMethod;
     // null = 入力と同じディレクトリ
     outputDir: string | null;
     // 出力ファイル名の明示指定 (null = チャプター名から自動生成)。
@@ -229,25 +258,72 @@ export type ChapterCutRequest = {
     outputName: string | null;
 };
 
-export type ChapterSplitRequest = {
+export type VideoSplitRequest = {
     input: string;
     // このチャプター添字の直前で分割する
     boundaryIndexes: number[];
-    accurate: boolean;
+    method: VideoCutMethod;
     outputDir: string | null;
 };
 
 // 実行前の出力先チェック結果
-export type ChapterOutputCheck = {
+export type VideoOutputCheck = {
     // 生成される出力パスの一覧
     outputs: string[];
     // そのうち既に存在するもの (実行すると上書きになるため確認が必要)
     existing: string[];
     // 字幕の形式の都合で出力コンテナを変える場合の変更内容 (拡張子。変えない場合は null)
     containerChange: { from: string; to: string } | null;
+    // 実行前に知らせること (出力に含められないもの・形式を変えて書くもの)
+    notices: VideoSplitNotice[];
 };
 
-export type ChapterJobResult = {
+// 切り出し・分割で実行前に知らせること
+export type VideoSplitNotice =
+    | { kind: 'data'; codec: string }
+    | { kind: 'coverArt' }
+    // 再エンコードで、同じ形式で書けない音声を別の形式で書く
+    | { kind: 'audioConverted'; codec: string; to: string }
+    // ロスレスで、範囲の始まりのキーフレームからは正しくデコードできない (前の映像を参照する)。chapters は該当する範囲の
+    // 最初のチャプターの番号 (1 からの連番)
+    | { kind: 'uncleanStart'; chapters: number[] };
+
+// 結合する 1 ファイル
+export type VideoMergeItem = {
+    input: string;
+    // ファイルの始まりに付けるチャプターの名前 (addChapters のときのみ使う。空 = ファイル名)
+    chapterTitle: string;
+};
+
+export type VideoMergeRequest = {
+    // 並べた順に結合する
+    items: VideoMergeItem[];
+    // 各ファイルの始まり (結合部) にチャプターを付ける
+    addChapters: boolean;
+    // 形式がそろっていても再エンコードする
+    reencode: boolean;
+    // 再エンコードで使う映像・音声のエンコーダ (null = 元のコーデックから決める)
+    videoEncoder: string | null;
+    audioEncoder: string | null;
+    // 出力ファイルの絶対パス
+    output: string;
+};
+
+// 使っている ffmpeg にあるエンコーダとフィルタ (調べられない場合は null)
+export type VideoMergeCapabilities = {
+    encoders: string[] | null;
+    filters: string[] | null;
+};
+
+// 結合の出力先の確認
+export type VideoMergeOutputCheck = {
+    // 出力先のフォルダがある
+    directoryExists: boolean;
+    // 同じ名前のファイルが既にある (上書きになる)
+    exists: boolean;
+};
+
+export type VideoJobResult = {
     outputs: string[];
     cancelled: boolean;
 };
@@ -605,7 +681,7 @@ export type AppSettings = {
     // ライブラリ・モデル・作業ディレクトリ
     storage: StorageSettings;
     audioNormalizer: AudioNormalizerSettings;
-    // チャプターカットと画像 SVG 変換のパラメータは永続化しない (毎回既定値から始める)
+    // 動画分割・結合と画像 SVG 変換のパラメータは永続化しない (毎回既定値から始める)
     cleanup: CleanupSettings;
     // 音声分離・音声変換・読み上げ
     voice: VoiceSettings;

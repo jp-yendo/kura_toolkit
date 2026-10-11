@@ -1,5 +1,5 @@
 import { useAudioStore } from './audioStore';
-import { useChapterStore } from './chapterStore';
+import { useVideoSplitMergeStore } from './videoSplitMergeStore';
 import { useConversionStore } from './conversionStore';
 import { useConversionSeparationStore, useSeparationWorkStore } from './separationWorkStore';
 import { useSvgAutoStore } from './svgAutoStore';
@@ -20,12 +20,12 @@ function discardWork(workKey: string): void {
 
 // 作業を持つ機能の、作業の破棄
 const LEAVE_HANDLERS: Record<string, () => void> = {
-    // 音量の正規化・チャプターカットは、選んだファイルと結果・設定を初めの状態に戻す (一時ファイルは処理ごとに片付く)
+    // 音量の正規化と動画分割・結合は、選んだファイルと結果・設定を初めの状態に戻す (一時ファイルは処理ごとに片付く)
     'audio/normalizer': () => {
         useAudioStore.getState().clearFiles();
     },
-    'video/chapter-cut': () => {
-        useChapterStore.getState().reset();
+    'video/split-merge': () => {
+        useVideoSplitMergeStore.getState().reset();
     },
     'audio/separation': () => {
         const separation = useSeparationWorkStore.getState();

@@ -1,7 +1,7 @@
 import fs from 'fs';
 import { runFfmpeg } from '../ffmpeg/ffmpeg';
 
-// mkv テキスト字幕の抽出とリタイム (元: cut-chapter.py の字幕処理群)
+// mkv テキスト字幕の抽出とリタイム
 // mkv のストリームコピーでは ffmpeg が字幕の時刻を正しくリベースしない
 // (挙動がシーク位置に依存して不定) ため、テキスト字幕はいったん単体で
 // 抽出し、こちら側で時刻をずらしてから合流させる。
@@ -14,7 +14,7 @@ export const TEXT_SUBTITLE_EXTRACT: Record<string, [string, string]> = {
     webvtt: ['webvtt', 'vtt'],
 };
 
-// 元実装は re.match による先頭一致のため、行頭に固定する
+// 時刻の行は行頭から始まるものだけを対象にするため、行頭に固定する
 // (固定しないと ASS のコメント行など、行の途中に一致する行まで書き換えてしまう)
 const SUB_TIMELINE_RE = /^((?:\d{1,2}:)?\d{1,2}:\d{2}[,.]\d{1,3})\s*-->\s*((?:\d{1,2}:)?\d{1,2}:\d{2}[,.]\d{1,3})(.*)/;
 const ASS_EVENT_RE = /^(Dialogue|Comment):\s*([^,]*),([^,]*),([^,]*),(.*)$/;
