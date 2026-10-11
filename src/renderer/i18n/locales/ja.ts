@@ -205,7 +205,6 @@ export default {
         mergeDropHint: '結合する動画ファイル (複数可) をドラッグ&ドロップ\nまたはクリックして選択',
         unsupportedFile: '対応していない形式のファイルです。',
         unreadableFiles: '次のファイルは読み込めなかったため追加しませんでした: {{names}}',
-        chapters: 'チャプター一覧',
         colNumber: '#',
         colStart: '開始',
         colEnd: '終了',
@@ -223,6 +222,7 @@ export default {
         },
         cutBoundary: '境界をまたぐフレーム',
         cutBoundaries: {
+            scene: '場面の切り替わりに合わせる',
             earlier: '前の動画に入れる',
             later: '後ろの動画に入れる',
             longer: '長く表示される側に入れる',

@@ -47,7 +47,7 @@ type VideoSplitMergeState = {
     outputDir: string;
     // 切り出し・分割の方法
     cutMethod: VideoCutMethod;
-    // チャプターの境界をまたぐフレームを入れる範囲
+    // チャプターの境界の決め方
     cutBoundary: VideoCutBoundary;
     // 結合するファイル (並べた順に結合する)
     mergeItems: MergeItem[];
@@ -70,6 +70,8 @@ type VideoSplitMergeState = {
     setFromIndex(index: number): void;
     setToIndex(index: number): void;
     toggleBoundary(index: number): void;
+    // 分割点にできるすべてのチャプター (先頭以外) を、分割点にする (checked) か、分割点から外す
+    setAllBoundaries(checked: boolean): void;
     // 結合するファイルを一覧の末尾へ足し、結合する画面へ移る
     addMergeItems(entries: Array<{ input: string; probe: VideoProbeResult }>): void;
     removeMergeItem(key: string): void;
@@ -118,7 +120,7 @@ const INITIAL_STATE: VideoSplitMergeData = {
     outputName: '',
     outputDir: '',
     cutMethod: 'lossless',
-    cutBoundary: 'earlier',
+    cutBoundary: 'scene',
     mergeItems: [],
     mergeChapters: false,
     mergeReencode: false,
@@ -157,6 +159,7 @@ export const useVideoSplitMergeStore = create<VideoSplitMergeState>((set, get) =
     setCutBoundary(boundary) {
         set({ cutBoundary: boundary });
     },
+
     setMode(mode) {
         set({ mode });
     },
@@ -165,6 +168,13 @@ export const useVideoSplitMergeStore = create<VideoSplitMergeState>((set, get) =
     },
     setToIndex(index) {
         set({ toIndex: index });
+    },
+    setAllBoundaries(checked) {
+        set({
+            boundaries: checked
+                ? (get().probe?.chapters ?? []).map(chapter => chapter.index).filter(index => index > 0)
+                : [],
+        });
     },
     toggleBoundary(index) {
         const current = get().boundaries;

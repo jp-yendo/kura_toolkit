@@ -12,6 +12,7 @@ import {
     hasLeadingFrames,
     FRAME_TOLERANCE,
 } from './keyframe';
+import { sceneChangeNear } from './scene';
 import { smartCutVideo } from './smart-cut';
 import { accurateAudioEncoder, accurateStreamArgs, copyStreamArgs } from './encoders';
 import { availableEncoders } from '../audio-formats';
@@ -95,14 +96,26 @@ export async function cutRange(options: CutRangeOptions): Promise<void> {
         throw new Error('OUTPUT_EQUALS_INPUT');
     }
 
-    // 範囲は開始チャプターの先頭から終了チャプターの末尾まで。境界をまたぐフレームを入れる範囲を boundary で決め、
-    // 範囲の始まり・終わりを、範囲に入る最初のフレーム・次の範囲に入る最初のフレームの表示の時刻にする (隣り合う範囲は
-    // 同じ境界を同じ規則で置き換えるため、どのフレームも一方だけに入る)
+    // 範囲は開始チャプターの先頭から終了チャプターの末尾まで。境界の決め方を boundary で決め、範囲の始まり・終わりを、
+    // 範囲に入る最初のフレーム・次の範囲に入る最初のフレームの表示の時刻にする。
+    // scene の場合は、そのフレームの前後で場面がはっきり切り替わるフレームがあれば、そこを境界にする (チャプターの
+    // 時刻が場面の切り替わりから数フレームずれて付いている動画のため)。ファイルの最初・最後の境界は合わせない (合わせると
+    // 最初・最後のフレームがどの範囲にも入らなくなる)。隣り合う範囲は同じ境界を同じ規則で置き換えるため、どのフレームも
+    // 一方だけに入る
     const videoIndex = findVideoStreamIndex(streams);
-    const resolve = (time: number) =>
-        videoIndex !== null ? boundaryFrame(inputPath, videoIndex, time, boundary, jobId) : Promise.resolve(time);
-    const start = await resolve(chapters[first].start);
-    const end = await resolve(chapters[last].end);
+    const videoStream = streams.find(stream => stream.index === videoIndex);
+    const frameRate = videoStream ? frameRateOf(videoStream) : 0;
+    const resolve = async (time: number, snap: boolean) => {
+        if (videoIndex === null) return time;
+        const frame = await boundaryFrame(inputPath, videoIndex, time, boundary, jobId);
+        if (!snap || boundary !== 'scene' || frameRate <= 0) return frame;
+        const scene = await sceneChangeNear(inputPath, videoIndex, frame, 1 / frameRate, jobId);
+        if (scene === null || Math.abs(scene - frame) <= FRAME_TOLERANCE) return frame;
+        log(`scene change  : boundary ${formatTime(time)} -> ${formatTime(scene)}`);
+        return scene;
+    };
+    const start = await resolve(chapters[first].start, first > 0);
+    const end = await resolve(chapters[last].end, last < chapters.length - 1);
 
     // まず映像の範囲を決め、音声・字幕などはその範囲に合わせて取り出す (映像と必ずそろえるため)。
     // 再エンコード・スマートカットは指定どおりの範囲。

@@ -205,7 +205,6 @@ export default {
         mergeDropHint: 'Drag & drop the video files to merge (one or more) here\nor click to select',
         unsupportedFile: 'This file type is not supported.',
         unreadableFiles: 'The following files could not be read and were not added: {{names}}',
-        chapters: 'Chapters',
         colNumber: '#',
         colStart: 'Start',
         colEnd: 'End',
@@ -223,6 +222,7 @@ export default {
         },
         cutBoundary: 'Frame across a boundary',
         cutBoundaries: {
+            scene: 'Snap to scene changes',
             earlier: 'Put in the earlier part',
             later: 'Put in the later part',
             longer: 'Put where it is shown longer',

@@ -30,7 +30,6 @@ import AppDialog from '../common/AppDialog';
 import FileDropZone from '../common/FileDropZone';
 import PathField from '../common/PathField';
 import LogView from '../common/LogView';
-import SectionLabel from '../common/SectionLabel';
 import Panel from '../common/Panel';
 import { showNotice } from '../../stores/noticeStore';
 import { useVideoSplitMergeStore, type SplitMode } from '../../stores/videoSplitMergeStore';
@@ -50,7 +49,7 @@ import type {
 } from '@shared/types';
 
 const CUT_METHODS: VideoCutMethod[] = ['lossless', 'smart', 'reencode'];
-const CUT_BOUNDARIES: VideoCutBoundary[] = ['earlier', 'later', 'longer'];
+const CUT_BOUNDARIES: VideoCutBoundary[] = ['scene', 'earlier', 'later', 'longer'];
 
 // 実行前に知らせることの文言
 function noticeText(t: TFunction, notice: VideoSplitNotice): string {
@@ -197,6 +196,9 @@ export default function SplitView({ jobs, onFile }: Props) {
     };
 
     const chapters = store.probe?.chapters ?? [];
+    // 分割点にできるチャプター (先頭以外) の数と、そのうち分割点にしたものの数
+    const selectable = Math.max(0, chapters.length - 1);
+    const checkedCount = store.boundaries.filter(index => index > 0).length;
 
     // 1 ストリーム分の説明行 (例: #1 音声: aac 2ch 48000 Hz 192 kbps [jpn])
     const formatStream = (stream: MediaStreamInfo): string => {
@@ -279,14 +281,19 @@ export default function SplitView({ jobs, onFile }: Props) {
                 sx={{ minHeight: 72, flexShrink: 0 }}
             />
 
-            <Tabs
-                value={store.mode}
-                onChange={(_event, value) => store.setMode(value as SplitMode)}
-                sx={{ borderBottom: 1, borderColor: 'divider' }}
+            {/* タブの行の右端にファイル情報のボタンを置く (解析結果は常時表示せず、必要なときだけダイアログで開く) */}
+            <Stack
+                direction='row'
+                sx={{ alignItems: 'center', justifyContent: 'space-between', borderBottom: 1, borderColor: 'divider' }}
             >
-                <Tab value='cut' label={t('videoSplitMergePage.modeCut')} />
-                <Tab value='split' label={t('videoSplitMergePage.modeSplit')} />
-            </Tabs>
+                <Tabs value={store.mode} onChange={(_event, value) => store.setMode(value as SplitMode)}>
+                    <Tab value='cut' label={t('videoSplitMergePage.modeCut')} />
+                    <Tab value='split' label={t('videoSplitMergePage.modeSplit')} />
+                </Tabs>
+                <Button size='small' startIcon={<InfoOutlinedIcon />} onClick={() => setInfoOpen(true)}>
+                    {t('videoSplitMergePage.fileInfo')}
+                </Button>
+            </Stack>
 
             {store.mode === 'cut' ? (
                 <Stack direction='row' spacing={2} sx={{ flexWrap: 'wrap', rowGap: 2 }}>
@@ -328,26 +335,28 @@ export default function SplitView({ jobs, onFile }: Props) {
                 </Typography>
             )}
 
-            {/* 解析結果は常時表示せず、必要なときだけダイアログで開く */}
-            <SectionLabel
-                action={
-                    <Button size='small' startIcon={<InfoOutlinedIcon />} onClick={() => setInfoOpen(true)}>
-                        {t('videoSplitMergePage.fileInfo')}
-                    </Button>
-                }
-            >
-                {t('videoSplitMergePage.chapters')}
-            </SectionLabel>
             {/* 残りの高さを埋め、あふれた行はこの枠内でスクロールさせる。
-                        TableContainer の component= には Panel を渡さない (className を受け取れず
-                        レイアウト指定が全て捨てられるため)。Panel 自身をスクロール枠にする */}
+                TableContainer の component= には Panel を渡さない (className を受け取れず
+                レイアウト指定が全て捨てられるため)。Panel 自身をスクロール枠にする */}
             <Panel disablePadding sx={{ flexGrow: 1, flexBasis: 0, minHeight: 180, overflow: 'auto' }}>
                 <Table size='small' stickyHeader>
                     <TableHead>
                         <TableRow>
-                            {/* チェック列は幅が狭く見出しが折り返すため、表示はせず読み上げ用の名前だけ持たせる */}
+                            {/* チェック列の見出しは、分割点にできるすべてのチャプター (先頭以外) をまとめて ON / OFF する
+                                チェックボックス (一部だけのときは途中の表示)。列の名前は読み上げ用にだけ持たせる */}
                             {store.mode === 'split' && (
-                                <TableCell padding='checkbox' aria-label={t('videoSplitMergePage.colSplitPoint')} />
+                                <TableCell padding='checkbox'>
+                                    <Checkbox
+                                        size='small'
+                                        disabled={selectable === 0}
+                                        checked={selectable > 0 && checkedCount === selectable}
+                                        indeterminate={checkedCount > 0 && checkedCount < selectable}
+                                        onChange={() => store.setAllBoundaries(checkedCount < selectable)}
+                                        slotProps={{
+                                            input: { 'aria-label': t('videoSplitMergePage.colSplitPoint') },
+                                        }}
+                                    />
+                                </TableCell>
                             )}
                             <TableCell>{t('videoSplitMergePage.colNumber')}</TableCell>
                             <TableCell>{t('videoSplitMergePage.colStart')}</TableCell>

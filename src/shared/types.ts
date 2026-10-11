@@ -244,9 +244,10 @@ export type VideoProbeResult = {
 // 再エンコードして指定の位置で切る、reencode = 映像・音声を再エンコードして指定の位置で切る
 export type VideoCutMethod = 'lossless' | 'smart' | 'reencode';
 
-// チャプターの境界をまたぐフレーム (境界より前に表示が始まり、後ろで終わるもの) を入れる範囲。
-// earlier = 前の範囲、later = 後ろの範囲、longer = 境界の前後で長く表示される側の範囲
-export type VideoCutBoundary = 'earlier' | 'later' | 'longer';
+// チャプターの境界の決め方。scene = 境界の近くで場面がはっきり切り替わるフレームを境界にする (見つからなければ earlier)。
+// ほかは境界をまたぐフレーム (境界より前に表示が始まり、後ろで終わるもの) を入れる範囲: earlier = 前の範囲、
+// later = 後ろの範囲、longer = 境界の前後で長く表示される側の範囲
+export type VideoCutBoundary = 'scene' | 'earlier' | 'later' | 'longer';
 
 export type VideoCutRequest = {
     input: string;

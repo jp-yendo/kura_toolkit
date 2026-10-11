@@ -359,7 +359,7 @@ export async function findCopyEnd(
 }
 
 // チャプターの境界 time で、後ろの範囲に入る最初のフレームの表示の時刻を返す。境界をまたぐフレームは rule で決めた範囲に入れる
-// (VideoCutBoundary)。境界がフレームの区切りにある場合はどれも同じになる (チャプターの時刻のミリ秒への丸めは FRAME_TOLERANCE
+// (VideoCutBoundary。scene は earlier と同じに扱う。場面の切り替わりへ合わせるのは sceneChangeNear)。境界がフレームの区切りにある場合はどれも同じになる (チャプターの時刻のミリ秒への丸めは FRAME_TOLERANCE
 // で吸収する)。後ろにフレームが無ければ time
 export async function boundaryFrame(
     input: string,
@@ -375,7 +375,7 @@ export async function boundaryFrame(
         // 表示の終わり (次のフレームの始まり)
         const finish = i + 1 < frames.length ? frames[i + 1].pts : begin + frames[i].duration;
         const later =
-            rule === 'earlier'
+            rule === 'earlier' || rule === 'scene'
                 ? begin >= time - FRAME_TOLERANCE
                 : rule === 'later'
                   ? finish > time + FRAME_TOLERANCE

@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Video Split & Merge, rebuilt from Chapter Cut:
   - Cut out a range of chapters, or split a video into several files at the chosen chapters.
   - Choose how to cut: lossless, smart cut or re-encode.
-  - Choose which part gets a frame that crosses a chapter boundary.
+  - Choose how chapter boundaries are placed, including snapping them to nearby scene changes.
   - Merge several videos into one file, with the order, output format and chapters at the joins of your choice.
 
 ## [0.3.2] - 2026-10-10
