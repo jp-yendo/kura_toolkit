@@ -1,7 +1,15 @@
 import fs from 'fs';
 import path from 'path';
 import { runFfmpeg } from '../ffmpeg/ffmpeg';
-import { copyStartSeek, findAudioPacketStart, findCopyEnd, findKeyframeBefore } from './keyframe';
+import {
+    copyStartSeek,
+    findAudioPacketStart,
+    findCopyEnd,
+    findKeyframeBefore,
+    countFrames,
+    firstFrameFrom,
+    FRAME_TOLERANCE,
+} from './keyframe';
 import { smartCutVideo } from './smart-cut';
 import { accurateAudioEncoder, accurateStreamArgs, copyStreamArgs } from './encoders';
 import { availableEncoders } from '../audio-formats';
@@ -94,14 +102,18 @@ export async function cutRange(options: CutRangeOptions): Promise<void> {
     // フレームをすべて正しく表示できるところまで
     const videoIndex = findVideoStreamIndex(streams);
     let actualStart = start;
-    // 出力側の -ss に渡す位置 (再エンコードは表示の時刻、ロスレスは copyStartSeek)
-    let outputStart = start;
-    // 映像の終わり (表示上の元の時刻) と、ロスレスで映像を切るデコードの順の位置
+    // 入力側・出力側の -ss に渡す位置と、-to に渡す位置。再エンコード・スマートカットは FRAME_TOLERANCE だけ手前にずらす
+    // (ffmpeg は境界ちょうどのフレームを含めるかが時刻の丸めで変わるため。範囲に含めるフレームの規則は FRAME_TOLERANCE)。
+    // ロスレスの出力側の -ss は copyStartSeek、-to はデコードの順の位置
+    let inputStart = start - FRAME_TOLERANCE;
+    let outputStart = start - FRAME_TOLERANCE;
+    let videoDecodeEnd = end - FRAME_TOLERANCE;
+    // 映像の終わり (表示上の元の時刻)
     let rangeEnd = end;
-    let videoDecodeEnd = end;
     if (method === 'lossless' && videoIndex !== null) {
         const keyframe = await findKeyframeBefore(inputPath, videoIndex, start, jobId);
         actualStart = keyframe.time;
+        inputStart = keyframe.time;
         outputStart = copyStartSeek(keyframe);
         const copyEnd = await findCopyEnd(inputPath, videoIndex, end, jobId);
         rangeEnd = copyEnd.displayEnd;
@@ -212,7 +224,7 @@ export async function cutRange(options: CutRangeOptions): Promise<void> {
             // 再エンコードはデコードした映像・音声が指定の位置からちょうど始まり、ストリームコピーは指定のキーフレームから始まる
             '-copyts',
             '-ss',
-            actualStart.toFixed(6),
+            inputStart.toFixed(6),
             '-to',
             videoDecodeEnd.toFixed(6),
             // 再エンコードで VP8・VP9 の透過を保つため、透過の層を読める libvpx で読む (ffmpeg 標準のデコーダは透過を読まない)
@@ -246,7 +258,13 @@ export async function cutRange(options: CutRangeOptions): Promise<void> {
             actualStart = Math.min(...packetStarts);
         }
         if (separateAudio) pass1.push('-map', '-0:a');
-        pass1.push(...codecArgs, '-ss', outputStart.toFixed(6), '-avoid_negative_ts', 'make_zero', tempOutput);
+        pass1.push(...codecArgs);
+        if (accurate && mainVideoIndex !== null) {
+            // 再エンコードの映像の終わりは -to だけに任せず、範囲に含まれるフレームの数で止める (-to は境界ちょうどの
+            // フレームを含めるかが時刻の基準と丸めで変わり、隣の範囲と 1 フレーム重なることがある)
+            pass1.push('-frames:v', String(await countFrames(inputPath, mainVideoIndex, start, end, jobId)));
+        }
+        pass1.push('-ss', outputStart.toFixed(6), '-avoid_negative_ts', 'make_zero', tempOutput);
         if (method === 'smart' && mainVideo) {
             // スマートカットは映像を部分ごとに作ってつなげる (smart-cut.ts)
             await smartCutVideo({
@@ -273,12 +291,15 @@ export async function cutRange(options: CutRangeOptions): Promise<void> {
         const { shift } = await probeOutputShift(tempOutput, jobId);
         // 出力の内容は、出力側の -ss により必ず actualStart から始まる
         const contentStart = actualStart;
+        // 出力の最初のフレームの元の表示の時刻 (切る位置がフレームの途中にある場合は actualStart より後ろ)
+        const firstFrame =
+            mainVideoIndex !== null ? await firstFrameFrom(inputPath, mainVideoIndex, actualStart, jobId) : actualStart;
         if (shift > 0.0005) {
             log(`ts shift      : +${shift.toFixed(3)}s (chapters compensated)`);
         }
 
-        // チャプター位置の基準は「出力上で元の時刻 T が現れる位置」に合わせる
-        const base = contentStart - shift;
+        // 出力の 0 秒に当たる元の時刻。出力の最初のフレームは出力上 shift の位置にあり、元の時刻は firstFrame
+        const base = firstFrame - shift;
 
         // ストリームコピーの音声: 映像の表示の始まり (actualStart) の音を含むパケットから、映像の表示の終わり (rangeEnd) の音を
         // 含むパケットまでを取り出す (音声のパケットの境目は映像と一致しないため、音を欠かさないよう外側へ広げる)。
@@ -458,12 +479,11 @@ export async function cutRange(options: CutRangeOptions): Promise<void> {
                 );
             }
         }
-        // タイムコードは、出力の最初のフレーム (元の時刻 contentStart) に合わせて進める (元のままだと切り出した位置とずれる)
+        // タイムコードは、出力の最初のフレーム (元の時刻 firstFrame) に合わせて進める (元のままだと切り出した位置とずれる)
         const timecode =
             options.formatTags.timecode ?? streams.find(stream => stream.tags?.timecode)?.tags?.timecode ?? null;
         const frameRate = mainVideo ? frameRateOf(mainVideo) : 0;
-        const shifted =
-            timecode && frameRate > 0 ? shiftTimecode(timecode, Math.max(0, contentStart), frameRate) : null;
+        const shifted = timecode && frameRate > 0 ? shiftTimecode(timecode, Math.max(0, firstFrame), frameRate) : null;
         if (shifted) {
             pass2.push('-timecode', shifted, '-metadata:s:v', `timecode=${shifted}`);
             if (options.formatTags.timecode) pass2.push('-metadata', `timecode=${shifted}`);

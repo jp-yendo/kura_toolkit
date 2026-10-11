@@ -284,6 +284,9 @@ export type VideoSplitNotice =
     | { kind: 'coverArt' }
     // 再エンコードで、同じ形式で書けない音声を別の形式で書く
     | { kind: 'audioConverted'; codec: string; to: string }
+    // ロスレスで、範囲が外側へ広がる (キーフレームの位置で切るため)。ranges は該当する範囲ごとの、最初のチャプターの番号
+    // (1 からの連番) と、前・後ろへ広がるフレームの数
+    | { kind: 'losslessExtended'; ranges: Array<{ chapter: number; before: number; after: number }> }
     // ロスレスで、範囲の始まりのキーフレームからは正しくデコードできない (前の映像を参照する)。chapters は該当する範囲の
     // 最初のチャプターの番号 (1 からの連番)
     | { kind: 'uncleanStart'; chapters: number[] };

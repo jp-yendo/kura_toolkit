@@ -35,6 +35,7 @@ import Panel from '../common/Panel';
 import { showNotice } from '../../stores/noticeStore';
 import { useVideoSplitMergeStore, type SplitMode } from '../../stores/videoSplitMergeStore';
 import { formatTime, VIDEO_EXTENSIONS, videoErrorMessage, videoFilters } from './videoFormat';
+import type { TFunction } from 'i18next';
 import type { VideoJobControls } from './useVideoJob';
 import { isChapterTrack } from '@shared/video-merge';
 import { codecLabel } from '@shared/video-codecs';
@@ -43,10 +44,42 @@ import type {
     VideoCutMethod,
     VideoCutRequest,
     VideoOutputCheck,
+    VideoSplitNotice,
     VideoSplitRequest,
 } from '@shared/types';
 
 const CUT_METHODS: VideoCutMethod[] = ['lossless', 'smart', 'reencode'];
+
+// 実行前に知らせることの文言
+function noticeText(t: TFunction, notice: VideoSplitNotice): string {
+    switch (notice.kind) {
+        case 'data':
+            return t('videoSplitMergePage.splitLossData', { codec: notice.codec });
+        case 'coverArt':
+            return t('videoSplitMergePage.splitLossCoverArt');
+        case 'audioConverted':
+            return t('videoSplitMergePage.splitAudioConverted', { codec: notice.codec, to: codecLabel(notice.to) });
+        case 'losslessExtended':
+            return t('videoSplitMergePage.splitLosslessExtended', {
+                ranges: notice.ranges
+                    .map(range =>
+                        t(
+                            range.before > 0 && range.after > 0
+                                ? 'videoSplitMergePage.splitExtendedBoth'
+                                : range.before > 0
+                                  ? 'videoSplitMergePage.splitExtendedBefore'
+                                  : 'videoSplitMergePage.splitExtendedAfter',
+                            range
+                        )
+                    )
+                    .join(', '),
+            });
+        case 'uncleanStart':
+            return t('videoSplitMergePage.splitUncleanStart', {
+                chapters: notice.chapters.map(chapter => `#${chapter}`).join(', '),
+            });
+    }
+}
 
 // 字幕コーデックの通称 (ffprobe の codec_name -> 一般的な呼び方)
 const SUBTITLE_FORMAT_NAMES: Record<string, string> = {
@@ -443,7 +476,7 @@ export default function SplitView({ jobs, onFile }: Props) {
                 </DialogActions>
             </AppDialog>
 
-            {/* 実行前に知らせること (出力に含められないもの・形式を変えて書く音声) がある場合の確認 */}
+            {/* 実行前に知らせること (出力に含められないもの・形式を変えて書く音声・ロスレスで広がる範囲など) がある場合の確認 */}
             <AppDialog open={lossCheck !== null} onClose={() => setLossCheck(null)} maxWidth='sm' fullWidth>
                 <DialogTitle>{t('videoSplitMergePage.splitNoticeTitle')}</DialogTitle>
                 <DialogContent>
@@ -451,19 +484,7 @@ export default function SplitView({ jobs, onFile }: Props) {
                         {t('videoSplitMergePage.splitNoticeMessage')}
                     </Typography>
                     {lossCheck?.notices.map(notice => {
-                        const text =
-                            notice.kind === 'data'
-                                ? t('videoSplitMergePage.splitLossData', { codec: notice.codec })
-                                : notice.kind === 'coverArt'
-                                  ? t('videoSplitMergePage.splitLossCoverArt')
-                                  : notice.kind === 'uncleanStart'
-                                    ? t('videoSplitMergePage.splitUncleanStart', {
-                                          chapters: notice.chapters.map(chapter => `#${chapter}`).join(', '),
-                                      })
-                                    : t('videoSplitMergePage.splitAudioConverted', {
-                                          codec: notice.codec,
-                                          to: codecLabel(notice.to),
-                                      });
+                        const text = noticeText(t, notice);
                         return (
                             <Typography key={text} variant='body2' color='text.secondary'>
                                 {text}

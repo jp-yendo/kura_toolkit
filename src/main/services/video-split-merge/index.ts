@@ -3,7 +3,7 @@ import path from 'path';
 import { emitJobEvent, finishJob, isCancelled, startJob } from '../job-manager';
 import { isCancelledError } from '../ffmpeg/ffmpeg';
 import { findVideoStreamIndex, probeVideoFile, probeChapters, probeMedia, type FfStream } from './probe';
-import { decodableFrom, findKeyframeBefore } from './keyframe';
+import { countFrames, decodableFrom, findCopyEnd, findKeyframeBefore } from './keyframe';
 import { defaultOutputPath, namedOutputPath, rangeLabels, resolveSubtitleFriendlyOutput } from './naming';
 import { cutRange } from './cut';
 import { mergeFiles } from './merge';
@@ -139,21 +139,31 @@ function noticesOf(
     return losses;
 }
 
-// ロスレスで切り出す範囲のうち、始まり (直前のキーフレーム) から正しくデコードできないものの、最初のチャプターの番号を返す
-async function uncleanStarts(input: string, streams: FfStream[], starts: RangeStart[]): Promise<number[]> {
+// ロスレスで切り出したときの各範囲の様子を調べ、知らせることを返す:
+// - 範囲が外側へ広がるもの (始まりが直前のキーフレームへ、終わりが表示に要るフレームまで) と、広がるフレームの数
+// - 始まり (直前のキーフレーム) から正しくデコードできないもの
+async function losslessNotices(input: string, streams: FfStream[], ranges: RangeBounds[]): Promise<VideoSplitNotice[]> {
     const index = findVideoStreamIndex(streams);
     if (index === null) return [];
     const codec = streams.find(stream => stream.index === index)?.codec_name;
-    const found: number[] = [];
-    for (const { chapter, start } of starts) {
+    const extended: Array<{ chapter: number; before: number; after: number }> = [];
+    const unclean: number[] = [];
+    for (const { chapter, start, end } of ranges) {
         const keyframe = await findKeyframeBefore(input, index, start);
-        if (!(await decodableFrom(input, index, codec, keyframe.time, true))) found.push(chapter);
+        const copyEnd = await findCopyEnd(input, index, end);
+        const before = await countFrames(input, index, keyframe.time, start);
+        const after = await countFrames(input, index, end, copyEnd.displayEnd);
+        if (before > 0 || after > 0) extended.push({ chapter, before, after });
+        if (!(await decodableFrom(input, index, codec, keyframe.time, true))) unclean.push(chapter);
     }
-    return found;
+    const notices: VideoSplitNotice[] = [];
+    if (extended.length > 0) notices.push({ kind: 'losslessExtended', ranges: extended });
+    if (unclean.length > 0) notices.push({ kind: 'uncleanStart', chapters: unclean });
+    return notices;
 }
 
-// 切り出す範囲の始まり (最初のチャプターの番号と、元の時刻)
-type RangeStart = { chapter: number; start: number };
+// 切り出す範囲 (最初のチャプターの番号と、元の始まり・終わりの時刻)
+type RangeBounds = { chapter: number; start: number; end: number };
 
 // 出力パスのうち既に存在するものと、実行前に知らせることを調べる
 async function checkExisting(
@@ -162,7 +172,7 @@ async function checkExisting(
     outputs: string[],
     streams: FfStream[],
     method: VideoCutMethod,
-    starts: RangeStart[]
+    ranges: RangeBounds[]
 ): Promise<VideoOutputCheck> {
     const accurate = method === 'reencode';
     const existing = outputs.filter(output => {
@@ -184,10 +194,7 @@ async function checkExisting(
 
     async function notices(): Promise<VideoSplitNotice[]> {
         const found = noticesOf(streams, outputs[0], accurate, accurate ? await availableEncoders() : null);
-        if (method === 'lossless') {
-            const chapters = await uncleanStarts(input, streams, starts);
-            if (chapters.length > 0) found.push({ kind: 'uncleanStart', chapters });
-        }
+        if (method === 'lossless') found.push(...(await losslessNotices(input, streams, ranges)));
         return found;
     }
 }
@@ -196,9 +203,9 @@ async function checkExisting(
 export async function videoCheckCut(request: VideoCutRequest): Promise<VideoOutputCheck> {
     const chapters = await probeChapters(request.input);
     const media = await probeMedia(request.input);
-    const { first, output } = planCut(request, chapters, media.streams);
+    const { first, last, output } = planCut(request, chapters, media.streams);
     return checkExisting(request.input, request.outputName || request.input, [output], media.streams, request.method, [
-        { chapter: first + 1, start: chapters[first].start },
+        { chapter: first + 1, start: chapters[first].start, end: chapters[last].end },
     ]);
 }
 
@@ -213,7 +220,7 @@ export async function videoCheckSplit(request: VideoSplitRequest): Promise<Video
         outputs,
         media.streams,
         request.method,
-        ranges.map(([first]) => ({ chapter: first + 1, start: chapters[first].start }))
+        ranges.map(([first, last]) => ({ chapter: first + 1, start: chapters[first].start, end: chapters[last].end }))
     );
 }
 

@@ -9,18 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- Video Split & Merge: merge several videos into one file.
-- Video Split & Merge: choose how to cut or split from lossless, smart cut and re-encode.
-
-### Changed
-
-- Chapter Cut is renamed Video Split & Merge.
-- Video Split & Merge: chapters are numbered from 1 in the chapter list, and the names of cut and split files include the number of the first chapter.
-
-### Fixed
-
-- Video Split & Merge: cut and split positions are more accurate, and the audio stays in sync with the video.
-- Video Split & Merge: cutting and splitting keep more of the original information, and anything that cannot be kept is shown beforehand.
+- Video Split & Merge, rebuilt from Chapter Cut:
+  - Cut out a range of chapters, or split a video into several files at the chosen chapters.
+  - Choose how to cut: lossless, smart cut or re-encode.
+  - Merge several videos into one file, with the order, output format and chapters at the joins of your choice.
 
 ## [0.3.2] - 2026-10-10
 

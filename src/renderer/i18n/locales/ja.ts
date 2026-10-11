@@ -320,6 +320,11 @@ export default {
         splitNoticeTitle: '実行前の確認',
         splitNoticeMessage: 'このまま実行すると、次のようになります。',
         splitAudioConverted: '音声 ({{codec}}) は同じ形式で書き出せないため、{{to}} で書き出します',
+        splitLosslessExtended:
+            'ロスレスはキーフレームの位置で切るため、次の範囲は隣のチャプターのフレームを含みます: {{ranges}}',
+        splitExtendedBoth: '#{{chapter}} (前に {{before}} フレーム・後ろに {{after}} フレーム)',
+        splitExtendedBefore: '#{{chapter}} (前に {{before}} フレーム)',
+        splitExtendedAfter: '#{{chapter}} (後ろに {{after}} フレーム)',
         splitUncleanStart:
             'チャプター {{chapters}} から始まる部分は、始まりのキーフレームが前の映像を参照するため、再生ソフトによっては始まりの映像が乱れることがあります (スマートカット・再エンコードでは起きません)',
         splitNoticeRun: 'このまま実行',

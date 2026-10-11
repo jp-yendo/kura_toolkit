@@ -8,6 +8,8 @@ import {
     findCopyEndBefore,
     findKeyframeBefore,
     decodableFrom,
+    firstFrameFrom,
+    FRAME_TOLERANCE,
     keyframesWithin,
     countFrames,
 } from './keyframe';
@@ -120,21 +122,27 @@ export async function smartCutVideo(options: SmartCutOptions): Promise<void> {
     const segmentExtension = IN_BAND_CODECS.has(video.codec_name ?? '') ? '.ts' : '.mkv';
     const decoder = hasAlphaLayer(video) ? ['-c:v', video.codec_name === 'vp8' ? 'libvpx' : 'libvpx-vp9'] : [];
     const encoding = await encodeArgs(options);
-    const segments: Array<{ file: string; duration: number }> = [];
-    const encode = async (from: number, to: number) => {
+    // 各部分のファイルと、その最初のフレームの元の表示の時刻
+    const segments: Array<{ file: string; first: number }> = [];
+    const encode = async (from: number, to: number, first: number) => {
         const file = path.join(tempDir, `smart${segments.length}${segmentExtension}`);
         await runFfmpeg(
             [
                 ...QUIET,
+                // 範囲に含めるフレームの規則に合わせて手前にずらす (FRAME_TOLERANCE)
                 '-ss',
-                from.toFixed(6),
+                (from - FRAME_TOLERANCE).toFixed(6),
                 '-to',
-                to.toFixed(6),
+                (to - FRAME_TOLERANCE).toFixed(6),
                 ...decoder,
                 '-i',
                 inputPath,
                 '-map',
                 `0:v:${videoOrder}`,
+                // 終わりは -to だけに任せず、範囲に含まれるフレームの数で止める (-to は境界ちょうどのフレームを含めるかが
+                // 時刻の基準と丸めで変わり、隣の範囲と 1 フレーム重なることがある)
+                '-frames:v',
+                String(await countFrames(inputPath, index, from, to, jobId)),
                 ...encoding,
                 '-avoid_negative_ts',
                 'make_zero',
@@ -142,12 +150,14 @@ export async function smartCutVideo(options: SmartCutOptions): Promise<void> {
             ],
             { jobId }
         );
-        segments.push({ file, duration: to - from });
+        segments.push({ file, first });
         log(`  re-encoded  : ${from.toFixed(3)} - ${to.toFixed(3)}`);
     };
 
     // 始まりから写し始めるキーフレームまで (範囲内にキーフレームが無ければ範囲全体) を再エンコードする
-    if (copyFrom === null || copyFrom > start + 0.001) await encode(start, copyFrom ?? end);
+    if (copyFrom === null || copyFrom > start + 0.001) {
+        await encode(start, copyFrom ?? end, await firstFrameFrom(inputPath, index, start, jobId));
+    }
     if (copyFrom !== null && copyEnd) {
         const file = path.join(tempDir, `smart${segments.length}${segmentExtension}`);
         // 1 つ前のキーフレームの直後を出力側の -ss に渡し、写し始めるキーフレームから書かせる (copyStartSeek)
@@ -176,18 +186,21 @@ export async function smartCutVideo(options: SmartCutOptions): Promise<void> {
             { jobId }
         );
         const copyTo = tailFrom ?? copyEnd.displayEnd;
-        segments.push({ file, duration: copyTo - copyFrom });
+        segments.push({ file, first: copyFrom });
         log(`  copied      : ${copyFrom.toFixed(3)} - ${copyTo.toFixed(3)}`);
     }
-    if (tailFrom !== null) await encode(tailFrom, end);
+    if (tailFrom !== null) await encode(tailFrom, end, tailFrom);
 
-    // 各部分の長さを明示してつなげる (それぞれの部分の始まりは 0 秒に寄せられる)。mkv の添付ファイル (フォントなど) は
-    // 元のファイルから取り込む (-t 0 で添付ファイルだけを読む)
+    // 各部分の長さ (最初のフレームから次の部分の最初のフレームまで) を明示してつなげる (それぞれの部分の始まりは 0 秒に
+    // 寄せられる。切る位置がフレームの途中にあっても、フレームの間隔が元のまま続く)。最後の部分は長さを指定しない。
+    // mkv の添付ファイル (フォントなど) は元のファイルから取り込む (-t 0 で添付ファイルだけを読む)
     const listPath = path.join(tempDir, 'smart.txt');
     const lines = ['ffconcat version 1.0'];
-    for (const segment of segments) {
-        lines.push(`file ${concatPath(segment.file)}`, `duration ${segment.duration.toFixed(6)}`);
-    }
+    segments.forEach((segment, i) => {
+        lines.push(`file ${concatPath(segment.file)}`);
+        const next = segments[i + 1];
+        if (next) lines.push(`duration ${(next.first - segment.first).toFixed(6)}`);
+    });
     fs.writeFileSync(listPath, lines.join('\n') + '\n', 'utf-8');
     await runFfmpeg(
         [
@@ -216,6 +229,8 @@ export async function smartCutVideo(options: SmartCutOptions): Promise<void> {
         { jobId }
     );
 
+    // 再エンコードした部分が無ければ (範囲全体を写しただけで) つなぎ目は無いため、確かめない
+    if (segments.length === 1 && copyFrom !== null) return;
     // つなぎ目を含めて映像をすべてデコードし、誤りが無く、元の範囲と同じ数のフレームが表示されることを確かめる
     // (誤りがあれば再生ソフトでも乱れ、数が違えばフレームが欠けている・重なっているため失敗とする)
     const errors: string[] = [];

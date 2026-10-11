@@ -322,6 +322,11 @@ export default {
         splitNoticeTitle: 'Before You Continue',
         splitNoticeMessage: 'If you continue, the following applies.',
         splitAudioConverted: 'Audio ({{codec}}) cannot be written in the same format, so it is written as {{to}}',
+        splitLosslessExtended:
+            'Lossless cuts at keyframes, so these parts include frames of the neighboring chapters: {{ranges}}',
+        splitExtendedBoth: '#{{chapter}} ({{before}} frames before, {{after}} frames after)',
+        splitExtendedBefore: '#{{chapter}} ({{before}} frames before)',
+        splitExtendedAfter: '#{{chapter}} ({{after}} frames after)',
         splitUncleanStart:
             'The parts starting at chapter {{chapters}} begin at a keyframe that refers to earlier frames, so their first frames may be distorted in some players (this does not happen with Smart cut or Re-encode)',
         splitNoticeRun: 'Continue',

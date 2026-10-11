@@ -2,6 +2,11 @@ import { probeJson } from '../ffmpeg/ffprobe';
 
 // キーフレーム探索
 
+// 範囲にフレームを含める規則の許容幅 (秒)。表示の時刻が「始まり - FRAME_TOLERANCE」以上・「終わり - FRAME_TOLERANCE」未満の
+// フレームを範囲に含める。隣り合う範囲は同じ境界の値を使うため、どのフレームもどちらか一方だけに入る (チャプターの時刻の
+// ミリ秒への丸めなどで、境界がフレームの時刻とわずかにずれていても重なりも抜けも出ない)
+export const FRAME_TOLERANCE = 0.0005;
+
 type FfprobePacketsResult = {
     packets?: Array<{ pts_time?: string; dts_time?: string; flags?: string }>;
 };
@@ -65,6 +70,32 @@ export async function keyframesWithin(
     return (await keyframesBetween(input, streamIndex, from, to + 1.0, jobId)).filter(
         time => time > from + 0.0005 && time < to - 0.0005
     );
+}
+
+// 表示の時刻が time 以降の最初の映像のフレームの表示の時刻を返す (切る位置がフレームの途中にある場合、範囲の最初の
+// フレームは切る位置より後ろにある)。見つからなければ time
+export async function firstFrameFrom(
+    input: string,
+    streamIndex: number,
+    time: number,
+    jobId?: string
+): Promise<number> {
+    const data = await probeJson<FfprobePacketsResult>(
+        [
+            '-select_streams',
+            String(streamIndex),
+            '-show_entries',
+            'packet=pts_time',
+            '-read_intervals',
+            `${Math.max(0, time - 1).toFixed(6)}%${(time + 5).toFixed(6)}`,
+            input,
+        ],
+        { jobId }
+    );
+    const times = (data.packets ?? [])
+        .map(packet => Number.parseFloat(packet.pts_time ?? ''))
+        .filter(value => Number.isFinite(value) && value >= time - 0.0005);
+    return times.length > 0 ? Math.min(...times) : time;
 }
 
 // 表示の時刻が from 以上・to より前の映像のフレームの数を返す

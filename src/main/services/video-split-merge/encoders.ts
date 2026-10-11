@@ -131,7 +131,9 @@ export function accurateStreamArgs(streams: FfStream[], audio: AccurateAudio[]):
                 encoder = 'libx264';
                 note = ` (no matching encoder for ${name})`;
             }
-            args.push(`-c:${spec}`, encoder);
+            // 元のフレームの時刻をそのまま保つ (既定ではエンコーダの時刻の単位が 1 / フレームレートになり、切る位置が
+            // フレームの途中にあると、映像の時刻がフレームの格子へ丸められて音声とずれる)
+            args.push(`-c:${spec}`, encoder, `-fps_mode:${spec}`, 'passthrough', `-enc_time_base:${spec}`, 'demux');
             // VP8・VP9 の透過の層は ffprobe の画素形式に現れないため、透過付きの形式を指定する
             const pixelFormat = hasAlphaLayer(stream) && stream.pix_fmt === 'yuv420p' ? 'yuva420p' : stream.pix_fmt;
             if (pixelFormat) {
