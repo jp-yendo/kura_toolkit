@@ -50,6 +50,15 @@ const IPC_CHANNELS = {
     VIDEO_SPLIT_MERGE_MERGE: 'videoSplitMerge:merge',
     VIDEO_SPLIT_MERGE_CAPABILITIES: 'videoSplitMerge:capabilities',
     VIDEO_SPLIT_MERGE_CHECK_OUTPUT: 'videoSplitMerge:checkOutput',
+    VIDEO_TRACK_TAG_PROBE: 'videoTrackTag:probe',
+    VIDEO_TRACK_TAG_FRAMES: 'videoTrackTag:frames',
+    VIDEO_TRACK_TAG_WAVEFORM: 'videoTrackTag:waveform',
+    VIDEO_TRACK_TAG_PREVIEW: 'videoTrackTag:preview',
+    VIDEO_TRACK_TAG_MAKE_PREVIEW: 'videoTrackTag:makePreview',
+    VIDEO_TRACK_TAG_DISCARD: 'videoTrackTag:discard',
+    VIDEO_TRACK_TAG_CHECK_SAVE: 'videoTrackTag:checkSave',
+    VIDEO_TRACK_TAG_SAVE: 'videoTrackTag:save',
+    VIDEO_TRACK_TAG_EXPORT: 'videoTrackTag:export',
     VECTORIZER_LOAD_IMAGE: 'vectorizer:loadImage',
     VECTORIZER_CONVERT: 'vectorizer:convert',
     VECTORIZER_SAVE_SVG: 'vectorizer:saveSvg',
@@ -266,6 +275,35 @@ const api: IpcApi = {
         },
         async checkOutput(output) {
             return ipcRenderer.invoke(IPC_CHANNELS.VIDEO_SPLIT_MERGE_CHECK_OUTPUT, output);
+        },
+    },
+    videoTrackTag: {
+        async probe(input) {
+            return ipcRenderer.invoke(IPC_CHANNELS.VIDEO_TRACK_TAG_PROBE, input);
+        },
+        async frames(input) {
+            return ipcRenderer.invoke(IPC_CHANNELS.VIDEO_TRACK_TAG_FRAMES, input);
+        },
+        async waveform(source, streamIndex, durationSec) {
+            return ipcRenderer.invoke(IPC_CHANNELS.VIDEO_TRACK_TAG_WAVEFORM, source, streamIndex, durationSec);
+        },
+        async preview(input) {
+            return ipcRenderer.invoke(IPC_CHANNELS.VIDEO_TRACK_TAG_PREVIEW, input);
+        },
+        async makePreview(jobId, input, durationSec) {
+            return ipcRenderer.invoke(IPC_CHANNELS.VIDEO_TRACK_TAG_MAKE_PREVIEW, jobId, input, durationSec);
+        },
+        async discard() {
+            return ipcRenderer.invoke(IPC_CHANNELS.VIDEO_TRACK_TAG_DISCARD);
+        },
+        async checkSave(request) {
+            return ipcRenderer.invoke(IPC_CHANNELS.VIDEO_TRACK_TAG_CHECK_SAVE, request);
+        },
+        async save(jobId, request) {
+            return ipcRenderer.invoke(IPC_CHANNELS.VIDEO_TRACK_TAG_SAVE, jobId, request);
+        },
+        async exportTrack(jobId, request) {
+            return ipcRenderer.invoke(IPC_CHANNELS.VIDEO_TRACK_TAG_EXPORT, jobId, request);
         },
     },
     vectorizer: {

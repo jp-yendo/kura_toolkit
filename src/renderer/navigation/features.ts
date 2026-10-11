@@ -1,6 +1,7 @@
 import type { SvgIconComponent } from '@mui/icons-material';
 import GraphicEqIcon from '@mui/icons-material/GraphicEq';
 import MovieEditIcon from '@mui/icons-material/MovieEdit';
+import VideoSettingsIcon from '@mui/icons-material/VideoSettings';
 import PolylineIcon from '@mui/icons-material/Polyline';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import CleaningServicesIcon from '@mui/icons-material/CleaningServices';
@@ -78,6 +79,15 @@ export const FEATURES: FeatureDef[] = [
         color: FEATURE_COLORS.video,
         titleKey: 'features.videoSplitMerge.title',
         descKey: 'features.videoSplitMerge.desc',
+    },
+    {
+        id: 'videoTrackTag',
+        category: 'video',
+        route: '/video/track-tag',
+        icon: VideoSettingsIcon,
+        color: FEATURE_COLORS.video,
+        titleKey: 'features.videoTrackTag.title',
+        descKey: 'features.videoTrackTag.desc',
     },
     {
         id: 'svgConverter',

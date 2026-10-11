@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-10-11
+
 ### Added
 
 - Video Split & Merge, rebuilt from Chapter Cut:
@@ -14,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - Choose how to cut: lossless, smart cut or re-encode.
   - Choose how chapter boundaries are placed, including snapping them to nearby scene changes.
   - Merge several videos into one file, with the order, output format and chapters at the joins of your choice.
+- Video Tracks & Tags, which edits the tags, tracks and chapters of a video and outputs the result without re-encoding.
 
 ## [0.3.2] - 2026-10-10
 

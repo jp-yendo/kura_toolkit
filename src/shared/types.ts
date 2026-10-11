@@ -332,6 +332,121 @@ export type VideoJobResult = {
     cancelled: boolean;
 };
 
+// 動画トラック・タグ管理
+
+// 解析結果の 1 項目 (ffprobe の項目名と、表示用に文字にした値)
+export type ProbeField = { key: string; value: string };
+
+// 編集の対象にするトラックの種類
+export type TrackKind = 'video' | 'audio' | 'subtitle';
+
+// ファイルの中の 1 ストリーム
+export type TrackStreamInfo = {
+    // ファイルの中のストリームの番号
+    index: number;
+    // ffprobe の codec_type (video / audio / subtitle / data / attachment)
+    codecType: string;
+    // 編集の対象にするトラックの種類 (カバーアート・データ・添付ファイル・mp4 のチャプター用のトラックは null)
+    kind: TrackKind | null;
+    codec: string;
+    language: string;
+    title: string;
+    isDefault: boolean;
+    // コーデックのタグ (mp4 の hvc1・mp4a など。持たない形式は空)
+    codecTag: string;
+    // 一覧に添える要約の行 (長さとビットレート (字幕は長さだけ)、映像は解像度とフレームレート・音声はチャンネル数と
+    // サンプルレート・画像の字幕は解像度)
+    summary: string[];
+    // ffprobe のすべての項目 (タグと指定 (disposition) を除く)
+    fields: ProbeField[];
+    tags: Record<string, string>;
+    // 立っている指定 (default・forced など)
+    dispositions: string[];
+};
+
+export type TrackTagChapter = {
+    title: string;
+    start: number;
+    end: number;
+    // title 以外のチャプターのタグ (書き出すときに引き継ぐ)
+    tags: Record<string, string>;
+};
+
+export type TrackTagFile = {
+    path: string;
+    // 拡張子 (小文字、ドット付き)
+    extension: string;
+    sizeBytes: number;
+    durationSec: number | null;
+    // ffprobe のファイル全体の項目 (タグを除く)
+    formatFields: ProbeField[];
+    formatTags: Record<string, string>;
+    streams: TrackStreamInfo[];
+    chapters: TrackTagChapter[];
+};
+
+// 本編の映像のフレームの表示の時刻 (昇順) と、キーフレームの表示の時刻 (昇順)
+export type TrackTagFrames = { times: number[]; keyframes: number[] };
+
+// 音声のトラックの波形: channels はチャンネルごと (モノラルは 1 つ、ステレオ以上は左・右の 2 つ。3 チャンネル以上は
+// ステレオにまとめる) の区間の最大の並び。channels[c][i] は時刻 i * step から step 秒の区間の音の大きさの最大
+// (0 から 1。時刻はファイルの始まりを 0 とする)
+export type TrackTagWaveform = { step: number; channels: number[][] };
+
+// プレビューで再生する URL (proxy = 元の動画を再生できないため作ったプレビュー用の動画)
+export type TrackTagPreview = { url: string; proxy: boolean };
+
+// 出力するトラック (出力の順)
+export type TrackTagEditTrack = {
+    // トラックを持つファイル (元の動画か、追加したファイル)
+    source: string;
+    streamIndex: number;
+    kind: TrackKind;
+    codec: string;
+    // 言語 (ISO 639-2 の 3 文字。空 = 指定なし)
+    language: string;
+    // トラックの名前 (空 = 名前なし)
+    title: string;
+    isDefault: boolean;
+    // 既定以外のフラグ (ffmpeg の disposition の名前。強制・聴覚障害者向けなど)
+    flags: string[];
+};
+
+export type TrackTagSaveRequest = {
+    input: string;
+    output: string;
+    // ファイル全体のタグ (書く順)
+    formatTags: Array<{ key: string; value: string }>;
+    tracks: TrackTagEditTrack[];
+    chapters: TrackTagChapter[];
+};
+
+// 出力の前に調べること
+export type TrackTagSaveCheck = {
+    // 再エンコードしなければ出力形式へ入れられないトラック (出力できない。trackNumber は出力のトラックの 1 からの番号)
+    unsupported: Array<{ trackNumber: number; kind: TrackKind; codec: string }>;
+    // 形式を変えて入れる字幕 (書式などが失われうる)
+    converted: Array<{ trackNumber: number; codec: string; to: string }>;
+    // 出力形式に書けないファイル全体のタグ
+    lostTags: string[];
+    // 出力形式に書けないトラックのタグ (言語・独自のタグなど) の名前
+    lostTrackTags: string[];
+    // 出力形式にチャプターを書けない
+    chaptersLost: boolean;
+    // 出力形式に書けないチャプターのタグ (名前以外) の名前
+    lostChapterTags: string[];
+    // 出力形式に書けないトラックのフラグ (disposition の名前)
+    lostFlags: string[];
+    // 既定にしないトラックが既定として書かれる (種類ごとに最初のトラックを既定にする形式)
+    defaultForced: boolean;
+    // 書けるかを確かめられなかった (この形式の試しのファイルを書けない)
+    probeFailed: boolean;
+    // 出力形式に入れられない、元のファイルのそのほかのもの
+    droppedExtras: Array<'attachment' | 'coverArt' | 'data'>;
+};
+
+export type TrackTagExportRequest = { input: string; streamIndex: number; output: string };
+
 // ---------------------------------------------------------------------------
 // 画像 SVG 変換 (vtracer)
 // ---------------------------------------------------------------------------

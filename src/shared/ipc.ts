@@ -18,6 +18,13 @@ import type {
     VideoMergeCapabilities,
     VideoMergeOutputCheck,
     VideoMergeRequest,
+    TrackTagExportRequest,
+    TrackTagFile,
+    TrackTagFrames,
+    TrackTagWaveform,
+    TrackTagPreview,
+    TrackTagSaveCheck,
+    TrackTagSaveRequest,
     CleanupCapabilities,
     CleanupItem,
     CleanupRemoveResult,
@@ -351,6 +358,27 @@ export type IpcApi = {
         capabilities(): Promise<VideoMergeCapabilities>;
         // 結合の出力先のフォルダがあるか・同じ名前のファイルが既にあるか
         checkOutput(output: string): Promise<VideoMergeOutputCheck>;
+    };
+    // 動画トラック・タグ管理
+    videoTrackTag: {
+        // ファイルのすべての解析結果 (トラック・タグ・チャプター)
+        probe(input: string): Promise<TrackTagFile>;
+        // 本編の映像のフレームとキーフレームの時刻
+        frames(input: string): Promise<TrackTagFrames>;
+        // 音声のトラックの波形 (durationSec は区間の長さを決めるための長さ)
+        waveform(source: string, streamIndex: number, durationSec: number | null): Promise<TrackTagWaveform>;
+        // 元の動画を再生する URL
+        preview(input: string): Promise<TrackTagPreview>;
+        // 元の動画を再生できない場合に、プレビュー用の動画を作る (ジョブ。取り消した場合は null)
+        makePreview(jobId: string, input: string, durationSec: number | null): Promise<TrackTagPreview | null>;
+        // 作ったプレビュー用の動画を片付ける
+        discard(): Promise<void>;
+        // 書き出す前に、出力形式へ入れられないもの・形式を変えるもの・書けないタグを調べる
+        checkSave(request: TrackTagSaveRequest): Promise<TrackTagSaveCheck>;
+        // 編集した内容で新しいファイルへ書き出す (ジョブ)
+        save(jobId: string, request: TrackTagSaveRequest): Promise<VideoJobResult>;
+        // トラックを 1 つ単体のファイルへ書き出す (ジョブ)
+        exportTrack(jobId: string, request: TrackTagExportRequest): Promise<VideoJobResult>;
     };
     // 画像 SVG 変換
     vectorizer: {

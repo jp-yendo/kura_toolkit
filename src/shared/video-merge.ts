@@ -84,7 +84,7 @@ function sourceSignature(source: MergeSource): string {
 }
 
 // 出力形式ごとの、再エンコードせずにそのまま入れられる映像・音声のコーデック (表に無い形式 (mkv) は制限しない)
-const COPY_CODECS: Record<string, { video: string[]; audio: string[] }> = {
+export const COPY_CODECS: Record<string, { video: string[]; audio: string[] }> = {
     '.mp4': {
         video: ['h264', 'hevc', 'mpeg4', 'av1', 'vp9', 'mpeg2video', 'mjpeg'],
         audio: ['aac', 'mp3', 'ac3', 'eac3', 'alac', 'flac', 'opus', 'mp2'],

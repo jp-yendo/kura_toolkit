@@ -58,6 +58,20 @@ Audio Separation & Processing, Voice Conversion and Text to Speech need items (P
 - Videos of the same format (codec, resolution and so on) are merged quickly without re-encoding, and videos of different formats are re-encoded (the resolution, bitrate, color standard and so on follow the largest among the videos; when HDR and SDR videos are merged, the SDR videos are converted to HDR)
 - All video and audio tracks, track roles (commentary, hearing impaired and so on), subtitles (with their styles), all cover art, attachments, the original chapters, the timecode, video properties such as HDR, rotation and transparency, and the offset between video and audio are kept (anything the output format cannot hold is shown before merging)
 
+### Video: Video Tracks & Tags
+
+- Choose a video and see all the information about the file and its tracks that ffprobe provides, such as the format and bit rate
+- Edit the tags of the whole file: common ones such as title, artist and description in their own fields, and add, edit or delete any other tag by name
+- Change the name and language of video, audio and subtitle tracks
+- Choose the default track for each of video, audio and subtitles
+- Choose track flags (forced, hearing impaired, visually impaired, commentary, original, dub and so on) from those that suit the track type
+- Add tracks from another file (video, audio or subtitles), and delete tracks (deleting an original track can be undone; at least one video track is kept)
+- Change the name, start and end of chapters, and add or delete chapters
+- While watching the preview, set the start and end of a chapter to the current position, or start a new chapter there when the position is outside every chapter (it runs until the next chapter) (move to the previous or next frame, keyframe or chapter, and see the audio waveform and the chapter positions on bars as wide as the video)
+- Play videos that the preview cannot play by making a preview video
+- Output the edits to a new file without re-encoding (choose the format: Auto, or one of MP4, MKV, WebM, MOV, AVI and MPEG-TS that can hold every track without re-encoding; tracks the output format cannot hold stop the output, and converted subtitles and tags, chapters and so on that the output format cannot hold are shown before the output)
+- Export a track to a file in a format that suits its codec, without re-encoding (MP4 subtitles are converted to SRT)
+
 ### Image: SVG Converter
 
 - Convert images (PNG, JPEG, BMP, GIF, TIFF) into vector SVG files
@@ -100,7 +114,7 @@ The following can be set.
 
 ### Required External Tools
 
-Audio Normalizer, Video Split & Merge and the voice features (Audio Separation & Processing, Voice Conversion, Text to Speech) require [FFmpeg](https://ffmpeg.org/). It is not included with the app, so install it separately.
+Audio Normalizer, Video Split & Merge, Video Tracks & Tags and the voice features (Audio Separation & Processing, Voice Conversion, Text to Speech) require [FFmpeg](https://ffmpeg.org/). It is not included with the app, so install it separately.
 
 Changing the key in Voice Conversion (except by whole octaves) and timed rows in Text to Speech that are sped up to fit their time (the default) need an FFmpeg build that includes rubberband, and saving as Ogg Vorbis needs one that includes libvorbis. Installing it as below includes both.
 

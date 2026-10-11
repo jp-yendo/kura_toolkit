@@ -1,5 +1,6 @@
 import { useAudioStore } from './audioStore';
 import { useVideoSplitMergeStore } from './videoSplitMergeStore';
+import { useVideoTrackTagStore } from './videoTrackTagStore';
 import { useConversionStore } from './conversionStore';
 import { useConversionSeparationStore, useSeparationWorkStore } from './separationWorkStore';
 import { useSvgAutoStore } from './svgAutoStore';
@@ -26,6 +27,11 @@ const LEAVE_HANDLERS: Record<string, () => void> = {
     },
     'video/split-merge': () => {
         useVideoSplitMergeStore.getState().reset();
+    },
+    // 動画トラック・タグ管理は、選んだ動画と編集した内容を初めの状態に戻し、作ったプレビュー用の動画を片付ける
+    'video/track-tag': () => {
+        void window.kuraToolkit.videoTrackTag.discard();
+        useVideoTrackTagStore.getState().reset();
     },
     'audio/separation': () => {
         const separation = useSeparationWorkStore.getState();

@@ -4,7 +4,7 @@ import path from 'path';
 import { Readable } from 'stream';
 import { protocol } from 'electron';
 
-// プレビュー用に、ローカルの音声・画像ファイルを renderer の <audio> / <img> へ渡す独自スキーム。
+// プレビュー用に、ローカルの音声・画像・動画ファイルを renderer の <audio> / <img> / <video> へ渡す独自スキーム。
 // ファイルの中身を renderer のメモリに文字列として持たせず (dataURL を使わず)、必要な分だけ読ませる。
 // renderer は開発時 http://localhost、配布時 file:// から読み込まれるため file:// を直接参照できない。
 // 任意のファイルを読ませないよう、main が登録したファイルだけを推測できない識別子で公開する。
@@ -18,7 +18,8 @@ const pathToToken = new Map<string, string>();
 // ままになる。Windows では開いているファイルへの上書き (名前の変更) が EPERM で失敗するため、置き換える前に閉じる)
 const openStreams = new Map<string, Set<fs.ReadStream>>();
 
-// 公開するファイルの形式 (音声: 処理の結果と、学習用に追加・録音した音声。画像: SVG 変換の元画像と変換結果)
+// 公開するファイルの形式 (音声: 処理の結果と、学習用に追加・録音した音声。画像: SVG 変換の元画像と変換結果。
+// 動画: 動画トラック・タグ管理のプレビュー)
 const CONTENT_TYPES: Record<string, string> = {
     '.wav': 'audio/wav',
     '.mp3': 'audio/mpeg',
@@ -31,6 +32,14 @@ const CONTENT_TYPES: Record<string, string> = {
     '.gif': 'image/gif',
     '.tiff': 'image/tiff',
     '.svg': 'image/svg+xml',
+    '.mp4': 'video/mp4',
+    '.m4v': 'video/mp4',
+    '.mov': 'video/mp4',
+    '.mkv': 'video/x-matroska',
+    '.webm': 'video/webm',
+    '.ts': 'video/mp2t',
+    '.m2ts': 'video/mp2t',
+    '.avi': 'video/x-msvideo',
 };
 
 // app の ready より前に呼ぶ必要がある
