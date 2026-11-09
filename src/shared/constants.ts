@@ -87,6 +87,7 @@ export const IPC_CHANNELS = {
     CLEANUP_GET_CAPABILITIES: 'cleanup:getCapabilities',
     CLEANUP_OPEN_PERMISSION_SETTINGS: 'cleanup:openPermissionSettings',
     CLEANUP_SCAN: 'cleanup:scan',
+    CLEANUP_GET_ITEMS: 'cleanup:getItems',
     CLEANUP_REMOVE: 'cleanup:remove',
     VOICE_LIBRARY_STATUS: 'voice:library:status',
     VOICE_LIBRARY_REFRESH_PLATFORM: 'voice:library:refreshPlatform',

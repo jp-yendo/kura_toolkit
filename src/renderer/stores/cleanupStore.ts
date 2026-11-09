@@ -5,7 +5,8 @@ type CleanupState = {
     selectedTargets: CleanupTargetId[];
     selectedRoots: string[];
     items: CleanupItem[];
-    checked: string[];
+    // チェックした項目のパス。検索結果は数十万件になることがあるため、照合が件数に比例しない Set で持つ
+    checked: ReadonlySet<string>;
     // 保存済みの検索条件を復元済みかどうか (起動後 1 回だけ復元する)
     restored: boolean;
     toggleTarget(id: CleanupTargetId): void;
@@ -14,7 +15,7 @@ type CleanupState = {
     setAllRoots(paths: string[]): void;
     setItems(items: CleanupItem[]): void;
     toggleChecked(path: string): void;
-    setChecked(paths: string[]): void;
+    setChecked(paths: Iterable<string>): void;
     restore(targets: CleanupTargetId[], roots: string[]): void;
     pruneRoots(availablePaths: string[]): void;
 };
@@ -27,7 +28,7 @@ export const useCleanupStore = create<CleanupState>((set, get) => ({
     selectedTargets: [],
     selectedRoots: [],
     items: [],
-    checked: [],
+    checked: new Set(),
     restored: false,
     toggleTarget(id) {
         set({ selectedTargets: toggle(get().selectedTargets, id) });
@@ -42,13 +43,15 @@ export const useCleanupStore = create<CleanupState>((set, get) => ({
         set({ selectedRoots: paths });
     },
     setItems(items) {
-        set({ items, checked: [] });
+        set({ items, checked: new Set() });
     },
     toggleChecked(path) {
-        set({ checked: toggle(get().checked, path) });
+        const checked = new Set(get().checked);
+        if (!checked.delete(path)) checked.add(path);
+        set({ checked });
     },
     setChecked(paths) {
-        set({ checked: paths });
+        set({ checked: new Set(paths) });
     },
     restore(targets, roots) {
         // 起動後の最初の 1 回だけ適用する (画面を行き来しても選択が巻き戻らないようにする)

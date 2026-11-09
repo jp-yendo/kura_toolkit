@@ -2,13 +2,14 @@ import { ipcMain, shell } from 'electron';
 import { IPC_CHANNELS } from '../../shared/constants';
 import {
     getAvailableCleanupTargets,
+    getCleanupItems,
     getCleanupRoots,
     getFullDiskAccessStatus,
     removeCleanupItems,
     scanCleanupTargets,
     type CleanupScanOptions,
 } from '../services/cleanup';
-import type { CleanupCapabilities, CleanupItem } from '../../shared/types';
+import type { CleanupCapabilities } from '../../shared/types';
 
 // macOS のフルディスクアクセス設定を開く URL スキーム
 const MAC_FULL_DISK_ACCESS_URL = 'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles';
@@ -35,7 +36,11 @@ export function registerCleanupIpcHandlers() {
         return scanCleanupTargets(jobId, options);
     });
 
-    ipcMain.handle(IPC_CHANNELS.CLEANUP_REMOVE, (_e, jobId: string, items: CleanupItem[]) => {
-        return removeCleanupItems(jobId, items);
+    ipcMain.handle(IPC_CHANNELS.CLEANUP_GET_ITEMS, (_e, offset: number, limit: number) => {
+        return getCleanupItems(offset, limit);
+    });
+
+    ipcMain.handle(IPC_CHANNELS.CLEANUP_REMOVE, (_e, jobId: string, selection: Uint8Array) => {
+        return removeCleanupItems(jobId, selection);
     });
 }

@@ -760,6 +760,7 @@ export default {
             '{{count}} items will be removed. Files and directories are moved to the trash (only Windows alternate data streams are deleted directly). Continue?',
         resultSummary: 'Cleanup finished. Succeeded: {{ok}} / Failed: {{failed}}',
         failedItems: 'Failed items:',
+        moreFailedItems: '{{count}} more items also failed',
         rescanQuestion: 'Run the search again?',
         rescan: 'Rescan',
         targetLabels: {

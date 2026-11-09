@@ -15,6 +15,7 @@ import {
     type WalkerResponse,
     type WalkTask,
 } from '../services/dir-walker-protocol';
+import { appendAll } from '../utils/array';
 import type { CleanupItem } from '../../shared/types';
 
 // ディレクトリ走査ワーカー。
@@ -94,8 +95,8 @@ function runDirectoryTask(dir: string): void {
     out.errors.length = 0;
     scanCleanupDirectory(dir, init.config, out);
     pendingDirs += 1;
-    if (out.items.length > 0) pendingItems.push(...out.items);
-    if (out.errors.length > 0) pendingErrors.push(...out.errors);
+    appendAll(pendingItems, out.items);
+    appendAll(pendingErrors, out.errors);
     for (const subdir of out.subdirs) stack.push({ kind: 'dir', path: subdir });
     // ファイルが多いディレクトリは ADS 判定を切り出して他スレッドへ回せるようにする。
     // 少ないうちは切り出さずその場で済ませる (タスク化のほうが高くつくため)

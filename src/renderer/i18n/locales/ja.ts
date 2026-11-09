@@ -756,6 +756,7 @@ export default {
             '{{count}} 個の項目を削除します。ファイルとディレクトリはゴミ箱へ移動します (Windows の代替データストリームのみ直接削除されます)。よろしいですか？',
         resultSummary: 'クリーンアップが完了しました。成功: {{ok}} 件 / 失敗: {{failed}} 件',
         failedItems: '失敗した項目:',
+        moreFailedItems: 'ほか {{count}} 件も失敗しました',
         rescanQuestion: '再検索を実行しますか？',
         rescan: '再検索',
         targetLabels: {

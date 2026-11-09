@@ -212,11 +212,23 @@ export type CleanupScanOptions = {
     targets: CleanupTargetId[];
 };
 
+// 直近の検索結果。件数が数十万になることがあり、まとめて 1 回の IPC では送れないため main に置き、
+// 画面へは getCleanupItems で分けて渡す。削除の対象もこの並びの位置で受け取る
+let scanItems: CleanupItem[] = [];
+
+// 画面へ一度に渡す件数の上限
+const ITEMS_PAGE_MAX = 20000;
+// 削除の進捗を送る間隔 (1 件ごとに送ると、件数が多いときに画面の更新が追いつかなくなる)
+const REMOVE_PROGRESS_INTERVAL_MS = 100;
+// 失敗した項目のうち、理由まで返す件数 (画面に並べる分だけ。件数は別に返す)
+const FAILED_DETAIL_LIMIT = 100;
+
 // 選択されたルートを再帰走査して対象を検出する。
 // 走査はディレクトリ単位で並列化する (スレッド数はアプリ設定の「探索のスレッド数」)。
 // 総ディレクトリ数は事前に分からないため進捗率は出さず、走査済み件数と各スレッドの現在位置を送る。
 export async function scanCleanupTargets(jobId: string, options: CleanupScanOptions): Promise<CleanupScanResult> {
     startJob(jobId);
+    scanItems = [];
     try {
         const result = await walkCleanupTargets({
             roots: options.roots,
@@ -229,29 +241,52 @@ export async function scanCleanupTargets(jobId: string, options: CleanupScanOpti
         });
         // キャンセル状態は finishJob でジョブ登録が消える前に確定させる
         const cancelled = result.cancelled || isCancelled(jobId);
-        return { items: result.items, cancelled, errors: result.errors };
+        scanItems = result.items;
+        return { count: scanItems.length, cancelled };
     } finally {
         finishJob(jobId);
     }
 }
 
-// 選択された項目を削除する (通常はゴミ箱へ、ADS は直接削除)
-export async function removeCleanupItems(jobId: string, items: CleanupItem[]): Promise<CleanupRemoveResult> {
+// 直近の検索結果のうち offset 番目から最大 limit 件を返す
+export function getCleanupItems(offset: number, limit: number): CleanupItem[] {
+    const start = Math.max(0, Math.floor(offset));
+    const count = Math.min(Math.max(0, Math.floor(limit)), ITEMS_PAGE_MAX);
+    return scanItems.slice(start, start + count);
+}
+
+// 直近の検索結果のうち、selection が 1 の位置の項目を削除する (通常はゴミ箱へ、ADS は直接削除)。
+// selection は検索結果と同じ並び・同じ長さ。削除できた項目は検索結果から取り除き、その位置を removed で返す
+export async function removeCleanupItems(jobId: string, selection: Uint8Array): Promise<CleanupRemoveResult> {
+    if (selection.length !== scanItems.length) {
+        throw new Error(`selection length ${selection.length} does not match ${scanItems.length} found items`);
+    }
     startJob(jobId);
+    const targets: number[] = [];
+    for (let index = 0; index < selection.length; index++) {
+        if (selection[index]) targets.push(index);
+    }
+    const removed = new Uint8Array(scanItems.length);
     let deleted = 0;
+    let failedCount = 0;
     const failed: { path: string; error: string }[] = [];
+    let lastProgressAt = 0;
     try {
-        for (let i = 0; i < items.length; i++) {
+        for (let i = 0; i < targets.length; i++) {
             if (isCancelled(jobId)) break;
-            const item = items[i];
-            emitJobEvent({
-                jobId,
-                kind: 'progress',
-                current: i + 1,
-                total: items.length,
-                percent: (i / items.length) * 100,
-                message: item.path,
-            });
+            const item = scanItems[targets[i]];
+            const now = Date.now();
+            if (now - lastProgressAt >= REMOVE_PROGRESS_INTERVAL_MS) {
+                lastProgressAt = now;
+                emitJobEvent({
+                    jobId,
+                    kind: 'progress',
+                    current: i + 1,
+                    total: targets.length,
+                    percent: (i / targets.length) * 100,
+                    message: item.path,
+                });
+            }
             try {
                 if (item.kind === 'ads') {
                     // ADS はゴミ箱へ移動できないため直接削除する (本体ファイルは残る)
@@ -259,16 +294,18 @@ export async function removeCleanupItems(jobId: string, items: CleanupItem[]): P
                 } else {
                     await shell.trashItem(item.path);
                 }
+                removed[targets[i]] = 1;
                 deleted += 1;
             } catch (error) {
-                failed.push({
-                    path: item.path,
-                    error: error instanceof Error ? error.message : String(error),
-                });
+                failedCount += 1;
+                if (failed.length < FAILED_DETAIL_LIMIT) {
+                    failed.push({ path: item.path, error: error instanceof Error ? error.message : String(error) });
+                }
             }
         }
     } finally {
+        scanItems = scanItems.filter((_, index) => !removed[index]);
         finishJob(jobId);
     }
-    return { deleted, failed };
+    return { deleted, failedCount, failed, removed };
 }

@@ -648,14 +648,18 @@ export type CleanupItem = {
 };
 
 export type CleanupScanResult = {
-    items: CleanupItem[];
+    // 見つかった件数。項目は件数が多いと 1 回の IPC で送れないため、cleanup.getItems で分けて受け取る
+    count: number;
     cancelled: boolean;
-    errors: string[];
 };
 
 export type CleanupRemoveResult = {
     deleted: number;
+    failedCount: number;
+    // 失敗した項目と理由 (画面に並べる分として先頭の一部だけ。全体の件数は failedCount)
     failed: { path: string; error: string }[];
+    // 検索結果と同じ並びで、1 は削除できた項目 (検索結果から取り除かれている)
+    removed: Uint8Array;
 };
 
 // このプラットフォームで利用できるクリーンアップ機能と権限の状態

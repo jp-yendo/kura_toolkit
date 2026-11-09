@@ -11,8 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
-- File Cleanup: searching no longer freezes the app or stays stuck when a drive stops responding (such as a disconnected network drive). Cancel now always ends the search.
-- File Cleanup: the search details now show the folder a thread is stuck on, instead of showing it as idle.
+- File Cleanup: searching no longer freezes or stays stuck on "Searching" when it finds a very large number of items or a drive stops responding.
 
 ## [0.3.3] - 2026-10-11
 

@@ -21,10 +21,11 @@ import ProgressDialog from '../../components/common/ProgressDialog';
 import PageContainer from '../../components/common/PageContainer';
 import SectionLabel from '../../components/common/SectionLabel';
 import Panel from '../../components/common/Panel';
+import VirtualList from '../../components/common/VirtualList';
 import { showNotice } from '../../stores/noticeStore';
 import { useCleanupStore } from '../../stores/cleanupStore';
 import { useSettingsStore } from '../../stores/settingsStore';
-import type { CleanupCapabilities, CleanupRemoveResult, CleanupRoot, JobEvent } from '@shared/types';
+import type { CleanupCapabilities, CleanupItem, CleanupRemoveResult, CleanupRoot, JobEvent } from '@shared/types';
 
 // グループ配下の項目を字下げする量 (MUI の spacing 単位)
 const CHILD_INDENT = 3;
@@ -37,6 +38,22 @@ const CHECKBOX_ROW_SX = {
     mr: 0,
     '& .MuiFormControlLabel-label': { fontSize: '0.9375rem', lineHeight: 1.5 },
 };
+
+// 検索結果の 1 行の高さ (px)。一覧は見えている行だけを描くため、行の高さをそろえる
+const RESULT_ROW_HEIGHT = 28;
+// 検索結果を一度に受け取る件数 (1 回の IPC で送る量を抑えるため分けて受け取る)
+const RESULT_PAGE_SIZE = 20000;
+
+// 直近の検索結果を、分けてすべて受け取る
+async function fetchScanItems(count: number): Promise<CleanupItem[]> {
+    const items: CleanupItem[] = [];
+    while (items.length < count) {
+        const page = await window.kuraToolkit.cleanup.getItems(items.length, RESULT_PAGE_SIZE);
+        if (page.length === 0) break;
+        for (const item of page) items.push(item);
+    }
+    return items;
+}
 
 // 検索条件が前回と同じかどうか (並び順は問わない)
 function sameSelection(a: readonly string[], b: readonly string[]): boolean {
@@ -269,12 +286,14 @@ export default function CleanupPage() {
                 roots: store.selectedRoots,
                 targets: store.selectedTargets,
             });
-            store.setItems(scanResult.items);
-            if (!scanResult.cancelled && scanResult.items.length === 0) {
+            store.setItems(await fetchScanItems(scanResult.count));
+            if (!scanResult.cancelled && scanResult.count === 0) {
                 // 一瞬で消える通知では見落とされるため、閉じるまで残るダイアログで伝える
                 setNoneFoundOpen(true);
             }
         } catch (error) {
+            // main 側の検索結果は検索を始めた時点で空になるため、一覧もそろえて空にする
+            store.setItems([]);
             showNotice('warning', errorMessage(t, error));
         } finally {
             setJob(null);
@@ -283,17 +302,19 @@ export default function CleanupPage() {
 
     const runCleanup = async () => {
         setConfirmOpen(false);
-        const targets = store.items.filter(item => store.checked.includes(item.path));
+        // 削除する項目は、main が持つ検索結果と同じ並びの位置で指定する (パスを送ると件数が多いときに重くなるため)
+        const items = store.items;
+        const selection = new Uint8Array(items.length);
+        items.forEach((item, index) => {
+            if (store.checked.has(item.path)) selection[index] = 1;
+        });
         const jobId = crypto.randomUUID();
         setJob({ jobId, kind: 'remove', foundCount: 0, visitedDirs: 0, workers: [] });
         try {
-            const removeResult = await window.kuraToolkit.cleanup.remove(jobId, targets);
+            const removeResult = await window.kuraToolkit.cleanup.remove(jobId, selection);
             setResult(removeResult);
-            // 失敗した項目以外を一覧から取り除く
-            const failedPaths = new Set(removeResult.failed.map(item => item.path));
-            store.setItems(
-                store.items.filter(item => !store.checked.includes(item.path) || failedPaths.has(item.path))
-            );
+            // 削除できた項目を一覧から取り除く (main の検索結果からも同じ位置の項目が取り除かれている)
+            store.setItems(items.filter((_, index) => !removeResult.removed[index]));
         } catch (error) {
             showNotice('warning', errorMessage(t, error));
         } finally {
@@ -406,20 +427,30 @@ export default function CleanupPage() {
                     {t('cleanupPage.colPath')}
                     {store.items.length > 0 ? ` (${t('cleanupPage.foundCount', { count: store.items.length })})` : ''}
                 </SectionLabel>
-                <Panel disablePadding sx={{ flexGrow: 1, overflow: 'auto', py: 0.5 }}>
-                    {store.items.map(item => (
-                        <Box key={item.path} sx={{ display: 'flex', alignItems: 'center', px: 1, gap: 0.5 }}>
-                            <Checkbox
-                                size='small'
-                                sx={CHECKBOX_SX}
-                                checked={store.checked.includes(item.path)}
-                                onChange={() => store.toggleChecked(item.path)}
-                            />
-                            <Typography variant='body2' sx={{ wordBreak: 'break-all', lineHeight: 1.5 }}>
-                                {item.path}
-                            </Typography>
-                        </Box>
-                    ))}
+                {/* 数十万件になることがあるため、見えている行だけを描く。パスは 1 行に収め、収まらない分は省略して
+                    マウスを重ねたときに全体を出す */}
+                <Panel disablePadding sx={{ flexGrow: 1, display: 'flex', minHeight: 0, overflow: 'hidden' }}>
+                    <VirtualList
+                        count={store.items.length}
+                        rowHeight={RESULT_ROW_HEIGHT}
+                        sx={{ flexGrow: 1, py: 0.5 }}
+                        renderRow={index => {
+                            const item = store.items[index];
+                            return (
+                                <Box sx={{ display: 'flex', alignItems: 'center', height: '100%', px: 1, gap: 0.5 }}>
+                                    <Checkbox
+                                        size='small'
+                                        sx={CHECKBOX_SX}
+                                        checked={store.checked.has(item.path)}
+                                        onChange={() => store.toggleChecked(item.path)}
+                                    />
+                                    <Typography variant='body2' noWrap title={item.path} sx={{ minWidth: 0 }}>
+                                        {item.path}
+                                    </Typography>
+                                </Box>
+                            );
+                        }}
+                    />
                 </Panel>
             </Box>
 
@@ -448,7 +479,7 @@ export default function CleanupPage() {
                     color='warning'
                     fullWidth
                     onClick={() => {
-                        if (store.checked.length === 0) {
+                        if (store.checked.size === 0) {
                             showNotice('warning', t('cleanupPage.needChecked'));
                             return;
                         }
@@ -496,7 +527,7 @@ export default function CleanupPage() {
             <AppDialog open={confirmOpen} onClose={() => setConfirmOpen(false)} maxWidth='sm' fullWidth>
                 <DialogTitle>{t('cleanupPage.confirmTitle')}</DialogTitle>
                 <DialogContent>
-                    <Typography>{t('cleanupPage.confirmMessage', { count: store.checked.length })}</Typography>
+                    <Typography>{t('cleanupPage.confirmMessage', { count: store.checked.size })}</Typography>
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setConfirmOpen(false)}>{t('common.cancel')}</Button>
@@ -513,10 +544,10 @@ export default function CleanupPage() {
                     <Typography sx={{ mb: 1 }}>
                         {t('cleanupPage.resultSummary', {
                             ok: result?.deleted ?? 0,
-                            failed: result?.failed.length ?? 0,
+                            failed: result?.failedCount ?? 0,
                         })}
                     </Typography>
-                    {result && result.failed.length > 0 && (
+                    {result && result.failedCount > 0 && (
                         <>
                             <Typography variant='body2' sx={{ mb: 0.5 }}>
                                 {t('cleanupPage.failedItems')}
@@ -531,6 +562,14 @@ export default function CleanupPage() {
                                     {item.path} ({item.error})
                                 </Typography>
                             ))}
+                            {/* 理由まで受け取るのは先頭の一部だけなので、残りは件数で伝える */}
+                            {result.failedCount > result.failed.length && (
+                                <Typography variant='body2' color='text.secondary'>
+                                    {t('cleanupPage.moreFailedItems', {
+                                        count: result.failedCount - result.failed.length,
+                                    })}
+                                </Typography>
+                            )}
                         </>
                     )}
                     <Typography sx={{ mt: 2 }}>{t('cleanupPage.rescanQuestion')}</Typography>

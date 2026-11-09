@@ -20,6 +20,7 @@ import {
     type WalkerResponse,
     type WalkTask,
 } from './dir-walker-protocol';
+import { appendAll } from '../utils/array';
 import type { CleanupItem } from '../../shared/types';
 
 // ディレクトリ走査の並列実行。
@@ -221,13 +222,13 @@ function walkWithWorkers(options: WalkOptions): Promise<WalkResult> {
             worker.on('message', (message: WalkerResponse) => {
                 if (settled) return;
                 if (message.type === 'report') {
-                    if (message.items.length > 0) items.push(...message.items);
-                    errors.push(...message.errors);
+                    appendAll(items, message.items);
+                    appendAll(errors, message.errors);
                     visitedDirs += message.dirs;
                     return;
                 }
                 if (message.type === 'spill') {
-                    queue.push(...message.tasks);
+                    appendAll(queue, message.tasks);
                     feedIdleWorkers();
                     return;
                 }
@@ -273,7 +274,7 @@ async function scanAdsInChunks(
             cancelSignal,
         ]);
         if (found === CANCELLED) return CANCELLED;
-        if (found.length > 0) items.push(...found);
+        appendAll(items, found);
     }
     return items;
 }
@@ -325,8 +326,8 @@ async function walkInProcess(options: WalkOptions): Promise<WalkResult> {
             out.adsCandidates.length = 0;
             out.errors.length = 0;
             classifyDirectoryEntries(dir, entries, options.config, out);
-            if (out.items.length > 0) items.push(...out.items);
-            errors.push(...out.errors);
+            appendAll(items, out.items);
+            appendAll(errors, out.errors);
             for (const subdir of out.subdirs) stack.push(subdir);
             if (out.adsCandidates.length > 0) {
                 const found = await scanAdsInChunks(out.adsCandidates, cancelSignal);
@@ -334,7 +335,7 @@ async function walkInProcess(options: WalkOptions): Promise<WalkResult> {
                     cancelled = true;
                     break;
                 }
-                if (found.length > 0) items.push(...found);
+                appendAll(items, found);
             }
         }
     } finally {

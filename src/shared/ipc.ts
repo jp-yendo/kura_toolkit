@@ -410,7 +410,10 @@ export type IpcApi = {
         openPermissionSettings(): Promise<void>;
         getRoots(): Promise<CleanupRoot[]>;
         scan(jobId: string, options: { roots: string[]; targets: CleanupTargetId[] }): Promise<CleanupScanResult>;
-        remove(jobId: string, items: CleanupItem[]): Promise<CleanupRemoveResult>;
+        // 直近の検索結果のうち offset 番目から最大 limit 件 (一度に返す件数には上限がある)
+        getItems(offset: number, limit: number): Promise<CleanupItem[]>;
+        // 直近の検索結果のうち、selection (検索結果と同じ並び・同じ長さ) が 1 の項目を削除する
+        remove(jobId: string, selection: Uint8Array): Promise<CleanupRemoveResult>;
     };
     // 音声分離・音声変換・読み上げ
     voice: VoiceApi;
