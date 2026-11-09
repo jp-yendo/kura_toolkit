@@ -146,21 +146,33 @@ export type DirectoryScanResult = {
 // この単位に切って複数スレッドへ回せるようにする
 export const ADS_CHUNK_SIZE = 512;
 
+function zoneIdentifierItem(filePath: string): CleanupItem {
+    return { path: `${filePath}${ZONE_IDENTIFIER_SUFFIX}`, targetId: 'zoneIdentifier', kind: 'ads' };
+}
+
 // ADS 判定だけを行う。scanCleanupDirectory が集めた候補に対して呼ぶ
 export function scanAdsCandidates(paths: string[], items: CleanupItem[]): void {
     for (const filePath of paths) {
-        if (hasZoneIdentifier(filePath)) {
-            items.push({
-                path: `${filePath}${ZONE_IDENTIFIER_SUFFIX}`,
-                targetId: 'zoneIdentifier',
-                kind: 'ads',
-            });
-        }
+        if (hasZoneIdentifier(filePath)) items.push(zoneIdentifierItem(filePath));
     }
 }
 
+// scanAdsCandidates の非同期版。イベントループを塞げない場所 (main プロセス) で使う。
+// 存在しないときも例外になるため同期版より遅いが、待つ間もほかの処理を止めない
+export async function scanAdsCandidatesAsync(paths: string[]): Promise<CleanupItem[]> {
+    const found = await Promise.all(
+        paths.map(filePath =>
+            fs.promises.stat(`${filePath}${ZONE_IDENTIFIER_SUFFIX}`).then(
+                () => true,
+                // ENOENT 以外 (権限不足など) も「無し」として扱う
+                () => false
+            )
+        )
+    );
+    return paths.filter((_, index) => found[index]).map(zoneIdentifierItem);
+}
+
 // ディレクトリ 1 個を走査して、対象と配下のサブディレクトリを out へ集める。
-// 判定の順序は元実装と同一で、変えると検出結果が変わる。
 // 読み取れないディレクトリは黙って飛ばす。
 export function scanCleanupDirectory(dir: string, config: CleanupScanConfig, out: DirectoryScanResult): void {
     let entries: fs.Dirent[];
@@ -170,6 +182,17 @@ export function scanCleanupDirectory(dir: string, config: CleanupScanConfig, out
         // アクセスできないディレクトリはスキップ
         return;
     }
+    classifyDirectoryEntries(dir, entries, config, out);
+}
+
+// 読み取り済みのディレクトリの中身から、対象と配下のサブディレクトリを out へ集める。
+// 判定の順序は元実装と同一で、変えると検出結果が変わる。
+export function classifyDirectoryEntries(
+    dir: string,
+    entries: fs.Dirent[],
+    config: CleanupScanConfig,
+    out: DirectoryScanResult
+): void {
     for (const entry of entries) {
         const entryPath = path.join(dir, entry.name);
         try {

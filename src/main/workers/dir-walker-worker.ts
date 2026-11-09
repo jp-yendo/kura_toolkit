@@ -6,8 +6,10 @@ import {
     type DirectoryScanResult,
 } from '../services/cleanup-targets';
 import {
+    currentPathView,
     FLAG_CANCELLED,
     FLAG_IDLE_WORKERS,
+    writeCurrentPath,
     type WalkerInit,
     type WalkerRequest,
     type WalkerResponse,
@@ -40,6 +42,7 @@ const init = workerData as WalkerInit;
 const port = requireParentPort();
 
 const flags = new Int32Array(init.flags);
+const current = currentPathView(init.current);
 
 // ローカルの作業キュー (深さ優先。末尾から取り出す)
 const stack: WalkTask[] = [];
@@ -49,7 +52,6 @@ let running = false;
 let pendingItems: CleanupItem[] = [];
 let pendingErrors: string[] = [];
 let pendingDirs = 0;
-let currentDir: string | null = null;
 let lastReportAt = 0;
 
 // scanCleanupDirectory の受け皿 (使い回して確保を減らす)
@@ -71,7 +73,7 @@ function report(): void {
     pendingErrors = [];
     const dirs = pendingDirs;
     pendingDirs = 0;
-    post({ type: 'report', index: init.index, items, errors, dirs, current: currentDir });
+    post({ type: 'report', index: init.index, items, errors, dirs });
 }
 
 // 手が空いているワーカーがいれば、ローカルキューの半分を親へ返す。
@@ -115,18 +117,15 @@ function runAdsTask(paths: string[]): void {
 
 async function run(): Promise<void> {
     running = true;
-    // 再開直後に 1 回報告させる。仕事を受けるたびに短時間で終わる状況だと、
-    // 報告が走査の終わり (現在位置なし) に偏り、進捗が「待機中」のままに見えてしまう
-    lastReportAt = 0;
     let sinceYield = 0;
     while (stack.length > 0) {
         if (isCancelled()) break;
         const task = stack.pop() as WalkTask;
+        // 処理を始める前に書く。fs の呼び出しの中で止まっても、止まっている場所が main から見える
+        writeCurrentPath(current, task.kind === 'dir' ? task.path : task.dir);
         if (task.kind === 'dir') {
-            currentDir = task.path;
             runDirectoryTask(task.path);
         } else {
-            currentDir = task.dir;
             runAdsTask(task.paths);
         }
 
@@ -138,7 +137,7 @@ async function run(): Promise<void> {
         }
     }
     running = false;
-    currentDir = null;
+    writeCurrentPath(current, null);
     report();
     post({ type: 'idle', index: init.index });
 }

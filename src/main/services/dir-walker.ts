@@ -1,16 +1,20 @@
+import fs from 'fs';
 import path from 'path';
 import { Worker } from 'worker_threads';
 import {
     ADS_CHUNK_SIZE,
-    scanAdsCandidates,
-    scanCleanupDirectory,
+    classifyDirectoryEntries,
+    scanAdsCandidatesAsync,
     type CleanupScanConfig,
     type DirectoryScanResult,
 } from './cleanup-targets';
 import {
+    createCurrentPathBuffer,
+    currentPathView,
     FLAG_CANCELLED,
     FLAG_COUNT,
     FLAG_IDLE_WORKERS,
+    readCurrentPath,
     type WalkerInit,
     type WalkerRequest,
     type WalkerResponse,
@@ -22,24 +26,23 @@ import type { CleanupItem } from '../../shared/types';
 // 作業単位はディレクトリ 1 個で、ワーカーは受け取ったディレクトリを起点に自分のローカルキューで
 // 再帰し、手が空いたワーカーがいるときだけキューを分けて返す (spill)。
 // 1 ディレクトリごとに親と往復すると、走査そのものよりメッセージの往復が高くつくため。
+// fs の呼び出しはすべてワーカーか非同期 API で行い、main プロセスのイベントループを塞がない
+// (応答しないネットワークドライブなどで 1 回の呼び出しが長く返らないことがあるため)。
 
 // 空いたワーカーへ一度に渡すディレクトリ数
 const DISPATCH_BATCH = 8;
 // キャンセル要求を拾う間隔
 const CANCEL_POLL_MS = 100;
+// キャンセル後、ワーカーが手を止めて報告してくるのを待つ時間。
+// これを過ぎても戻らないワーカー (fs の呼び出しの中で止まっているもの) は待たずに終える
+const CANCEL_GRACE_MS = 1000;
 // 進捗を呼び出し元へ通知する間隔
 const PROGRESS_INTERVAL_MS = 150;
-// main 側で先読み展開するときの目安 (1 スレッドあたりのディレクトリ数) と最大階層
-const SEED_DIRS_PER_THREAD = 8;
-const SEED_MAX_DEPTH = 2;
-// ワーカーを使わない場合に、イベントループへ譲るまでのディレクトリ数。
-// main プロセス上で動くため、ワーカー内より短い間隔で譲る
-const INPROCESS_YIELD_EVERY_DIRS = 32;
 
 type WalkOptions = {
     roots: string[];
     config: CleanupScanConfig;
-    // 走査に使うスレッド数 (1 ならワーカーを起こさず同一プロセスで走査する)
+    // 走査に使うスレッド (ワーカー) の数
     threads: number;
     isCancelled: () => boolean;
     // 走査済みディレクトリ数・発見件数・スレッドごとの現在位置
@@ -59,79 +62,38 @@ function resolveWorkerPath(): string {
 }
 
 // 走査結果をディレクトリ単位で並列に集める。
-// ワーカーを起動できない環境でも動くよう、失敗時は同一プロセスの走査に落とす
+// ワーカーを起動できない環境でも動くよう、失敗時は main プロセス上の非同期の走査に落とす
 export async function walkCleanupTargets(options: WalkOptions): Promise<WalkResult> {
-    if (options.threads > 1) {
-        try {
-            const seed = await seedQueue(options);
-            const result = await walkWithWorkers(options, seed);
-            return {
-                items: [...seed.items, ...result.items],
-                errors: [...seed.errors, ...result.errors],
-                cancelled: result.cancelled,
-            };
-        } catch (error) {
-            // ワーカーが起動できない/途中で落ちた場合。結果が欠けたまま返さないよう逐次走査でやり直す。
-            // 黙って遅いまま動き続けないよう理由を残す
-            console.warn(
-                `dir-walker: worker threads unavailable, falling back to single-threaded scan: ${
-                    error instanceof Error ? error.message : String(error)
-                }`
-            );
-        }
+    try {
+        return await walkWithWorkers(options);
+    } catch (error) {
+        // ワーカーが起動できない/途中で落ちた場合。結果が欠けたまま返さないよう逐次走査でやり直す。
+        // 黙って遅いまま動き続けないよう理由を残す
+        console.warn(
+            `dir-walker: worker threads unavailable, falling back to in-process scan: ${
+                error instanceof Error ? error.message : String(error)
+            }`
+        );
     }
     return walkInProcess(options);
 }
 
-// ワーカーへ配る前に、ルートの浅い階層だけを main 側で展開しておく。
-// 最初から全スレッドへ十分な量が行き渡るようにするためで、
-// これが無いと序盤は 1 スレッドしか動けず、走査中のやり取りも増える
-type SeedResult = { queue: WalkTask[]; items: CleanupItem[]; errors: string[]; visitedDirs: number };
-
-async function seedQueue(options: WalkOptions): Promise<SeedResult> {
-    const items: CleanupItem[] = [];
-    const errors: string[] = [];
-    const adsTasks: WalkTask[] = [];
-    const out: DirectoryScanResult = { items: [], subdirs: [], adsCandidates: [], errors: [] };
-    let visitedDirs = 0;
-    let level = [...options.roots];
-    // 1 スレッドあたり数個ずつ行き渡る量を目安にする
-    const target = options.threads * SEED_DIRS_PER_THREAD;
-
-    for (let depth = 0; depth < SEED_MAX_DEPTH && level.length < target && level.length > 0; depth++) {
-        const next: string[] = [];
-        for (const dir of level) {
-            if (options.isCancelled()) break;
-            out.items.length = 0;
-            out.subdirs.length = 0;
-            out.adsCandidates.length = 0;
-            out.errors.length = 0;
-            scanCleanupDirectory(dir, options.config, out);
-            visitedDirs += 1;
-            if (out.items.length > 0) items.push(...out.items);
-            errors.push(...out.errors);
-            next.push(...out.subdirs);
-            // 展開したディレクトリ自身の ADS 判定はワーカーへ回す (main を止めないため)
-            for (let offset = 0; offset < out.adsCandidates.length; offset += ADS_CHUNK_SIZE) {
-                adsTasks.push({ kind: 'ads', dir, paths: out.adsCandidates.slice(offset, offset + ADS_CHUNK_SIZE) });
-            }
-        }
-        level = next;
-        // 展開のあいだ main プロセスを止めないよう階層ごとに譲る
-        await new Promise<void>(resolve => setImmediate(resolve));
-    }
-    const queue: WalkTask[] = level.map(dir => ({ kind: 'dir', path: dir }));
-    return { queue: [...adsTasks, ...queue], items, errors, visitedDirs };
-}
-
-function walkWithWorkers(options: WalkOptions, seed: SeedResult): Promise<WalkResult> {
+function walkWithWorkers(options: WalkOptions): Promise<WalkResult> {
     const workerPath = resolveWorkerPath();
+    const threads = Math.max(1, options.threads);
     const flagsBuffer = new SharedArrayBuffer(FLAG_COUNT * Int32Array.BYTES_PER_ELEMENT);
     const flags = new Int32Array(flagsBuffer);
+    const currentBuffers = Array.from({ length: threads }, () => createCurrentPathBuffer());
+    const currentViews = currentBuffers.map(currentPathView);
     const workers: Worker[] = [];
     try {
-        for (let index = 0; index < options.threads; index++) {
-            const init: WalkerInit = { index, config: options.config, flags: flagsBuffer };
+        for (let index = 0; index < threads; index++) {
+            const init: WalkerInit = {
+                index,
+                config: options.config,
+                flags: flagsBuffer,
+                current: currentBuffers[index],
+            };
             workers.push(new Worker(workerPath, { workerData: init }));
         }
     } catch (error) {
@@ -140,45 +102,66 @@ function walkWithWorkers(options: WalkOptions, seed: SeedResult): Promise<WalkRe
     }
 
     return new Promise<WalkResult>((resolve, reject) => {
-        const queue: WalkTask[] = [...seed.queue];
+        // 最初はルートだけを配り、走査中のワーカーが手の空いたワーカーへ分けていく
+        const queue: WalkTask[] = options.roots.map(root => ({ kind: 'dir', path: root }));
         const items: CleanupItem[] = [];
         const errors: string[] = [];
-        const workerPaths: (string | null)[] = new Array<string | null>(workers.length).fill(null);
+        // 共有メモリを読めなかった (書き込みと重なった) ときに出す、前回読めた現在位置
+        const lastPaths: (string | null)[] = new Array<string | null>(workers.length).fill(null);
         const idle = new Set<number>();
         // 起動に失敗したり途中で落ちたワーカー。仕事を渡す相手からも完了判定からも除く
         // (これをしないと、返事の来ないワーカーを待ち続けて終わらなくなる)
         const dead = new Set<number>();
-        // 先読みで走査した分を進捗の初期値にする (最終結果と件数がずれないようにするため)
-        let visitedDirs = seed.visitedDirs;
+        let visitedDirs = 0;
         let cancelled = false;
         let settled = false;
+        let cancelGraceTimer: NodeJS.Timeout | undefined;
 
-        const emitProgress = () => options.onProgress(visitedDirs, seed.items.length + items.length, [...workerPaths]);
+        // 現在位置はワーカーとのメッセージではなく共有メモリから読む。
+        // fs の呼び出しの中で止まっているワーカーも、止まっているディレクトリが分かる
+        const readWorkerPaths = (): (string | null)[] =>
+            currentViews.map((view, index) => {
+                if (dead.has(index)) return null;
+                const value = readCurrentPath(view);
+                if (value !== undefined) lastPaths[index] = value;
+                return lastPaths[index];
+            });
 
-        const cancelTimer = setInterval(() => {
-            if (cancelled || !options.isCancelled()) return;
-            cancelled = true;
-            // メッセージの往復を待たずに全ワーカーへ伝わる
-            Atomics.store(flags, FLAG_CANCELLED, 1);
-        }, CANCEL_POLL_MS);
-        const progressTimer = setInterval(emitProgress, PROGRESS_INTERVAL_MS);
+        const emitProgress = () => options.onProgress(visitedDirs, items.length, readWorkerPaths());
 
         const finish = () => {
             if (settled) return;
             settled = true;
             clearInterval(cancelTimer);
             clearInterval(progressTimer);
+            clearTimeout(cancelGraceTimer);
+            // fs の呼び出しの中で止まっているワーカーは、その呼び出しが返るまで実際には終わらないが、
+            // 終わりは待たない (待つと、止まったワーカーのために走査全体が終わらなくなる)
             for (const worker of workers) void worker.terminate();
-            workerPaths.fill(null);
             // ワーカーが 1 つでも落ちていたら、そのワーカーに渡してあった分は取り戻せず
-            // 結果が欠けている。検出漏れを黙って返さないよう、呼び出し元の逐次走査でやり直す
-            if (dead.size > 0) {
+            // 結果が欠けている。検出漏れを黙って返さないよう、呼び出し元の逐次走査でやり直す。
+            // キャンセルした場合は結果が途中までなのが前提なので、やり直さずにそのまま返す
+            if (dead.size > 0 && !cancelled) {
                 reject(new Error(errors[0] ?? 'a walker thread failed'));
                 return;
             }
-            emitProgress();
+            options.onProgress(
+                visitedDirs,
+                items.length,
+                workers.map(() => null)
+            );
             resolve({ items, errors, cancelled });
         };
+
+        const cancelTimer = setInterval(() => {
+            if (cancelled || !options.isCancelled()) return;
+            cancelled = true;
+            // メッセージの往復を待たずに全ワーカーへ伝わる
+            Atomics.store(flags, FLAG_CANCELLED, 1);
+            // 手を止めたワーカーの報告を少しだけ待ち、戻らないワーカーがいても終える
+            cancelGraceTimer = setTimeout(finish, CANCEL_GRACE_MS);
+        }, CANCEL_POLL_MS);
+        const progressTimer = setInterval(emitProgress, PROGRESS_INTERVAL_MS);
 
         // 待機中と脱落を合わせて全員そろえば、これ以上進まないので終了する
         const finishIfDone = () => {
@@ -195,9 +178,12 @@ function walkWithWorkers(options: WalkOptions, seed: SeedResult): Promise<WalkRe
             workers[index].postMessage(request);
         };
 
+        // 仕事を渡してよい状態か (キャンセル後は渡しても即座に戻ってくるだけなので渡さない)
+        const canDispatch = () => !settled && !cancelled && queue.length > 0;
+
         // 走査を終えたワーカーに次の仕事を渡す。渡すものが無ければ待機させる
         const markIdle = (index: number) => {
-            if (!settled && !dead.has(index) && queue.length > 0) {
+            if (!dead.has(index) && canDispatch()) {
                 dispatch(index);
                 return;
             }
@@ -211,7 +197,7 @@ function walkWithWorkers(options: WalkOptions, seed: SeedResult): Promise<WalkRe
         // 待機中のワーカーへキューを配り直す
         const feedIdleWorkers = () => {
             for (const index of [...idle]) {
-                if (queue.length === 0) break;
+                if (!canDispatch()) break;
                 dispatch(index);
             }
         };
@@ -223,7 +209,6 @@ function walkWithWorkers(options: WalkOptions, seed: SeedResult): Promise<WalkRe
             errors.push(`walker#${index}: ${reason}`);
             if (idle.delete(index)) Atomics.sub(flags, FLAG_IDLE_WORKERS, 1);
             dead.add(index);
-            workerPaths[index] = null;
             if (idle.size + dead.size === workers.length) {
                 finish();
                 return;
@@ -239,7 +224,6 @@ function walkWithWorkers(options: WalkOptions, seed: SeedResult): Promise<WalkRe
                     if (message.items.length > 0) items.push(...message.items);
                     errors.push(...message.errors);
                     visitedDirs += message.dirs;
-                    workerPaths[message.index] = message.current;
                     return;
                 }
                 if (message.type === 'spill') {
@@ -247,7 +231,6 @@ function walkWithWorkers(options: WalkOptions, seed: SeedResult): Promise<WalkRe
                     feedIdleWorkers();
                     return;
                 }
-                workerPaths[message.index] = null;
                 markIdle(message.index);
             });
             worker.on('error', error => {
@@ -274,7 +257,29 @@ function walkWithWorkers(options: WalkOptions, seed: SeedResult): Promise<WalkRe
     });
 }
 
-// ワーカーを使わない走査。スレッド数 1 の指定時とワーカー起動失敗時の両方で使う
+// キャンセルされたことを表す値 (Promise.race で fs の呼び出しと競わせる)
+const CANCELLED = Symbol('cancelled');
+
+// ADS 判定を一定数ずつ非同期に行う。一度に全件の stat を出すと、
+// ファイルが数万あるディレクトリで未完了の要求が積み上がるため区切る
+async function scanAdsInChunks(
+    paths: string[],
+    cancelSignal: Promise<typeof CANCELLED>
+): Promise<CleanupItem[] | typeof CANCELLED> {
+    const items: CleanupItem[] = [];
+    for (let offset = 0; offset < paths.length; offset += ADS_CHUNK_SIZE) {
+        const found = await Promise.race([
+            scanAdsCandidatesAsync(paths.slice(offset, offset + ADS_CHUNK_SIZE)),
+            cancelSignal,
+        ]);
+        if (found === CANCELLED) return CANCELLED;
+        if (found.length > 0) items.push(...found);
+    }
+    return items;
+}
+
+// ワーカーを使えないときの走査。main プロセス上で動くため、fs は非同期 API だけを使う。
+// fs の呼び出しが返らないままでもキャンセルで抜けられるよう、各呼び出しをキャンセルと競わせる
 async function walkInProcess(options: WalkOptions): Promise<WalkResult> {
     const stack: string[] = [...options.roots];
     const items: CleanupItem[] = [];
@@ -282,37 +287,59 @@ async function walkInProcess(options: WalkOptions): Promise<WalkResult> {
     const out: DirectoryScanResult = { items: [], subdirs: [], adsCandidates: [], errors: [] };
     let visitedDirs = 0;
     let cancelled = false;
-    let lastProgressAt = 0;
-    let sinceYield = 0;
     let currentDir: string | null = null;
 
-    while (stack.length > 0) {
-        if (options.isCancelled()) {
-            cancelled = true;
-            break;
-        }
-        const dir = stack.pop() as string;
-        currentDir = dir;
-        out.items.length = 0;
-        out.subdirs.length = 0;
-        out.adsCandidates.length = 0;
-        out.errors.length = 0;
-        scanCleanupDirectory(dir, options.config, out);
-        // 1 スレッドなので分割する意味は無く、その場でまとめて判定する
-        scanAdsCandidates(out.adsCandidates, out.items);
-        visitedDirs += 1;
-        if (out.items.length > 0) items.push(...out.items);
-        errors.push(...out.errors);
-        for (const subdir of out.subdirs) stack.push(subdir);
+    let cancelTimer: NodeJS.Timeout | undefined;
+    const cancelSignal = new Promise<typeof CANCELLED>(resolve => {
+        cancelTimer = setInterval(() => {
+            if (options.isCancelled()) resolve(CANCELLED);
+        }, CANCEL_POLL_MS);
+    });
+    // 処理中の呼び出しが返らなくても、止まっているディレクトリを出し続ける
+    const progressTimer = setInterval(
+        () => options.onProgress(visitedDirs, items.length, [currentDir]),
+        PROGRESS_INTERVAL_MS
+    );
 
-        if (Date.now() - lastProgressAt >= PROGRESS_INTERVAL_MS) {
-            lastProgressAt = Date.now();
-            options.onProgress(visitedDirs, items.length, [currentDir]);
+    try {
+        while (stack.length > 0) {
+            if (options.isCancelled()) {
+                cancelled = true;
+                break;
+            }
+            const dir = stack.pop() as string;
+            currentDir = dir;
+            const entries = await Promise.race([
+                // アクセスできないディレクトリはスキップ
+                fs.promises.readdir(dir, { withFileTypes: true }).catch(() => null),
+                cancelSignal,
+            ]);
+            if (entries === CANCELLED) {
+                cancelled = true;
+                break;
+            }
+            visitedDirs += 1;
+            if (entries === null) continue;
+            out.items.length = 0;
+            out.subdirs.length = 0;
+            out.adsCandidates.length = 0;
+            out.errors.length = 0;
+            classifyDirectoryEntries(dir, entries, options.config, out);
+            if (out.items.length > 0) items.push(...out.items);
+            errors.push(...out.errors);
+            for (const subdir of out.subdirs) stack.push(subdir);
+            if (out.adsCandidates.length > 0) {
+                const found = await scanAdsInChunks(out.adsCandidates, cancelSignal);
+                if (found === CANCELLED) {
+                    cancelled = true;
+                    break;
+                }
+                if (found.length > 0) items.push(...found);
+            }
         }
-        if (++sinceYield >= INPROCESS_YIELD_EVERY_DIRS) {
-            sinceYield = 0;
-            await new Promise<void>(resolve => setImmediate(resolve));
-        }
+    } finally {
+        clearInterval(cancelTimer);
+        clearInterval(progressTimer);
     }
     options.onProgress(visitedDirs, items.length, [null]);
     return { items, errors, cancelled };
