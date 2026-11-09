@@ -83,12 +83,13 @@ function isZoneIdentifierFile(name: string): boolean {
     return name.endsWith(ZONE_IDENTIFIER_SUFFIX) && name.length > ZONE_IDENTIFIER_SUFFIX.length;
 }
 
-// Windows ADS (Zone.Identifier) の存在を確認する。
+// Windows ADS (Zone.Identifier) の存在を確認する。存在が確定したものだけを「有り」にする。
 // まず statSync で絞り込む。存在しないときでも例外も Promise も生成せず undefined が返るため、
 // open より速い (実測で 1 件あたり 43us -> 15us)。ほとんどのファイルはここで「無し」と分かる。
 // ただし stat はボリュームや Windows のバージョンによって、ストリームが無くても本体ファイルの情報を返して
 // 「有り」と答えることがある (そのボリュームの全ファイルが見つかり、削除は ENOENT で失敗する)。
-// そのため「有り」のときだけストリームを実際に開いて確かめる。開く処理 (CreateFileW) はストリームの有無を正しく返す。
+// そのため「有り」のときはストリームを実際に開いて確かめ、開けたときだけ「有り」にする。
+// 開けないときは理由 (ストリームが無い・権限不足・使用中など) によらず、存在を確かめられないので「無し」にする。
 //
 // ADS の有無をディレクトリ一覧から知る手段は Windows に無いため、ファイルごとの判定は避けられない
 // (ディレクトリ列挙が返す FILE_ATTRIBUTE_* に ADS の有無を示すビットが無く、
@@ -103,7 +104,6 @@ function hasZoneIdentifier(filePath: string): boolean {
         fs.closeSync(fs.openSync(streamPath, 'r'));
         return true;
     } catch {
-        // 開けない (ストリームが無い・権限不足など) ときは「無し」として扱う
         return false;
     }
 }
@@ -117,7 +117,6 @@ async function hasZoneIdentifierAsync(filePath: string): Promise<boolean> {
         await handle.close();
         return true;
     } catch {
-        // ストリームが無い・権限不足などは「無し」として扱う
         return false;
     }
 }
