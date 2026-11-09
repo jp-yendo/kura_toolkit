@@ -56,7 +56,7 @@ type WalkResult = {
 };
 
 // ワーカーの実体パス。asar の中のファイルもそのまま Worker のエントリにできるため、
-// asarUnpack で展開する必要はない (Electron 43 で確認済み)
+// asarUnpack で展開する必要はない (Electron 45 で確認済み)
 function resolveWorkerPath(): string {
     return path.join(__dirname, '..', 'workers', 'dir-walker-worker.js');
 }

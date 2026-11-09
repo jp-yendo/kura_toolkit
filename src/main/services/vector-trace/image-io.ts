@@ -1,21 +1,21 @@
 import fs from 'fs/promises';
-import sharp from 'sharp';
+import sharp, { type KernelEnum, type OutputInfo, type Sharp } from 'sharp';
 import { readImage } from '@neplex/vectorizer';
 import type { VectorizerUpscale } from '../../../shared/types';
 import type { GrayImage, ImageSize, PreparedImage, RgbaImage } from './types';
 
 // 一般的な画像処理 (読み込み・拡大縮小・白地への合成・グレースケール化・しきい値・メディアン) を sharp で行う
 
-// 拡大の方法ごとの sharp のカーネル。sharp の型定義には linear (双線形) が無いが、実装は受け付ける
-const UPSCALE_KERNEL: Record<VectorizerUpscale, keyof sharp.KernelEnum> = {
+// 拡大の方法ごとの sharp のカーネル (linear は双線形)
+const UPSCALE_KERNEL: Record<VectorizerUpscale, keyof KernelEnum> = {
     nearest: 'nearest',
-    bilinear: 'linear' as keyof sharp.KernelEnum,
+    bilinear: 'linear',
 };
 
 const WHITE = { r: 255, g: 255, b: 255 };
 
 // sharp の出力 (チャンネル数 1-4) を RGBA にそろえる (グレースケールの出力は 1 チャンネル、アルファ付きは 2 チャンネル)
-function toRgba(data: Buffer, info: sharp.OutputInfo): RgbaImage {
+function toRgba(data: Buffer, info: OutputInfo): RgbaImage {
     const { width, height, channels } = info;
     if (channels === 4) return { width, height, data };
     const pixels = width * height;
@@ -36,7 +36,7 @@ function toRgba(data: Buffer, info: sharp.OutputInfo): RgbaImage {
 }
 
 // sharp の出力の最初のチャンネルだけを取り出す
-function firstChannel(data: Buffer, info: sharp.OutputInfo): GrayImage {
+function firstChannel(data: Buffer, info: OutputInfo): GrayImage {
     const { width, height, channels } = info;
     if (channels === 1) return { width, height, data };
     const pixels = width * height;
@@ -45,11 +45,11 @@ function firstChannel(data: Buffer, info: sharp.OutputInfo): GrayImage {
     return { width, height, data: out };
 }
 
-function rgbaInput(image: RgbaImage): sharp.Sharp {
+function rgbaInput(image: RgbaImage): Sharp {
     return sharp(image.data, { raw: { width: image.width, height: image.height, channels: 4 } });
 }
 
-function grayInput(image: GrayImage): sharp.Sharp {
+function grayInput(image: GrayImage): Sharp {
     const data = Buffer.from(image.data.buffer, image.data.byteOffset, image.data.byteLength);
     return sharp(data, { raw: { width: image.width, height: image.height, channels: 1 } });
 }
@@ -71,7 +71,7 @@ export async function loadImageLong(
             cause: error,
         });
     }
-    let pipeline: sharp.Sharp;
+    let pipeline: Sharp;
     let sourceSize: ImageSize;
     try {
         const meta = await sharp(buffer).metadata();
@@ -102,7 +102,7 @@ export async function loadImageLong(
             kernel: longSide > long ? UPSCALE_KERNEL[upscale] : 'lanczos3',
         });
     }
-    let decodedImage: { data: Buffer; info: sharp.OutputInfo };
+    let decodedImage: { data: Buffer; info: OutputInfo };
     try {
         decodedImage = await pipeline.toColourspace('srgb').ensureAlpha().raw().toBuffer({ resolveWithObject: true });
     } catch (error) {
