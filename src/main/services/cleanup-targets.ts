@@ -84,8 +84,11 @@ function isZoneIdentifierFile(name: string): boolean {
 }
 
 // Windows ADS (Zone.Identifier) の存在を確認する。
-// open ではなく statSync を使うのは、存在しないときでも例外も Promise も生成せず
-// undefined が返るため。実測で 1 件あたり 43us -> 15us になり、走査ファイル数ぶん効く。
+// まず statSync で絞り込む。存在しないときでも例外も Promise も生成せず undefined が返るため、
+// open より速い (実測で 1 件あたり 43us -> 15us)。ほとんどのファイルはここで「無し」と分かる。
+// ただし stat はボリュームや Windows のバージョンによって、ストリームが無くても本体ファイルの情報を返して
+// 「有り」と答えることがある (そのボリュームの全ファイルが見つかり、削除は ENOENT で失敗する)。
+// そのため「有り」のときだけストリームを実際に開いて確かめる。開く処理 (CreateFileW) はストリームの有無を正しく返す。
 //
 // ADS の有無をディレクトリ一覧から知る手段は Windows に無いため、ファイルごとの判定は避けられない
 // (ディレクトリ列挙が返す FILE_ATTRIBUTE_* に ADS の有無を示すビットが無く、
@@ -94,10 +97,27 @@ function isZoneIdentifierFile(name: string): boolean {
 // FILE_NAMED_STREAMS も当てにならず、FAT32 かつ非対応と申告しながら実際には ADS を保持する
 // クラウドドライブが存在する。
 function hasZoneIdentifier(filePath: string): boolean {
+    const streamPath = `${filePath}${ZONE_IDENTIFIER_SUFFIX}`;
     try {
-        return fs.statSync(`${filePath}${ZONE_IDENTIFIER_SUFFIX}`, { throwIfNoEntry: false }) !== undefined;
+        if (fs.statSync(streamPath, { throwIfNoEntry: false }) === undefined) return false;
+        fs.closeSync(fs.openSync(streamPath, 'r'));
+        return true;
     } catch {
-        // ENOENT 以外 (権限不足など) は「無し」として扱う
+        // 開けない (ストリームが無い・権限不足など) ときは「無し」として扱う
+        return false;
+    }
+}
+
+// hasZoneIdentifier の非同期版 (確かめ方は同じ)
+async function hasZoneIdentifierAsync(filePath: string): Promise<boolean> {
+    const streamPath = `${filePath}${ZONE_IDENTIFIER_SUFFIX}`;
+    try {
+        await fs.promises.stat(streamPath);
+        const handle = await fs.promises.open(streamPath, 'r');
+        await handle.close();
+        return true;
+    } catch {
+        // ストリームが無い・権限不足などは「無し」として扱う
         return false;
     }
 }
@@ -160,15 +180,7 @@ export function scanAdsCandidates(paths: string[], items: CleanupItem[]): void {
 // scanAdsCandidates の非同期版。イベントループを塞げない場所 (main プロセス) で使う。
 // 存在しないときも例外になるため同期版より遅いが、待つ間もほかの処理を止めない
 export async function scanAdsCandidatesAsync(paths: string[]): Promise<CleanupItem[]> {
-    const found = await Promise.all(
-        paths.map(filePath =>
-            fs.promises.stat(`${filePath}${ZONE_IDENTIFIER_SUFFIX}`).then(
-                () => true,
-                // ENOENT 以外 (権限不足など) も「無し」として扱う
-                () => false
-            )
-        )
-    );
+    const found = await Promise.all(paths.map(hasZoneIdentifierAsync));
     return paths.filter((_, index) => found[index]).map(zoneIdentifierItem);
 }
 

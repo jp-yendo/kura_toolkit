@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 - File Cleanup: searching no longer freezes or stays stuck on "Searching" when it finds a very large number of items or a drive stops responding.
+- File Cleanup: on some drives, every file was found as having a Zone.Identifier and could not be removed.
 
 ## [0.3.3] - 2026-10-11
 
