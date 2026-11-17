@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { buildExclusionRule, isExcludedByContents, isExcludedEntry, type ExclusionRule } from './cleanup-exclusion';
 import type { CleanupItem, CleanupTargetId } from '../../shared/types';
 
 // クリーンアップ対象の定義と、ディレクトリ 1 個ぶんの判定 (元: CleanSweep/clean_sweep.py)。
@@ -121,7 +122,7 @@ async function hasZoneIdentifierAsync(filePath: string): Promise<boolean> {
     }
 }
 
-// 走査条件。ワーカーへ postMessage するためプレーンなデータだけで構成する
+// 走査条件。ワーカーへ渡すため構造化複製できるデータ (プレーンなデータと RegExp) だけで構成する
 export type CleanupScanConfig = {
     fileTargets: { id: CleanupTargetId; pattern: string }[];
     prefixTargets: { id: CleanupTargetId; pattern: string }[];
@@ -129,9 +130,24 @@ export type CleanupScanConfig = {
     wantsZoneIdentifier: boolean;
     // ADS の存在確認はファイルごとに判定するため Windows でのみ行う
     checkAds: boolean;
+    // 利用者が指定した対象外。ディレクトリは検出せず配下も走査しない。ファイルは対象かどうかを判定しない
+    excludedDirs: ExclusionRule | null;
+    excludedFiles: ExclusionRule | null;
+    // 検索対象として選んだディレクトリ。対象外の指定に一致してもそれ自体は走査する
+    rootDirs: string[];
 };
 
-export function buildCleanupScanConfig(targets: CleanupTargetId[]): CleanupScanConfig {
+// 利用者が指定する対象外のパターン (cleanup-exclusion.ts の書式)
+export type CleanupExclusions = {
+    dirs: readonly string[];
+    files: readonly string[];
+};
+
+export function buildCleanupScanConfig(
+    targets: CleanupTargetId[],
+    exclusions: CleanupExclusions,
+    rootDirs: string[]
+): CleanupScanConfig {
     const selected = new Set(targets);
     const pick = (kind: TargetKind) =>
         TARGETS.filter(target => target.kind === kind && selected.has(target.id)).map(target => ({
@@ -145,6 +161,9 @@ export function buildCleanupScanConfig(targets: CleanupTargetId[]): CleanupScanC
         dirTargets: pick('dir'),
         wantsZoneIdentifier,
         checkAds: process.platform === 'win32' && wantsZoneIdentifier,
+        excludedDirs: buildExclusionRule(exclusions.dirs, true),
+        excludedFiles: buildExclusionRule(exclusions.files, false),
+        rootDirs: [...rootDirs],
     };
 }
 
@@ -204,6 +223,11 @@ export function classifyDirectoryEntries(
     config: CleanupScanConfig,
     out: DirectoryScanResult
 ): void {
+    // 直下の中身を条件にする対象外 (例: vendor/(?=autoload.php)) は、ディレクトリを読んだこの時点で判定する。
+    // 親を走査する時点で判定するとディレクトリごとに fs の呼び出しが増えるため。一致したら何も集めず、配下も走査しない
+    if (isExcludedByContents(config.excludedDirs, dir, entries) && !config.rootDirs.includes(dir)) {
+        return;
+    }
     for (const entry of entries) {
         const entryPath = path.join(dir, entry.name);
         try {
@@ -212,7 +236,7 @@ export function classifyDirectoryEntries(
                 continue;
             }
             if (entry.isDirectory()) {
-                if (isExcludedDirName(entry.name)) {
+                if (isExcludedDirName(entry.name) || isExcludedEntry(config.excludedDirs, entry.name, entryPath)) {
                     continue;
                 }
                 const dirTarget = config.dirTargets.find(target => target.pattern === entry.name);
@@ -223,8 +247,18 @@ export function classifyDirectoryEntries(
                 }
                 out.subdirs.push(entryPath);
             } else if (entry.isFile()) {
-                // Windows 以外で ADS が通常のファイルとして現れたもの
+                if (isExcludedEntry(config.excludedFiles, entry.name, entryPath)) {
+                    continue;
+                }
+                // Windows 以外で ADS が通常のファイルとして現れたもの。
+                // Windows で本体ファイルを対象外にすると ADS も調べないため、ここでも本体ファイルの名前で対象外を判定する
                 if (config.wantsZoneIdentifier && isZoneIdentifierFile(entry.name)) {
+                    const baseLength = entry.name.length - ZONE_IDENTIFIER_SUFFIX.length;
+                    const baseName = entry.name.slice(0, baseLength);
+                    const basePath = entryPath.slice(0, entryPath.length - ZONE_IDENTIFIER_SUFFIX.length);
+                    if (isExcludedEntry(config.excludedFiles, baseName, basePath)) {
+                        continue;
+                    }
                     out.items.push({ path: entryPath, targetId: 'zoneIdentifier', kind: 'file' });
                     continue;
                 }

@@ -759,6 +759,14 @@ export default {
         moreFailedItems: 'ほか {{count}} 件も失敗しました',
         rescanQuestion: '再検索を実行しますか？',
         rescan: '再検索',
+        exclusions: '対象外パス',
+        exclusionsWithCount: '対象外パス ({{count}})',
+        exclusionDescription:
+            '1 行に 1 つずつ書きます。名前だけを書くとどこにあっても対象外になり、フルパスで書くとその場所だけが対象外になります。ワイルドカードは「*」(任意の文字列)、「?」(任意の 1 文字)、「**」(階層をまたぐ任意の文字列) を使えます。ディレクトリは「vendor/(?=autoload.php)」のように書くと、直下に autoload.php があるときだけ対象外にできます (無いときは「(?!…)」。続けて書くとすべてを満たすとき)。',
+        excludedDirsPlaceholder: 'node_modules\n.git\nvendor/(?=autoload.php)',
+        excludedDirs: '対象外のディレクトリ',
+        excludedFilesPlaceholder: '*.iso\n*.vhdx',
+        excludedFiles: '対象外のファイル',
         targetLabels: {
             zoneIdentifier: 'Windows Zone.Identifier ファイル',
             thumbsDb: 'Windows サムネイルファイル (Thumbs.db)',

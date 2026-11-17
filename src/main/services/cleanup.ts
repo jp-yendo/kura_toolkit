@@ -223,16 +223,22 @@ const REMOVE_PROGRESS_INTERVAL_MS = 100;
 // 失敗した項目のうち、理由まで返す件数 (画面に並べる分だけ。件数は別に返す)
 const FAILED_DETAIL_LIMIT = 100;
 
-// 選択されたルートを再帰走査して対象を検出する。
+// 選択されたルートを再帰走査して対象を検出する。ルートそのものは対象外の指定に一致しても走査する。
 // 走査はディレクトリ単位で並列化する (スレッド数はアプリ設定の「探索のスレッド数」)。
 // 総ディレクトリ数は事前に分からないため進捗率は出さず、走査済み件数と各スレッドの現在位置を送る。
 export async function scanCleanupTargets(jobId: string, options: CleanupScanOptions): Promise<CleanupScanResult> {
     startJob(jobId);
     scanItems = [];
+    // 対象外の指定は設定に保存されたものを使う
+    const settings = getSettings();
     try {
         const result = await walkCleanupTargets({
             roots: options.roots,
-            config: buildCleanupScanConfig(options.targets),
+            config: buildCleanupScanConfig(
+                options.targets,
+                { dirs: settings.cleanup.excludedDirs, files: settings.cleanup.excludedFiles },
+                options.roots
+            ),
             threads: resolveSearchThreads(),
             isCancelled: () => isCancelled(jobId),
             onProgress: (visitedDirs, foundCount, workers) => {

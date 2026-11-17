@@ -22,6 +22,7 @@ import PageContainer from '../../components/common/PageContainer';
 import SectionLabel from '../../components/common/SectionLabel';
 import Panel from '../../components/common/Panel';
 import VirtualList from '../../components/common/VirtualList';
+import ExclusionDialog from '../../components/cleanup/ExclusionDialog';
 import { showNotice } from '../../stores/noticeStore';
 import { useCleanupStore } from '../../stores/cleanupStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -84,6 +85,7 @@ export default function CleanupPage() {
     const [job, setJob] = React.useState<RunningJob | null>(null);
     const [confirmOpen, setConfirmOpen] = React.useState(false);
     const [noneFoundOpen, setNoneFoundOpen] = React.useState(false);
+    const [exclusionOpen, setExclusionOpen] = React.useState(false);
     const [result, setResult] = React.useState<CleanupRemoveResult | null>(null);
 
     const customDirs = settings?.cleanup.customDirs;
@@ -259,6 +261,13 @@ export default function CleanupPage() {
         }
     };
 
+    // 対象外の指定を保存する (次の検索から使われる)
+    const saveExclusions = async (excludedDirs: string[], excludedFiles: string[]) => {
+        setExclusionOpen(false);
+        await update({ cleanup: { excludedDirs, excludedFiles } });
+    };
+    const exclusionCount = settings.cleanup.excludedDirs.length + settings.cleanup.excludedFiles.length;
+
     const runScan = async () => {
         if (store.selectedTargets.length === 0) {
             showNotice('warning', t('cleanupPage.needTargets'));
@@ -389,7 +398,17 @@ export default function CleanupPage() {
 
                 {/* 検索対象ディレクトリ。ボリュームとカスタムはまとめて切り替えられるようにする */}
                 <Box sx={{ flex: 1 }}>
-                    <SectionLabel>{t('cleanupPage.dirs')}</SectionLabel>
+                    <SectionLabel
+                        action={
+                            <Button size='small' onClick={() => setExclusionOpen(true)}>
+                                {exclusionCount > 0
+                                    ? t('cleanupPage.exclusionsWithCount', { count: exclusionCount })
+                                    : t('cleanupPage.exclusions')}
+                            </Button>
+                        }
+                    >
+                        {t('cleanupPage.dirs')}
+                    </SectionLabel>
                     <Panel>
                         {homeRoots.map(root => renderRootRow(root))}
 
@@ -510,6 +529,14 @@ export default function CleanupPage() {
                 onCancel={() => {
                     if (job) void window.kuraToolkit.jobs.cancel(job.jobId);
                 }}
+            />
+
+            <ExclusionDialog
+                open={exclusionOpen}
+                excludedDirs={settings.cleanup.excludedDirs}
+                excludedFiles={settings.cleanup.excludedFiles}
+                onClose={() => setExclusionOpen(false)}
+                onSave={(excludedDirs, excludedFiles) => void saveExclusions(excludedDirs, excludedFiles)}
             />
 
             {/* 検索したが対象が無かった場合 */}

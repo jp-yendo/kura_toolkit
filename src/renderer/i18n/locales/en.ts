@@ -763,6 +763,14 @@ export default {
         moreFailedItems: '{{count}} more items also failed',
         rescanQuestion: 'Run the search again?',
         rescan: 'Rescan',
+        exclusions: 'Excluded Paths',
+        exclusionsWithCount: 'Excluded Paths ({{count}})',
+        exclusionDescription:
+            'Enter one per line. A name alone is excluded wherever it is, and a full path excludes only that location. The wildcards * (any characters), ? (any single character) and ** (any characters across levels) can be used. For directories, vendor/(?=autoload.php) excludes vendor only when autoload.php is directly inside ((?!…) for when it is not; several in a row must all hold).',
+        excludedDirsPlaceholder: 'node_modules\n.git\nvendor/(?=autoload.php)',
+        excludedDirs: 'Excluded directories',
+        excludedFilesPlaceholder: '*.iso\n*.vhdx',
+        excludedFiles: 'Excluded files',
         targetLabels: {
             zoneIdentifier: 'Windows Zone.Identifier files',
             thumbsDb: 'Windows thumbnail files (Thumbs.db)',

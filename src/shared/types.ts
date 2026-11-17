@@ -616,6 +616,9 @@ export type CleanupSettings = {
     // 前回検索したときの条件 (次回起動時に復元する)
     selectedTargets: CleanupTargetId[];
     selectedRoots: string[];
+    // 対象外のディレクトリ・ファイルのパターン (1 個ずつ。名前またはフルパス、ワイルドカード * ** ? を使える)
+    excludedDirs: string[];
+    excludedFiles: string[];
 };
 
 export type CleanupTargetId =

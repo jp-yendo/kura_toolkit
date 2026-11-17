@@ -49,6 +49,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
         customDirs: [],
         selectedTargets: [],
         selectedRoots: [],
+        excludedDirs: [],
+        excludedFiles: [],
     },
     voice: {
         export: {

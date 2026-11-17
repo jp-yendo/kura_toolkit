@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-11-17
+
+### Added
+
+- File Cleanup: "Excluded Paths" leaves directories and files out of the search:
+  - Exclude them by name or full path, with the wildcards `*`, `**` and `?`. The contents of excluded directories are not searched.
+  - Exclude a directory only when a given file or directory is directly inside it, or is not, such as `vendor/(?=autoload.php)`.
+
 ## [0.3.4] - 2026-11-09
 
 ### Fixed
